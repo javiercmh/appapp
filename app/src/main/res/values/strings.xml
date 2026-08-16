@@ -101,4 +101,5 @@
     <string name="settings_reset_confirm_msg">This will permanently delete all workspace files, custom assets, version history snapshots, and runtime storage, and restore default settings. This action cannot be undone.</string>
     <string name="settings_reset_confirm_action">Reset Everything</string>
     <string name="settings_reset_success">App² has been reset to factory defaults</string>
+    <string name="template_upgrade_available">A new starter template is available. Your files were left untouched — load it from &lt;/&gt; → History → Official Starter Template.</string>
 </resources>

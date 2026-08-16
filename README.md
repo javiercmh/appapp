@@ -66,17 +66,21 @@ appapp/
     ├── proguard-rules.pro                       # Proguard rules for @JavascriptInterface
     └── src/main/
         ├── AndroidManifest.xml
+        ├── assets/
+        │   └── starter_template/                # "My Day" starter app: index.html, style.css,
+        │                                        #   app.js + bridge.js/store.js/ui.js (ES modules),
+        │                                        #   manifest.json, entries.json, AGENTS.md
         ├── java/com/example/runtimecompiler/
         │   ├── MainActivity.kt                  # Main Activity hosting WebView & dialogs
         │   ├── bridge/
-        │   │   ├── NativeStorageBridge.kt      # JavaScript interface for file I/O & state persistence
+        │   │   ├── NativeStorageBridge.kt      # JavaScript interface for file I/O, state, and notifications
         │   │   ├── MemoryBlock.kt              # Off-heap direct ByteBuffer native memory wrapper
         │   │   └── SystemMemoryManager.kt      # RAM & disk storage telemetry
         │   ├── editor/
         │   │   ├── SyntaxHighlighter.kt        # In-editor syntax coloring for HTML, CSS, JS, JSON
         │   │   └── SearchHelper.kt             # In-file text search & match navigation
         │   ├── templates/
-        │   │   └── DefaultWebApp.kt            # Modular starter template files
+        │   │   └── DefaultWebApp.kt            # Dynamic asset template loader
         │   └── workspace/
         │       ├── WorkspaceManager.kt         # Multi-file workspace manager
         │       ├── WorkspaceHistoryManager.kt  # Snapshots & version history

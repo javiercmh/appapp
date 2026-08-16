@@ -1,0 +1,19 @@
+{
+  "name": "Starter Demo",
+  "short_name": "Demo",
+  "version": "3.0.0",
+  "templateVersion": 3,
+  "description": "An interactive starter demo showcasing the App² runtime platform",
+  "main": "index.html",
+  "files": [
+    "index.html",
+    "style.css",
+    "app.js",
+    "bridge.js",
+    "store.js",
+    "ui.js",
+    "manifest.json",
+    "AGENTS.md",
+    "entries.json"
+  ]
+}

@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Starter Demo</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ==================== DEMO ==================== -->
+  <section id="pane-demo" class="pane active">
+    <header class="topbar">
+      <h1>App Demo</h1>
+      <span id="entry-count" class="chip">0 notes</span>
+    </header>
+
+    <!-- 1. Notes & Photo Storage -->
+    <div class="card composer">
+      <h2>Storage & Photos</h2>
+      <input type="text" id="note-input" class="field" placeholder="Write a note or idea..." autocomplete="off">
+      <p id="note-hint" class="hint"></p>
+
+      <!-- The picker is opened programmatically by the 📷 button. -->
+      <input type="file" id="photo-input" accept="image/*" hidden>
+
+      <div id="photo-preview" class="photo-preview" hidden>
+        <img id="photo-thumb" alt="Attached photo">
+        <button id="photo-remove" class="icon-btn" aria-label="Remove photo">✕</button>
+      </div>
+
+      <div class="row">
+        <button id="btn-photo" class="btn btn-ghost">📷 Add photo</button>
+      </div>
+      <button id="btn-save" class="btn btn-primary btn-block">Save to workspace</button>
+    </div>
+
+    <div id="feed" class="feed"></div>
+
+    <!-- 2. Accent Theme Customization -->
+    <div class="card">
+      <h2>Accent Colour</h2>
+      <p class="muted">Tap a colour. It updates CSS variables instantly and is remembered after you close the app &mdash; that is one <code>savePref()</code> call in <code>store.js</code>.</p>
+      <div id="swatches" class="swatches"></div>
+    </div>
+
+    <!-- 3. Native Notifications Playground -->
+    <div class="card">
+      <h2>Native Notifications</h2>
+      <div class="row-between">
+        <span class="muted">System status</span>
+        <span id="notif-pill" class="chip">Checking…</span>
+      </div>
+      <button id="btn-notif" class="btn btn-primary btn-block" hidden>Turn on notifications</button>
+      <p id="notif-hint" class="hint"></p>
+
+      <div id="notif-controls" class="notif-controls">
+        <button id="btn-notif-sample" class="btn btn-primary btn-block">🔔 Send sample notification</button>
+        <div class="row">
+          <button id="btn-notif-10s" class="btn btn-ghost">⏰ Test in 10s</button>
+          <button id="btn-notif-1m" class="btn btn-ghost">⏰ Test in 1 min</button>
+        </div>
+        <div id="notif-status-box" class="notif-status-box" hidden>
+          <span id="notif-status-text"></span>
+          <button id="btn-notif-cancel" class="link-btn">Cancel</button>
+        </div>
+      </div>
+
+      <p class="muted">Notifications fire through the native Android bridge. To trigger background
+        alarms when the app is completely closed, an agent can add a Kotlin AlarmManager bridge.</p>
+    </div>
+  </section>
+
+  <!-- ==================== GUIDE ==================== -->
+  <section id="pane-guide" class="pane">
+    <header class="topbar"><h1>Guide</h1></header>
+
+    <div class="card">
+      <h2>This is your app</h2>
+      <p class="muted">Everything you are looking at is a handful of plain files stored on this
+        phone. Nothing is compiled and nothing is downloaded.</p>
+      <ol class="steps">
+        <li><strong>Edit</strong> &mdash; tap <strong>&lt;/&gt;</strong> in the App² bar to open and edit any file.</li>
+        <li><strong>Run</strong> &mdash; tap <strong>↻</strong> to see your change immediately.</li>
+        <li><strong>Install</strong> &mdash; puts it on your home screen. Opened from there the
+          App² bar disappears and this is just your app.</li>
+      </ol>
+      <button id="btn-show-tip" class="btn btn-ghost btn-block">Show the welcome tip again</button>
+    </div>
+
+    <div class="card">
+      <h2>Your app's files</h2>
+      <div id="file-list" class="file-groups"></div>
+      <p id="storage-line" class="muted"></p>
+    </div>
+
+    <div class="card">
+      <h2>Console</h2>
+      <p class="muted">Your app writes its own log to <code>app.log</code> and can read it back.
+        Every <code>console.log</code> lands here.</p>
+      <pre id="console-out" class="console">…</pre>
+      <div class="row">
+        <button id="btn-log-refresh" class="btn btn-ghost">Refresh</button>
+        <button id="btn-log-clear" class="btn btn-ghost">Clear</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Ask an AI to change it</h2>
+      <p class="muted">This workspace ships an <code>AGENTS.md</code> with the full platform rules
+        &mdash; point your agent at it first. Tap a prompt to copy it.</p>
+      <div id="prompts" class="prompts"></div>
+    </div>
+  </section>
+
+  <!-- ==================== CHROME ==================== -->
+  <div id="tip" class="tip" hidden>
+    <div class="tip-header">
+      <span class="tip-title">💡 Welcome to App²</span>
+      <button id="tip-close" class="tip-close" aria-label="Close tip">✕</button>
+    </div>
+    <p><strong>This screen is a handful of plain files.</strong> Tap <strong>&lt;/&gt;</strong> in the App² bar to inspect and edit your project, <strong>↻</strong> to reload instantly, and <strong>Install</strong> to add it directly to your home screen without the App² bar.</p>
+    <div class="tip-actions">
+      <button id="tip-dismiss" class="btn btn-primary tip-btn">Got it</button>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden>
+    <span id="toast-text"></span>
+    <button id="toast-action" class="toast-action" hidden>Undo</button>
+  </div>
+
+  <nav class="tabbar">
+    <button class="tab active" data-pane="demo"><span>✨</span>Demo</button>
+    <button class="tab" data-pane="guide"><span>📖</span>Guide</button>
+  </nav>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

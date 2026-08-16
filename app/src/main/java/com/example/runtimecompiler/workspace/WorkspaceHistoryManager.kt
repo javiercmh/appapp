@@ -98,13 +98,14 @@ class WorkspaceHistoryManager(
     @Synchronized
     fun getSnapshots(): List<WorkspaceSnapshot> {
         val userSnapshots = loadUserSnapshots()
+        val starterFiles = DefaultWebApp.getStarterFiles(context)
 
         val starterSnapshot = WorkspaceSnapshot(
             id = STARTER_TEMPLATE_SNAPSHOT_ID,
             timestamp = 0L,
             formattedTime = "Starter Template",
-            fileCount = DefaultWebApp.STARTER_FILES.size,
-            files = DefaultWebApp.STARTER_FILES,
+            fileCount = starterFiles.size,
+            files = starterFiles,
             label = "Official Starter Template"
         )
 
@@ -120,8 +121,11 @@ class WorkspaceHistoryManager(
             val currentFiles = workspaceManager.listFiles()
             if (currentFiles.isEmpty()) return null
 
+            // Snapshots store contents as JSON strings, so binary assets (icon, user photos) are
+            // skipped rather than corrupted by a UTF-8 round-trip. They are left on disk untouched.
             val filesMap = mutableMapOf<String, String>()
             for (f in currentFiles) {
+                if (WorkspaceManager.isBinaryAsset(f.name)) continue
                 filesMap[f.name] = workspaceManager.readFile(f.name)
             }
 
@@ -230,16 +234,22 @@ class WorkspaceHistoryManager(
     fun restoreSnapshot(snapshotId: String, workspaceManager: WorkspaceManager): Boolean {
         return try {
             if (snapshotId == STARTER_TEMPLATE_SNAPSHOT_ID) {
-                // 1. Clean up workspace files that are not in the starter template (excluding runtime logs)
+                val starterFiles = DefaultWebApp.getStarterFiles(context)
+
+                // 1. Clean up workspace files that are not in the starter template. Runtime logs and
+                // binary assets (app icon, user photos) are kept — they are data, not code.
                 val currentFiles = workspaceManager.listFiles()
                 for (f in currentFiles) {
-                    if (f.name != "app.log" && !DefaultWebApp.STARTER_FILES.containsKey(f.name)) {
+                    if (f.name != "app.log" &&
+                        !WorkspaceManager.isBinaryAsset(f.name) &&
+                        !starterFiles.containsKey(f.name)
+                    ) {
                         workspaceManager.deleteFile(f.name)
                     }
                 }
 
                 // 2. Apply starter template files
-                workspaceManager.applyTemplate(DefaultWebApp.STARTER_FILES)
+                workspaceManager.applyTemplate(starterFiles)
 
                 // 3. Purge legacy SharedPreferences shadow state if any exists
                 try {
@@ -257,10 +267,14 @@ class WorkspaceHistoryManager(
                 return false
             }
 
-            // 1. Clean up workspace files that were created after the snapshot (excluding runtime logs)
+            // 1. Clean up workspace files that were created after the snapshot. Runtime logs and
+            // binary assets are kept — snapshots never captured them, so deleting would lose data.
             val currentFiles = workspaceManager.listFiles()
             for (f in currentFiles) {
-                if (f.name != "app.log" && !target.files.containsKey(f.name)) {
+                if (f.name != "app.log" &&
+                    !WorkspaceManager.isBinaryAsset(f.name) &&
+                    !target.files.containsKey(f.name)
+                ) {
                     workspaceManager.deleteFile(f.name)
                 }
             }

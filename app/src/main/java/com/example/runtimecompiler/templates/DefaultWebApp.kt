@@ -1,639 +1,145 @@
 package com.example.runtimecompiler.templates
 
+import android.content.Context
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
+
+/**
+ * Manages starter template files loaded dynamically from standalone assets
+ * (`app/src/main/assets/starter_template/`).
+ */
 object DefaultWebApp {
 
-    const val DEFAULT_INDEX_HTML = """<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>App² Project</title>
-  <link rel="stylesheet" href="style.css">
-</head>
-<body>
-
-  <div class="container">
-    <!-- Header -->
-    <header class="header-card">
-      <div class="brand-pill">App² Runtime</div>
-      <h1 class="header-title">My App</h1>
-      <p class="header-subtitle">Interactive On-Device App with State Persistence</p>
-      <div class="storage-badge">
-        <span class="storage-dot"></span>
-        <span id="storage-status">Persistent Storage: Ready</span>
-      </div>
-    </header>
-
-    <!-- Input Card -->
-    <section class="input-card">
-      <input 
-        type="text" 
-        id="text-input" 
-        class="text-input" 
-        placeholder="Enter text to save to local disk..." 
-        autocomplete="off"
-        autofocus
-      />
-      <div class="button-group">
-        <button id="btn-submit" class="btn btn-primary">
-          <span>Submit</span>
-        </button>
-        <button id="btn-undo" class="btn btn-undo" disabled>
-          <span>Undo</span>
-        </button>
-      </div>
-    </section>
-
-    <!-- Items List Card -->
-    <section class="list-card">
-      <div class="list-header">
-        <span class="list-title">Saved Items</span>
-        <span id="item-count" class="list-count">0 items</span>
-      </div>
-
-      <div id="items-container" class="items-container">
-        <div id="empty-state" class="empty-state">
-          <div class="empty-icon">📝</div>
-          <div>No items saved yet. Type above and tap Submit!</div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Telemetry Card -->
-    <footer class="telemetry-card">
-      <div class="telemetry-row">
-        <span>Storage File:</span>
-        <span id="stat-file-name" class="telemetry-val">saved_items.json</span>
-      </div>
-      <div class="telemetry-row">
-        <span>Backend:</span>
-        <span id="stat-backend" class="telemetry-val">Android Native Storage</span>
-      </div>
-      <div class="telemetry-row">
-        <span>Free Space:</span>
-        <span id="stat-disk-space" class="telemetry-val">Checking...</span>
-      </div>
-      <div class="telemetry-row">
-        <span>Last Sync:</span>
-        <span id="stat-last-sync" class="telemetry-val">Initialized</span>
-      </div>
-    </footer>
-  </div>
-
-  <script src="app.js"></script>
-</body>
-</html>
-"""
-
-    const val DEFAULT_STYLE_CSS = """:root {
-  --bg-gradient: linear-gradient(135deg, #090d16 0%, #0f172a 50%, #1e1b4b 100%);
-  --card-bg: rgba(30, 41, 59, 0.78);
-  --card-border: rgba(255, 255, 255, 0.1);
-  --primary: #3b82f6;
-  --primary-hover: #2563eb;
-  --secondary: #475569;
-  --secondary-hover: #334155;
-  --accent: #10b981;
-  --text-main: #f8fafc;
-  --text-muted: #94a3b8;
-  --input-bg: rgba(15, 23, 42, 0.7);
-  --input-border: rgba(148, 163, 184, 0.25);
-  --input-focus: #38bdf8;
-}
-
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  -webkit-tap-highlight-color: transparent;
-}
-
-body {
-  background: var(--bg-gradient);
-  color: var(--text-main);
-  min-height: 100vh;
-  padding: max(16px, env(safe-area-inset-top, 16px)) 
-           max(16px, env(safe-area-inset-right, 16px)) 
-           max(16px, env(safe-area-inset-bottom, 16px)) 
-           max(16px, env(safe-area-inset-left, 16px));
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-}
-
-.container {
-  width: 100%;
-  max-width: 520px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.brand-pill {
-  display: inline-block;
-  align-self: center;
-  background: rgba(59, 130, 246, 0.2);
-  border: 1px solid rgba(56, 189, 248, 0.4);
-  color: #38bdf8;
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  padding: 3px 10px;
-  border-radius: 999px;
-  margin-bottom: 8px;
-}
-
-.header-card {
-  background: var(--card-bg);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--card-border);
-  border-radius: 18px;
-  padding: 20px;
-  text-align: center;
-  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.4);
-}
-
-.header-title {
-  font-size: 1.4rem;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  margin-bottom: 6px;
-  background: linear-gradient(90deg, #60a5fa, #34d399);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.header-subtitle {
-  font-size: 0.85rem;
-  color: var(--text-muted);
-}
-
-.storage-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 12px;
-  padding: 4px 12px;
-  border-radius: 9999px;
-  font-size: 0.75rem;
-  font-family: monospace;
-  background: rgba(16, 185, 129, 0.15);
-  border: 1px solid rgba(16, 185, 129, 0.3);
-  color: #34d399;
-}
-
-.storage-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background-color: #34d399;
-  box-shadow: 0 0 8px #34d399;
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.4; transform: scale(0.85); }
-}
-
-.input-card {
-  background: var(--card-bg);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--card-border);
-  border-radius: 18px;
-  padding: 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.4);
-}
-
-.text-input {
-  width: 100%;
-  background: var(--input-bg);
-  border: 1.5px solid var(--input-border);
-  border-radius: 12px;
-  padding: 14px 16px;
-  font-size: 1rem;
-  color: var(--text-main);
-  outline: none;
-  transition: all 0.2s ease;
-}
-
-.text-input:focus {
-  border-color: var(--input-focus);
-  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.25);
-}
-
-.text-input::placeholder {
-  color: var(--text-muted);
-}
-
-.button-group {
-  display: flex;
-  gap: 10px;
-}
-
-.btn {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 13px 18px;
-  font-size: 0.95rem;
-  font-weight: 600;
-  border-radius: 12px;
-  border: none;
-  cursor: pointer;
-  transition: all 0.18s ease;
-  user-select: none;
-}
-
-.btn:active {
-  transform: scale(0.97);
-}
-
-.btn-primary {
-  background: var(--primary);
-  color: #ffffff;
-  box-shadow: 0 4px 14px rgba(59, 130, 246, 0.35);
-}
-
-.btn-primary:hover {
-  background: var(--primary-hover);
-}
-
-.btn-undo {
-  background: var(--secondary);
-  color: #ffffff;
-  box-shadow: 0 4px 14px rgba(71, 85, 105, 0.25);
-}
-
-.btn-undo:hover {
-  background: var(--secondary-hover);
-}
-
-.btn-undo:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
-}
-
-.list-card {
-  background: var(--card-bg);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--card-border);
-  border-radius: 18px;
-  padding: 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-height: 180px;
-  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.4);
-}
-
-.list-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid var(--card-border);
-  padding-bottom: 10px;
-}
-
-.list-title {
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--text-main);
-}
-
-.list-count {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  background: rgba(255, 255, 255, 0.08);
-  padding: 2px 8px;
-  border-radius: 999px;
-}
-
-.items-container {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  overflow-y: auto;
-  max-height: 280px;
-}
-
-.item-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: rgba(15, 23, 42, 0.6);
-  border: 1px solid var(--card-border);
-  border-radius: 10px;
-  padding: 10px 14px;
-  animation: fadeIn 0.2s ease-out;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(-6px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.item-content {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  overflow: hidden;
-}
-
-.item-index {
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: #60a5fa;
-  background: rgba(59, 130, 246, 0.15);
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.item-text {
-  font-size: 0.9rem;
-  color: var(--text-main);
-  word-break: break-word;
-}
-
-.item-time {
-  font-size: 0.7rem;
-  color: var(--text-muted);
-  flex-shrink: 0;
-  font-family: monospace;
-  margin-left: 8px;
-}
-
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 140px;
-  color: var(--text-muted);
-  font-size: 0.88rem;
-  text-align: center;
-  gap: 8px;
-}
-
-.empty-icon {
-  font-size: 1.8rem;
-  opacity: 0.4;
-}
-
-.telemetry-card {
-  background: rgba(15, 23, 42, 0.85);
-  border: 1px solid var(--card-border);
-  border-radius: 14px;
-  padding: 12px 16px;
-  font-family: monospace;
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.telemetry-row {
-  display: flex;
-  justify-content: space-between;
-}
-
-.telemetry-val {
-  color: #38bdf8;
-}
-"""
-
-    const val DEFAULT_APP_JS = """// --- App² Logic & Persistent Storage Integration ---
-const STORAGE_FILE = "saved_items.json";
-let items = [];
-
-const inputField = document.getElementById('text-input');
-const submitBtn = document.getElementById('btn-submit');
-const undoBtn = document.getElementById('btn-undo');
-const itemsContainer = document.getElementById('items-container');
-const emptyState = document.getElementById('empty-state');
-const itemCountSpan = document.getElementById('item-count');
-const storageStatusSpan = document.getElementById('storage-status');
-const statFileName = document.getElementById('stat-file-name');
-const statBackend = document.getElementById('stat-backend');
-const statDiskSpace = document.getElementById('stat-disk-space');
-const statLastSync = document.getElementById('stat-last-sync');
-
-// Load persistent state directly from Android workspace file on launch
-function loadPersistentState() {
-  try {
-    let rawData = "";
-    
-    // 1. Try Native Android Storage Bridge
-    if (window.AndroidStorage) {
-      statBackend.textContent = "Android Workspace File";
-      rawData = window.AndroidStorage.readFile(STORAGE_FILE);
-    } 
-    // 2. Fallback to Browser localStorage for standalone browser preview
-    else if (window.localStorage) {
-      statBackend.textContent = "Browser LocalStorage (Fallback)";
-      rawData = localStorage.getItem(STORAGE_FILE) || "";
-    }
-
-    if (rawData && rawData.trim().length > 0) {
-      items = JSON.parse(rawData);
-      console.log("[Storage] Loaded " + items.length + " items from " + STORAGE_FILE);
-      storageStatusSpan.textContent = "Loaded " + items.length + " items from disk";
-    } else {
-      console.log("[Storage] No data in " + STORAGE_FILE + ". Starting with empty list.");
-      items = [];
-      storageStatusSpan.textContent = "Persistent Storage: Ready (Empty)";
-    }
-  } catch (err) {
-    console.error("[Storage] Error loading " + STORAGE_FILE + ":", err);
-    items = [];
-    storageStatusSpan.textContent = "Error parsing " + STORAGE_FILE;
-  }
-
-  updateStorageTelemetry();
-  renderList();
-}
-
-// Save current items list directly to persistent workspace file
-function savePersistentState() {
-  const jsonStr = JSON.stringify(items, null, 2);
-  try {
-    if (window.AndroidStorage) {
-      window.AndroidStorage.writeFile(STORAGE_FILE, jsonStr);
-      console.log("[Storage] Saved " + items.length + " items to " + STORAGE_FILE + " (" + jsonStr.length + " bytes)");
-    } else if (window.localStorage) {
-      localStorage.setItem(STORAGE_FILE, jsonStr);
-    }
-  } catch (err) {
-    console.error("[Storage] Failed to save " + STORAGE_FILE + " to disk:", err);
-  }
-
-  const now = new Date().toLocaleTimeString();
-  statLastSync.textContent = now + " (" + jsonStr.length + " bytes on disk)";
-  updateStorageTelemetry();
-}
-
-// Update storage disk space telemetry
-function updateStorageTelemetry() {
-  if (window.AndroidStorage) {
-    try {
-      const statsJson = window.AndroidStorage.getStorageStats();
-      const stats = JSON.parse(statsJson);
-      const usableMB = Math.round(stats.usableSpaceBytes / (1024 * 1024));
-      statDiskSpace.textContent = usableMB + " MB Free";
-    } catch (e) {
-      console.error("[Storage] Error reading storage stats:", e);
-    }
-  } else {
-    statDiskSpace.textContent = "Simulated Web Storage";
-  }
-}
-
-// Render list items in DOM
-function renderList() {
-  itemsContainer.innerHTML = '';
-
-  if (items.length === 0) {
-    itemsContainer.appendChild(emptyState);
-    emptyState.style.display = 'flex';
-    undoBtn.disabled = true;
-  } else {
-    emptyState.style.display = 'none';
-    undoBtn.disabled = false;
-
-    items.forEach((item, index) => {
-      const row = document.createElement('div');
-      row.className = 'item-row';
-
-      const content = document.createElement('div');
-      content.className = 'item-content';
-
-      const badge = document.createElement('span');
-      badge.className = 'item-index';
-      badge.textContent = index + 1;
-
-      const textSpan = document.createElement('span');
-      textSpan.className = 'item-text';
-      textSpan.textContent = item.text;
-
-      content.appendChild(badge);
-      content.appendChild(textSpan);
-
-      const timeSpan = document.createElement('span');
-      timeSpan.className = 'item-time';
-      timeSpan.textContent = item.timestamp;
-
-      row.appendChild(content);
-      row.appendChild(timeSpan);
-      itemsContainer.appendChild(row);
-    });
-
-    // Auto-scroll to latest item
-    itemsContainer.scrollTop = itemsContainer.scrollHeight;
-  }
-
-  itemCountSpan.textContent = items.length + (items.length === 1 ? " item" : " items");
-}
-
-// Add item (Submit)
-function addItem() {
-  const text = inputField.value.trim();
-  if (!text) {
-    inputField.focus();
-    return;
-  }
-
-  const newItem = {
-    id: Date.now(),
-    text: text,
-    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-  };
-
-  items.push(newItem);
-  inputField.value = '';
-  inputField.focus();
-
-  renderList();
-  savePersistentState();
-}
-
-// Remove last item (Undo)
-function undoItem() {
-  if (items.length > 0) {
-    const removed = items.pop();
-    console.log("[Storage] Undo removed item:", removed.text);
-    renderList();
-    savePersistentState();
-  }
-}
-
-// Event listeners
-submitBtn.addEventListener('click', addItem);
-undoBtn.addEventListener('click', undoItem);
-
-inputField.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') {
-    addItem();
-  }
-});
-
-// Initialize on DOM load
-window.addEventListener('DOMContentLoaded', () => {
-  loadPersistentState();
-});
-"""
-
-    const val DEFAULT_SAVED_ITEMS_JSON = """[
-  {
-    "id": 1,
-    "text": "Welcome to App²! Try editing saved_items.json in the editor.",
-    "timestamp": "12:00:00 PM"
-  }
-]
-"""
-
-    const val DEFAULT_MANIFEST_JSON = """{
-  "name": "My App",
-  "short_name": "My App",
-  "version": "1.0.0",
-  "description": "On-device app built with App²",
-  "main": "index.html",
-  "files": [
-    "index.html",
-    "style.css",
-    "app.js",
-    "manifest.json",
-    "saved_items.json"
-  ]
-}
-"""
-
-    val STARTER_FILES: Map<String, String> = mapOf(
-        "index.html" to DEFAULT_INDEX_HTML,
-        "style.css" to DEFAULT_STYLE_CSS,
-        "app.js" to DEFAULT_APP_JS,
-        "manifest.json" to DEFAULT_MANIFEST_JSON,
-        "saved_items.json" to DEFAULT_SAVED_ITEMS_JSON
+    const val STARTER_TEMPLATE_DIR = "starter_template"
+
+    /** Bumped whenever the shipped starter template changes shape. See [PRISTINE_HASHES]. */
+    const val TEMPLATE_VERSION = 3
+
+    val CORE_TEMPLATE_FILES = listOf(
+        "index.html",
+        "style.css",
+        "app.js",
+        "bridge.js",
+        "store.js",
+        "ui.js",
+        "manifest.json",
+        "AGENTS.md",
+        "entries.json"
     )
 
-    // Backward compatibility helper
-    val DEFAULT_HTML: String
-        get() = DEFAULT_INDEX_HTML
+    /** Files the previous template generations shipped that v3 no longer uses. */
+    val OBSOLETE_TEMPLATE_FILES = listOf("saved_items.json")
+
+    /**
+     * SHA-256 of every starter file as shipped by an earlier template generation, keyed by file
+     * name. Used to decide whether a workspace is untouched and therefore safe to upgrade in place.
+     *
+     * Three generations are covered:
+     *  - v0: the hardcoded `DEFAULT_*` constants that originally shipped.
+     *  - v1: the initial asset files on development builds.
+     *  - v2: the My Day template files before directory and tip modal updates.
+     */
+    private val PRISTINE_HASHES: Map<String, Set<String>> = mapOf(
+        "index.html" to setOf(
+            "5fc769705da24f45de2e9d070119be539e6a3fcc63b3993b6a24d2338c92348a",
+            "fe38e68f0daeb82007c301254031cc599464880f1a5ae317b7a09074baa3c667",
+            "346107373e6079c1d492aec392878cbb23f03d7f99695a8b5a72d2865d2d51ff"
+        ),
+        "style.css" to setOf(
+            "f510ae3ceb8c770d8dd5e5437ab8b08fa10d5c94269f30a8ed5d5868c70adfe6",
+            "7b9084f80c919799360cd6b299dfea75ceae56f1d44883d4af83520f98dd0432",
+            "3578af56a3c5701accb5262a0dea93b8bd4427a92dd64430a81d657a81b9879c"
+        ),
+        "app.js" to setOf(
+            "364dbdea82f75c90e56ce667a31383ccdbe7f03de123e6f00837613be58d45b8",
+            "787f9662a61aa9eb073b6e268fe6356853da429e26892aec006689d844869c17",
+            "d31ef0c6ac3d86ef04f93d13f8dc10bd2daebfec11bebcbfc024f63535623255"
+        ),
+        "ui.js" to setOf(
+            "e55099f046af50e05d5f84d2d472ec2be097820b2466c4172faa2afa575ffe78"
+        ),
+        "saved_items.json" to setOf(
+            "c769919e5c633ee2e294236cc1e8448238c26e56f372b614a9a75a02d2174383",
+            "515c4579336ca85a566bbe5c86efaa8f5d655a4ddb8ccc0c86f5d432d52c3410"
+        )
+    )
+
+    fun sha256(content: String): String =
+        MessageDigest.getInstance("SHA-256")
+            .digest(content.toByteArray(StandardCharsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+
+    /** True if [content] matches any previously shipped version of [fileName]. */
+    fun isPristine(fileName: String, content: String): Boolean =
+        PRISTINE_HASHES[fileName]?.contains(sha256(content)) == true
+
+    private val fileCache = mutableMapOf<String, String>()
+
+    /**
+     * Loads all starter template files from the assets directory (recursively).
+     */
+    @Synchronized
+    fun getStarterFiles(context: Context): Map<String, String> {
+        val result = mutableMapOf<String, String>()
+        try {
+            fun walkAssets(dir: String, prefix: String = "") {
+                val list = context.assets.list(dir) ?: return
+                for (name in list) {
+                    val subPath = if (dir.isEmpty()) name else "$dir/$name"
+                    val relativeName = if (prefix.isEmpty()) name else "$prefix/$name"
+                    val children = context.assets.list(subPath)
+                    if (children != null && children.isNotEmpty() && !name.contains('.')) {
+                        walkAssets(subPath, relativeName)
+                    } else {
+                        val content = getStarterFile(context, relativeName)
+                        if (content.isNotEmpty()) {
+                            result[relativeName] = content
+                        }
+                    }
+                }
+            }
+            walkAssets(STARTER_TEMPLATE_DIR)
+        } catch (_: Exception) {
+            for (fileName in CORE_TEMPLATE_FILES) {
+                val content = getStarterFile(context, fileName)
+                if (content.isNotEmpty()) {
+                    result[fileName] = content
+                }
+            }
+        }
+        if (result.isEmpty()) {
+            for (fileName in CORE_TEMPLATE_FILES) {
+                val content = getStarterFile(context, fileName)
+                if (content.isNotEmpty()) {
+                    result[fileName] = content
+                }
+            }
+        }
+        return result
+    }
+
+    /**
+     * Loads a single starter template file from assets.
+     */
+    @Synchronized
+    fun getStarterFile(context: Context, fileName: String): String {
+        fileCache[fileName]?.let { return it }
+
+        return try {
+            val path = "$STARTER_TEMPLATE_DIR/$fileName"
+            val content = context.assets.open(path).bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
+            fileCache[fileName] = content
+            content
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
+    /**
+     * Clears in-memory cache of starter files.
+     */
+    @Synchronized
+    fun clearCache() {
+        fileCache.clear()
+    }
 }

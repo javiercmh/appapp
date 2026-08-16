@@ -1,0 +1,18 @@
+[
+  {
+    "id": 2,
+    "text": "When it looks right, tap Install — it becomes a home-screen app with no App² bar.",
+    "photo": null,
+    "createdAt": 1700000060000,
+    "remindAt": null,
+    "notified": false
+  },
+  {
+    "id": 1,
+    "text": "Welcome! Write a note, attach a photo, or test notifications below. Everything here is saved to a real file you can open with </>.",
+    "photo": null,
+    "createdAt": 1700000000000,
+    "remindAt": null,
+    "notified": false
+  }
+]

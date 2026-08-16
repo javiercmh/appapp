@@ -24,6 +24,16 @@ class WorkspaceManager(
 ) {
     val workspaceDir: File = File(context.filesDir, "workspace")
 
+    // Kept separate from `appapp_settings`, which a factory reset clears wholesale.
+    private val statePrefs = context.getSharedPreferences("workspace_state", Context.MODE_PRIVATE)
+
+    /**
+     * Set when a newer starter template shipped but the workspace had user edits, so it was left
+     * untouched. MainActivity reads this once to surface a single notice.
+     */
+    var pendingTemplateUpgradeNotice: Boolean = false
+        private set
+
     init {
         ensureWorkspaceInitialized()
     }
@@ -32,9 +42,23 @@ class WorkspaceManager(
         onLogListener?.invoke(message)
     }
 
+    fun consumeTemplateUpgradeNotice(): Boolean {
+        val pending = pendingTemplateUpgradeNotice
+        pendingTemplateUpgradeNotice = false
+        return pending
+    }
+
+    private var appliedTemplateVersion: Int
+        get() = statePrefs.getInt(KEY_APPLIED_TEMPLATE_VERSION, 0)
+        set(value) = statePrefs.edit().putInt(KEY_APPLIED_TEMPLATE_VERSION, value).apply()
+
     /**
-     * Initializes the workspace directory and starter files if not already present,
-     * and auto-migrates legacy template files on existing devices.
+     * Initializes the workspace directory and starter files if not already present, and upgrades
+     * older starter templates on existing devices.
+     *
+     * An upgrade only happens when every code file still matches a previously shipped version
+     * byte-for-byte. If the user has edited anything, their files are never touched — they are told
+     * where to find the new template instead.
      */
     fun ensureWorkspaceInitialized() {
         if (!workspaceDir.exists()) {
@@ -44,21 +68,48 @@ class WorkspaceManager(
         val indexFile = File(workspaceDir, "index.html")
         if (!indexFile.exists()) {
             resetWorkspace()
-        } else {
-            // Auto-migration: check if on-disk app.js contains legacy shadow state fallback
-            val appJsFile = File(workspaceDir, "app.js")
-            if (appJsFile.exists()) {
-                val currentJs = readFile("app.js")
-                if (currentJs.contains("saved_items_state")) {
-                    writeFile("app.js", DefaultWebApp.DEFAULT_APP_JS)
-                    log("[Workspace] Auto-migrated on-device 'app.js' to clean decoupled version.")
+            return
+        }
+
+        val logFile = File(workspaceDir, "app.log")
+        if (!logFile.exists()) {
+            writeFile("app.log", "[System] App² workspace initialized.\n")
+        }
+
+        if (appliedTemplateVersion >= DefaultWebApp.TEMPLATE_VERSION) return
+
+        if (isWorkspacePristine()) {
+            applyTemplate(DefaultWebApp.getStarterFiles(context))
+            // applyTemplate only writes, so files dropped between versions must go explicitly.
+            for (obsolete in DefaultWebApp.OBSOLETE_TEMPLATE_FILES) {
+                val file = File(workspaceDir, obsolete)
+                if (!file.exists()) continue
+                if (DefaultWebApp.isPristine(obsolete, readFile(obsolete))) {
+                    file.delete()
+                    log("[Workspace] Removed obsolete starter file '$obsolete'.")
+                } else {
+                    log("[Workspace] Kept '$obsolete' — it contains your data.")
                 }
             }
+            log("[Workspace] Upgraded untouched starter template to v${DefaultWebApp.TEMPLATE_VERSION}.")
+        } else {
+            pendingTemplateUpgradeNotice = true
+            appendToFile(
+                "app.log",
+                "[System] A new App² starter template (v${DefaultWebApp.TEMPLATE_VERSION}) is available. " +
+                    "Open </> → History → ⭐ Official Starter Template to load it. " +
+                    "Your current files were left untouched.\n"
+            )
+        }
+        appliedTemplateVersion = DefaultWebApp.TEMPLATE_VERSION
+    }
 
-            val logFile = File(workspaceDir, "app.log")
-            if (!logFile.exists()) {
-                writeFile("app.log", "[System] App² workspace initialized.\n")
-            }
+    /** True only if every code file on disk is byte-identical to a previously shipped version. */
+    private fun isWorkspacePristine(): Boolean {
+        val trackedFiles = listOf("index.html", "style.css", "app.js")
+        return trackedFiles.all { name ->
+            val file = File(workspaceDir, name)
+            file.exists() && DefaultWebApp.isPristine(name, readFile(name))
         }
     }
 
@@ -86,11 +137,13 @@ class WorkspaceManager(
     }
 
     /**
-     * Re-initializes all default workspace template files from DefaultWebApp.STARTER_FILES.
+     * Re-initializes all default workspace template files from DefaultWebApp assets.
      */
     fun resetWorkspace(): Boolean {
-        val success = applyTemplate(DefaultWebApp.STARTER_FILES)
+        val starterFiles = DefaultWebApp.getStarterFiles(context)
+        val success = applyTemplate(starterFiles)
         if (success) {
+            appliedTemplateVersion = DefaultWebApp.TEMPLATE_VERSION
             appendToFile("app.log", "[System] App² workspace reset to starter template.\n")
         }
         return success
@@ -105,7 +158,9 @@ class WorkspaceManager(
             for (file in files) {
                 file.delete()
             }
-            val success = applyTemplate(DefaultWebApp.STARTER_FILES)
+            val starterFiles = DefaultWebApp.getStarterFiles(context)
+            val success = applyTemplate(starterFiles)
+            appliedTemplateVersion = DefaultWebApp.TEMPLATE_VERSION
             writeFile("app.log", "[System] App² factory reset completed.\n")
             log("[Workspace] Factory reset workspace successfully.")
             success
@@ -115,31 +170,36 @@ class WorkspaceManager(
         }
     }
 
-    private fun sanitizeFileName(fileName: String): String {
-        return fileName.trim().replace(Regex("[^a-zA-Z0-9._-]"), "_")
-    }
-
     fun getFile(fileName: String): File {
-        val sanitized = sanitizeFileName(fileName)
-        return File(workspaceDir, sanitized)
+        val sanitized = sanitizeRelativePath(fileName)
+        val file = File(workspaceDir, sanitized)
+        return if (file.canonicalPath.startsWith(workspaceDir.canonicalPath)) {
+            file
+        } else {
+            File(workspaceDir, sanitized.substringAfterLast('/'))
+        }
     }
 
     /**
-     * Lists all files in the workspace directory.
+     * Lists all files in the workspace directory recursively.
      * Core files (index.html, style.css, app.js, manifest.json, app.log) are prioritized at the top.
      */
     fun listFiles(): List<WorkspaceFile> {
-        val files = workspaceDir.listFiles() ?: emptyArray()
-        val coreNames = setOf("index.html", "style.css", "app.js", "manifest.json", "app.log")
+        if (!workspaceDir.exists()) return emptyList()
+        val coreNames = setOf(
+            "index.html", "style.css", "app.js", "bridge.js", "store.js", "ui.js",
+            "manifest.json", "AGENTS.md", "app.log"
+        )
 
-        return files
+        return workspaceDir.walkTopDown()
             .filter { it.isFile }
             .map { file ->
+                val relativePath = file.relativeTo(workspaceDir).path.replace('\\', '/')
                 WorkspaceFile(
-                    name = file.name,
+                    name = relativePath,
                     size = file.length(),
                     lastModified = file.lastModified(),
-                    isCore = coreNames.contains(file.name)
+                    isCore = coreNames.contains(relativePath)
                 )
             }
             .sortedWith(compareBy<WorkspaceFile> { !it.isCore }
@@ -155,6 +215,7 @@ class WorkspaceManager(
                 }
                 .thenBy { it.name }
             )
+            .toList()
     }
 
     /**
@@ -163,7 +224,7 @@ class WorkspaceManager(
     fun readFile(fileName: String): String {
         return try {
             val file = getFile(fileName)
-            if (!file.exists()) {
+            if (!file.exists() || !file.isFile) {
                 log("[Workspace] File '$fileName' does not exist.")
                 return ""
             }
@@ -177,15 +238,16 @@ class WorkspaceManager(
     }
 
     /**
-     * Writes text content to a workspace file.
+     * Writes text content to a workspace file. Auto-creates parent directories if needed.
      */
     fun writeFile(fileName: String, content: String): Boolean {
         return try {
             val file = getFile(fileName)
+            file.parentFile?.mkdirs()
             FileOutputStream(file).use { output ->
                 output.write(content.toByteArray(StandardCharsets.UTF_8))
             }
-            log("[Workspace] Saved '${file.name}' (${content.length} chars)")
+            log("[Workspace] Saved '${file.relativeTo(workspaceDir).path.replace('\\', '/')}' (${content.length} chars)")
             true
         } catch (e: Exception) {
             log("[Workspace Error] Failed to write '$fileName': ${e.message}")
@@ -201,6 +263,7 @@ class WorkspaceManager(
     fun appendToFile(fileName: String, content: String, maxBytes: Long = 200_000): Boolean {
         return try {
             val file = getFile(fileName)
+            file.parentFile?.mkdirs()
             if (!file.exists()) {
                 file.createNewFile()
             } else if (file.length() > maxBytes) {
@@ -222,12 +285,12 @@ class WorkspaceManager(
     }
 
     /**
-     * Creates a new file in the workspace.
+     * Creates a new file in the workspace, auto-creating parent directories as needed.
      */
     fun createFile(fileName: String, initialContent: String = ""): Boolean {
-        val sanitized = sanitizeFileName(fileName)
+        val sanitized = sanitizeRelativePath(fileName)
         if (sanitized.isBlank()) return false
-        val file = File(workspaceDir, sanitized)
+        val file = getFile(sanitized)
         if (file.exists()) {
             log("[Workspace Warning] File '$sanitized' already exists.")
             return false
@@ -236,19 +299,33 @@ class WorkspaceManager(
     }
 
     /**
-     * Deletes a file from the workspace. Protects index.html and manifest.json from accidental deletion.
+     * Deletes a file from the workspace and cleans up empty parent directories.
+     * Protects index.html and manifest.json from accidental deletion.
      */
     fun deleteFile(fileName: String): Boolean {
-        val sanitized = sanitizeFileName(fileName)
+        val sanitized = sanitizeRelativePath(fileName)
         if (sanitized == "index.html" || sanitized == "manifest.json") {
             log("[Workspace Warning] Cannot delete protected core file '$sanitized'.")
             return false
         }
         return try {
-            val file = File(workspaceDir, sanitized)
-            if (file.exists()) {
+            val file = getFile(sanitized)
+            if (file.exists() && file.isFile) {
                 val deleted = file.delete()
                 log("[Workspace] Deleted '$sanitized': $deleted")
+                if (deleted) {
+                    // Clean up empty parent directories up to workspaceDir
+                    var parent = file.parentFile
+                    while (parent != null && parent != workspaceDir && parent.canonicalPath.startsWith(workspaceDir.canonicalPath)) {
+                        val children = parent.listFiles()
+                        if (children == null || children.isEmpty()) {
+                            parent.delete()
+                            parent = parent.parentFile
+                        } else {
+                            break
+                        }
+                    }
+                }
                 deleted
             } else {
                 false
@@ -260,6 +337,33 @@ class WorkspaceManager(
     }
 
     companion object {
+        private const val KEY_APPLIED_TEMPLATE_VERSION = "applied_template_version"
+
+        /**
+         * Sanitizes a relative file path, preserving forward slashes for subdirectories
+         * while preventing directory traversal (such as ..) and removing invalid characters.
+         */
+        fun sanitizeRelativePath(rawPath: String): String {
+            val normalized = rawPath.replace('\\', '/').trim()
+            val segments = normalized.split('/')
+                .map { it.trim().replace(Regex("[^a-zA-Z0-9._-]"), "_") }
+                .filter { it.isNotEmpty() && it != "." && it != ".." }
+            return segments.joinToString("/")
+        }
+
+        /**
+         * True for files whose bytes cannot survive a UTF-8 text round-trip. History snapshots
+         * store file contents as JSON strings, so these must be excluded rather than mangled.
+         * SVG is deliberately absent — it is text and round-trips fine.
+         */
+        fun isBinaryAsset(fileName: String): Boolean {
+            val lower = fileName.lowercase()
+            return lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") ||
+                lower.endsWith(".gif") || lower.endsWith(".webp") || lower.endsWith(".bmp") ||
+                lower.endsWith(".ico") || lower.endsWith(".woff") || lower.endsWith(".woff2") ||
+                lower.endsWith(".ttf")
+        }
+
         /**
          * Resolves MIME type based on file extension.
          */
@@ -279,6 +383,7 @@ class WorkspaceManager(
                 lower.endsWith(".woff") -> "font/woff"
                 lower.endsWith(".ttf") -> "font/ttf"
                 lower.endsWith(".txt") -> "text/plain"
+                lower.endsWith(".md") -> "text/markdown"
                 else -> "application/octet-stream"
             }
         }

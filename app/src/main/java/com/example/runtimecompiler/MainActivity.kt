@@ -1,8 +1,13 @@
 package com.example.runtimecompiler
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Dialog
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
@@ -22,6 +27,8 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.ConsoleMessage
+import android.webkit.MimeTypeMap
+import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -96,6 +103,13 @@ class MainActivity : AppCompatActivity() {
     private var onImportCompletedCallback: (() -> Unit)? = null
     private var onIconUpdatedCallback: (() -> Unit)? = null
 
+    /**
+     * Held between `onShowFileChooser` and the picker result. WebView requires this callback to be
+     * invoked exactly once — with null on cancel — or the originating `<input type="file">` is
+     * permanently stuck and will never open a chooser again.
+     */
+    private var pendingFileChooserCallback: ValueCallback<Array<Uri>>? = null
+
     private val saveZipLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri: Uri? ->
         val filesToExport = pendingExportFiles
         if (uri != null && filesToExport != null) {
@@ -149,10 +163,101 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // Backs `<input type="file">` inside the runtime web app. Registered as property initialisers
+    // (i.e. before STARTED), matching pickIconLauncher above.
+    private val webFileChooserLauncher =
+        registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+            deliverFileChooserResult(if (uri != null) arrayOf(uri) else null)
+        }
+
+    private val webFileChooserMultiLauncher =
+        registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris: List<Uri> ->
+            deliverFileChooserResult(if (uris.isEmpty()) null else uris.toTypedArray())
+        }
+
+    /**
+     * Single delivery point for a pending file chooser. Idempotent: clears the field before
+     * invoking, so a second call is a no-op rather than a double-delivery.
+     */
+    private fun deliverFileChooserResult(uris: Array<Uri>?) {
+        val callback = pendingFileChooserCallback ?: return
+        pendingFileChooserCallback = null
+        try {
+            callback.onReceiveValue(uris)
+        } catch (e: Exception) {
+            // The page may have navigated or reloaded while the picker was open.
+            appendLog("[WebView] Stale file chooser callback ignored: ${e.message}")
+        }
+    }
+
+    /**
+     * Collapses an `<input accept="...">` list into the single MIME string GetContent takes.
+     * Falls back to a family wildcard when the types agree, and to a full wildcard when they don't.
+     */
+    private fun resolveChooserMimeType(acceptTypes: Array<String>?): String {
+        val raw = acceptTypes?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList()
+        if (raw.isEmpty()) return "*/*"
+        val mimes = raw.map { type ->
+            if (type.startsWith(".")) {
+                MimeTypeMap.getSingleton().getMimeTypeFromExtension(type.removePrefix(".").lowercase()) ?: "*/*"
+            } else {
+                type
+            }
+        }
+        val firstFamily = mimes.first().substringBefore('/')
+        return when {
+            mimes.size == 1 -> mimes.first()
+            mimes.all { it.substringBefore('/') == firstFamily } -> "$firstFamily/*"
+            else -> "*/*"
+        }
+    }
+
+    private val requestNotificationPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+            if (isGranted) {
+                appendLog("[Permissions] Notification permission granted.")
+            } else {
+                appendLog("[Permissions] Notification permission denied.")
+            }
+            // The bridge's requestNotificationPermission() returns immediately because the native
+            // prompt is async, so tell the web app the real outcome instead of making it poll.
+            if (::binding.isInitialized) {
+                binding.webView.evaluateJavascript(
+                    "window.dispatchEvent(new CustomEvent('app2:notifperm',{detail:{granted:$isGranted}}))",
+                    null
+                )
+            }
+        }
+
+    fun promptNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                requestNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                NativeStorageBridge.CHANNEL_ID,
+                NativeStorageBridge.CHANNEL_NAME,
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "Notifications posted from App² runtime web applications"
+                enableVibration(true)
+            }
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.createNotificationChannel(channel)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // Enable Edge-to-Edge display for notches, display cutouts, and status/navigation bars
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+
+        createNotificationChannel()
 
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -212,13 +317,24 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Initialize Native Storage & State Bridge
-        storageBridge = NativeStorageBridge(this) { storageLog ->
-            runOnUiThread { appendLog(storageLog) }
-        }
+        storageBridge = NativeStorageBridge(
+            context = this,
+            onLogListener = { storageLog ->
+                runOnUiThread { appendLog(storageLog) }
+            },
+            onRequestNotificationPermission = {
+                runOnUiThread { promptNotificationPermission() }
+            }
+        )
 
         setupWebView()
         setupListeners()
         reloadApp()
+
+        // A newer starter template shipped, but this workspace had user edits so it was left alone.
+        if (workspaceManager.consumeTemplateUpgradeNotice()) {
+            Toast.makeText(this, getString(R.string.template_upgrade_available), Toast.LENGTH_LONG).show()
+        }
 
         // Handle Back button for WebView history
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
@@ -251,9 +367,10 @@ class MainActivity : AppCompatActivity() {
         // Hardware acceleration
         webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
 
-        // Inject Native Storage Bridge as window.AndroidStorage & window.AndroidMemory
+        // Inject Native Bridges as window.AndroidStorage, window.AndroidMemory, window.AndroidNotification
         webView.addJavascriptInterface(storageBridge, "AndroidStorage")
         webView.addJavascriptInterface(storageBridge, "AndroidMemory")
+        webView.addJavascriptInterface(storageBridge, "AndroidNotification")
 
         // Intercept JavaScript console logs and errors
         webView.webChromeClient = object : WebChromeClient() {
@@ -272,6 +389,38 @@ class MainActivity : AppCompatActivity() {
                     binding.progressBar.progress = newProgress
                 } else {
                     binding.progressBar.visibility = View.GONE
+                }
+            }
+
+            // Enables `<input type="file">` in the runtime web app. Without this override the
+            // WebView silently ignores taps on file inputs.
+            override fun onShowFileChooser(
+                webView: WebView?,
+                filePathCallback: ValueCallback<Array<Uri>>?,
+                fileChooserParams: FileChooserParams?
+            ): Boolean {
+                if (filePathCallback == null) return false
+
+                // Release any chooser still in flight so its <input> isn't stuck forever.
+                deliverFileChooserResult(null)
+                pendingFileChooserCallback = filePathCallback
+
+                val mimeType = resolveChooserMimeType(fileChooserParams?.acceptTypes)
+                val allowMultiple = fileChooserParams?.mode == FileChooserParams.MODE_OPEN_MULTIPLE
+
+                return try {
+                    if (allowMultiple) {
+                        webFileChooserMultiLauncher.launch(mimeType)
+                    } else {
+                        webFileChooserLauncher.launch(mimeType)
+                    }
+                    appendLog("[WebView] File chooser opened (accept=$mimeType, multiple=$allowMultiple)")
+                    true
+                } catch (e: Exception) {
+                    // e.g. no picker app installed. Release the callback so the input stays usable.
+                    appendLog("[WebView Error] Could not open file picker: ${e.message}")
+                    deliverFileChooserResult(null)
+                    true
                 }
             }
         }
@@ -641,7 +790,11 @@ class MainActivity : AppCompatActivity() {
             return when {
                 lower == "index.html" -> Pair("🌐", "Web Entrypoint & Layout")
                 lower == "style.css" -> Pair("🎨", "App Stylesheet")
-                lower == "app.js" -> Pair("⚡", "App Logic & Native Bridge")
+                lower == "app.js" -> Pair("⚡", "App Entry Point & Bootstrap")
+                lower == "bridge.js" -> Pair("🔌", "Native Bridge Wrapper")
+                lower == "store.js" -> Pair("💾", "Data & Persistence Layer")
+                lower == "ui.js" -> Pair("🖌️", "UI Rendering Layer")
+                lower == "agents.md" -> Pair("🤖", "AI Agent Instructions")
                 lower == "manifest.json" -> Pair("📦", "App Metadata & Manifest")
                 lower == "icon.png" || lower == "app_icon.png" -> Pair("🖼️", "App Icon Asset")
                 lower == "app.log" -> Pair("📜", "Console & Runtime Logs")
@@ -649,6 +802,7 @@ class MainActivity : AppCompatActivity() {
                 lower.endsWith(".css") -> Pair("🎨", "Stylesheet")
                 lower.endsWith(".js") || lower.endsWith(".mjs") -> Pair("⚡", "JavaScript Module")
                 lower.endsWith(".json") -> Pair("📄", "JSON Data File")
+                lower.endsWith(".md") -> Pair("📝", "Markdown Document")
                 lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".svg") || lower.endsWith(".webp") -> Pair("🖼️", "Image Asset")
                 else -> Pair("📄", "Workspace File")
             }
@@ -1190,9 +1344,9 @@ class MainActivity : AppCompatActivity() {
                 btnRestore.setOnClickListener {
                     val title = if (isStarter) "Reset to Starter Template?" else "Revert to Snapshot?"
                     val message = if (isStarter) {
-                        "Reset workspace to the official latest Starter Template? Current files will be replaced with the clean starter template."
+                        "Reset workspace to the official latest Starter Template? Your code files will be replaced. Images, including your app icon and any photos, are kept."
                     } else {
-                        "Revert workspace to state from ${snap.formattedTime}? Current unsaved edits will be replaced."
+                        "Revert workspace to state from ${snap.formattedTime}? Your code files will be replaced. Images are kept."
                     }
                     MaterialAlertDialogBuilder(this)
                         .setTitle(title)
@@ -1556,6 +1710,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        // Release any in-flight file chooser before tearing the WebView down.
+        deliverFileChooserResult(null)
         binding.webView.destroy()
     }
 }

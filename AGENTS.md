@@ -6,7 +6,7 @@ This document provides architectural context, coding standards, and operational 
 
 ## 1. Codebase Summary & Architecture
 
-**AppApp** (stylized as **App²**) is an Android application written in **Kotlin** that allows dynamic runtime creation, editing, and execution of modular web applications (`index.html`, `style.css`, `app.js`, `manifest.json`, and custom data files) inside a hardware-accelerated Android `WebView`, while providing direct platform access via JavaScript bridges (`window.AndroidStorage` / `window.AndroidMemory`).
+**AppApp** (stylized as **App²**) is an Android application written in **Kotlin** that allows dynamic runtime creation, editing, and execution of modular web applications (`index.html`, `style.css`, `app.js`, `manifest.json`, and custom data files) inside a hardware-accelerated Android `WebView`, while providing direct platform access via a JavaScript bridge (`window.AndroidStorage`, also aliased as `window.AndroidMemory` and `window.AndroidNotification`).
 
 ### Core Modules & Packages
 
@@ -18,10 +18,11 @@ This document provides architectural context, coding standards, and operational 
 | `com.example.runtimecompiler.workspace.WorkspaceManager` | Manages the unified multi-file project workspace stored in internal storage (`filesDir/workspace/`). Handles file reading, writing, creation, deletion, template initialization, and MIME type resolution. |
 | `com.example.runtimecompiler.workspace.WorkspaceHistoryManager` | Manages up to 5 full version snapshots (FIFO) of the workspace in `filesDir/workspace_history.json` with timestamps, enabling one-tap rollback. |
 | `com.example.runtimecompiler.workspace.WorkspacePackageManager` | Handles selective ZIP export/packaging, Android Sharesheet integration, direct stream export, and secure ZIP extraction with Zip-Slip defense and auto-backup snapshots. |
-| `com.example.runtimecompiler.bridge.NativeStorageBridge` | Main `@JavascriptInterface` exposed to the web runtime as `window.AndroidStorage` and `window.AndroidMemory`. Manages persistent key-value state and unified file I/O directly in `workspace/`. |
+| `com.example.runtimecompiler.bridge.NativeStorageBridge` | Main `@JavascriptInterface` exposed to the web runtime as `window.AndroidStorage`, `window.AndroidMemory`, and `window.AndroidNotification`. Manages persistent key-value state, unified file I/O directly in `workspace/`, and native system notifications. |
+| `com.example.runtimecompiler.bridge.NativeMemoryBridge` | **Not registered.** Defines memory methods that are unreachable from JavaScript — `window.AndroidMemory` is an alias of `NativeStorageBridge`. Do not document or use it as a web-facing API. |
 | `com.example.runtimecompiler.bridge.MemoryBlock` | Off-heap direct `java.nio.ByteBuffer` wrapper for low-level byte operations. |
 | `com.example.runtimecompiler.bridge.SystemMemoryManager` | Queries device RAM (`ActivityManager.MemoryInfo`), JVM heap, and native memory allocations. |
-| `com.example.runtimecompiler.templates.DefaultWebApp` | Contains the default starter templates for `index.html`, `style.css`, `app.js`, and `manifest.json`. |
+| `com.example.runtimecompiler.templates.DefaultWebApp` | Loads the starter template files dynamically from standalone assets (`app/src/main/assets/starter_template/`). Owns `TEMPLATE_VERSION` and the pristine-content hashes used to decide whether a workspace can be safely upgraded in place. |
 
 ---
 
@@ -31,13 +32,21 @@ All project code and runtime app files live together in the unified internal sto
 ```
 filesDir/workspace/
 ├── index.html       # Primary HTML entrypoint & UI layout
-├── style.css        # Modular CSS stylesheet with safe-area variables
-├── app.js           # JavaScript logic & AndroidStorage bridge calls
+├── style.css        # Stylesheet with safe-area variables
+├── app.js           # ES module entry point (<script type="module">)
+├── bridge.js        # Sole wrapper around the AndroidStorage bridge
+├── store.js         # Persistence: data files, photos, preferences
+├── ui.js            # DOM rendering
 ├── manifest.json    # App metadata & identity configuration
+├── AGENTS.md        # Platform contract for AI agents editing the web app
 ├── icon.png         # Custom app icon asset (if configured)
 ├── app.log          # Runtime console, error & bridge logs
-└── [data files]     # Dynamic files created by app (e.g. saved_items.json)
+└── [data files]     # Created at runtime (e.g. entries.json, photo_*.jpg)
 ```
+
+The starter template ships **its own `AGENTS.md`** into the workspace, documenting the runtime from
+the web app's point of view (bridge API, platform limits, house rules). It is a separate document
+from this one — **when the JavaScript bridge changes, update both.**
 
 ### Asset Interception
 The `WebView` loads `https://app.local/index.html`. Requests to `https://app.local/*` (e.g. `<link rel="stylesheet" href="style.css">`, `<script src="app.js"></script>`, or JSON/image assets) are intercepted in `WebViewClient.shouldInterceptRequest` and served directly from `filesDir/workspace/` with auto-resolved MIME types.
@@ -93,6 +102,19 @@ When adding new bridge methods for the runtime web app:
    ```kotlin
    webView.addJavascriptInterface(yourBridgeInstance, "BridgeName")
    ```
+7. Mirror the change in **both** `AGENTS.md` files and in the template's `bridge.js`.
+
+### Current bridge surface
+
+`NativeStorageBridge` exposes key-value state (`saveState` / `loadState` / `removeState` /
+`clearAllState`), file I/O (`writeFile` / `readFile` / `fileExists` / `deleteFile` / `listFiles`),
+**binary file I/O (`writeFileBase64` / `readFileBase64`)**, telemetry (`getStorageStats`), and
+notifications (`showNotification` / `showNotificationWithId` / `cancelNotification` /
+`hasNotificationPermission` / `requestNotificationPermission`).
+
+`WebChromeClient.onShowFileChooser` is implemented in `MainActivity`, so `<input type="file">` works
+inside the runtime web app. Pair it with `writeFileBase64` to persist a picked image as a real
+binary file that the `app.local` interceptor can then serve via `<img src="...">`.
 
 ---
 
@@ -116,5 +138,60 @@ When adding new bridge methods for the runtime web app:
    - XML view IDs like `btn_reset` or `btn_edit_code` map to ViewBinding properties `binding.btnReset` and `binding.btnEditCode`. When updating layouts, ensure all references in `MainActivity.kt` stay synchronized.
 4. **MIME Resolution & Asset URLs**:
    - All internal requests to `https://app.local/*` are intercepted by `WebViewClient.shouldInterceptRequest` from `filesDir/workspace/`. Ensure any new file types are registered in `WorkspaceManager.getMimeType()`.
-5. **Git Commit & Push Restrictions**:
-   - **Agent Rule**: Do **not** run `git commit` or `git push` autonomously. Only execute commit and push commands when the user explicitly gives a direct instruction to do so.
+5. **Workspace Files & Nested Subdirectories**:
+   - `WorkspaceManager` and `NativeStorageBridge` support real nested subdirectories (e.g. `css/style.css`, `js/app.js`, `assets/images/photo.jpg`).
+   - Slashes (`/`) are preserved for subdirectories, while path traversal (`..` escaping root) is strictly prevented. Parent directories are auto-created when writing files.
+6. **Binary Files & History Snapshots**:
+   - `WorkspaceHistoryManager` stores file contents as JSON strings, so binary assets would be
+     destroyed by a UTF-8 round-trip. `WorkspaceManager.isBinaryAsset()` excludes them from
+     snapshots and from both restore sweeps. Consequence: **images are not version-controlled**,
+     but a code rollback no longer corrupts `icon.png` or the user's photos.
+7. **Starter Template Assets Are Read As Text**:
+   - `DefaultWebApp.getStarterFile()` decodes assets as UTF-8, so **never** place a binary file in
+     `assets/starter_template/` — it would be silently corrupted at install time.
+8. **Bridge Signature Quirks** (all documented in the workspace `AGENTS.md` too):
+   - `loadState(key, defaultValue)` has a Kotlin default argument but no `@JvmOverloads`, so
+     JavaScript **must** pass both arguments.
+   - `readFile` returns `""` for both "missing" and "empty" — pair with `fileExists`.
+   - `showNotificationWithId` takes an `Int`; `Date.now()` overflows it. Prefer `showNotification`.
+   - `NativeMemoryBridge` is never registered. `window.AndroidMemory` is an alias of
+     `NativeStorageBridge`, so its memory methods do not exist at runtime.
+9. **Kotlin Block Comments Nest — `/*` and `*/` Inside a Comment Will Break the Build**:
+   - **Kotlin block comments nest**, unlike Java, C, or JavaScript. The lexer tracks depth, so a
+     `/*` appearing *inside* a comment opens a **second** level, and the `*/` that looks like it
+     closes the comment only unwinds one level. Everything after it is swallowed as comment —
+     often to end of file.
+   - This codebase is a minefield for it: the strings `https://app.local/*` and the MIME wildcard
+     `*/*` appear constantly in prose, and both contain a comment delimiter.
+
+     ```kotlin
+     /**
+      * Served by the `https://app.local/*` interceptor.   // ← opens a NESTED comment
+      */                                                   // ← only closes the nested one
+     fun stillInsideAComment() {}                          // silently not compiled
+     ```
+
+     The mirror-image case is a `*/` closing a comment **early**, which turns the remaining
+     KDoc prose into code:
+
+     ```kotlin
+     /**
+      * Falls back to */* when the types disagree.   // ← comment ends at the `*/`
+      */                                             // ← now a syntax error
+     ```
+   - **Symptoms are misleading.** The nesting case reports no error at the comment. It reports
+     `Unresolved reference` on members far below — including things the comment swallowed, like a
+     `companion object` — so the reported line has nothing to do with the real cause. If you see a
+     cluster of unresolved references in one file, check for a stray `/*` above them **first**.
+   - **Rule**: never write a bare `/*` or `*/` inside a comment. Backticks and markdown do not help
+     — the lexer does not know what markdown is. Reword instead: write `https://app.local`, or
+     "a full wildcard" rather than `*/*`. Inside **string literals** these sequences are perfectly
+     safe (`return "*/*"` is fine); the hazard is comments only.
+   - **Do not verify by counting delimiters.** Comparing counts of `/*` and `*/` in a file produces
+     false positives from string literals like `"*/*"` and false negatives from nesting, and a
+     checker that only looks for early-closing comments cannot detect the nesting case at all.
+     A correct check must lex the file: track nesting depth while skipping `//` line comments and
+     `"`, `'`, and `"""` literals, then report any comment left unclosed at EOF and any `*/`
+     encountered at depth 0.
+10. **Git Commit & Push Restrictions**:
+    - **Agent Rule**: Do **not** run `git commit` or `git push` autonomously. Only execute commit and push commands when the user explicitly gives a direct instruction to do so.
