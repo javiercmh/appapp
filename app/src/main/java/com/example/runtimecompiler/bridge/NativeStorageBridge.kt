@@ -30,13 +30,6 @@ class NativeStorageBridge(
     private val sharedPrefs: SharedPreferences =
         context.getSharedPreferences("runtime_app_state", Context.MODE_PRIVATE)
 
-    init {
-        // Purge legacy shadow state from earlier versions if present
-        if (sharedPrefs.contains("saved_items_state")) {
-            sharedPrefs.edit().remove("saved_items_state").apply()
-        }
-    }
-
     private val workspaceDir: File
         get() {
             val dir = File(context.filesDir, "workspace")

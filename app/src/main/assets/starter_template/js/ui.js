@@ -272,14 +272,14 @@ export function initNotificationPlayground() {
 
 const FILE_ROLES = {
   'index.html': { icon: '🌐', desc: 'Web markup & UI shell', group: 'code' },
-  'style.css': { icon: '🎨', desc: 'Theme & safe-area styles', group: 'code' },
-  'app.js': { icon: '⚡', desc: 'Entry point & bootstrap', group: 'code' },
-  'ui.js': { icon: '🖌️', desc: 'DOM rendering & interactions', group: 'code' },
-  'store.js': { icon: '💾', desc: 'Data persistence & preferences', group: 'code' },
-  'bridge.js': { icon: '🔌', desc: 'Native Android bridge wrapper', group: 'code' },
+  'css/style.css': { icon: '🎨', desc: 'Theme & safe-area styles', group: 'code' },
+  'js/app.js': { icon: '⚡', desc: 'Entry point & bootstrap', group: 'code' },
+  'js/ui.js': { icon: '🖌️', desc: 'DOM rendering & interactions', group: 'code' },
+  'js/store.js': { icon: '💾', desc: 'Data persistence & preferences', group: 'code' },
+  'js/bridge.js': { icon: '🔌', desc: 'Native Android bridge wrapper', group: 'code' },
   'manifest.json': { icon: '📦', desc: 'App metadata & settings', group: 'config' },
   'AGENTS.md': { icon: '🤖', desc: 'AI developer instructions', group: 'config' },
-  'entries.json': { icon: '📝', desc: 'User saved notes database', group: 'data' },
+  'data/entries.json': { icon: '📝', desc: 'User saved notes database', group: 'data' },
   'app.log': { icon: '📜', desc: 'Runtime console logs', group: 'data' }
 };
 

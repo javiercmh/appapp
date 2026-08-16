@@ -7,13 +7,13 @@
   "main": "index.html",
   "files": [
     "index.html",
-    "style.css",
-    "app.js",
-    "bridge.js",
-    "store.js",
-    "ui.js",
+    "css/style.css",
+    "js/app.js",
+    "js/bridge.js",
+    "js/store.js",
+    "js/ui.js",
     "manifest.json",
     "AGENTS.md",
-    "entries.json"
+    "data/entries.json"
   ]
 }

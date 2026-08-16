@@ -24,16 +24,6 @@ class WorkspaceManager(
 ) {
     val workspaceDir: File = File(context.filesDir, "workspace")
 
-    // Kept separate from `appapp_settings`, which a factory reset clears wholesale.
-    private val statePrefs = context.getSharedPreferences("workspace_state", Context.MODE_PRIVATE)
-
-    /**
-     * Set when a newer starter template shipped but the workspace had user edits, so it was left
-     * untouched. MainActivity reads this once to surface a single notice.
-     */
-    var pendingTemplateUpgradeNotice: Boolean = false
-        private set
-
     init {
         ensureWorkspaceInitialized()
     }
@@ -42,23 +32,8 @@ class WorkspaceManager(
         onLogListener?.invoke(message)
     }
 
-    fun consumeTemplateUpgradeNotice(): Boolean {
-        val pending = pendingTemplateUpgradeNotice
-        pendingTemplateUpgradeNotice = false
-        return pending
-    }
-
-    private var appliedTemplateVersion: Int
-        get() = statePrefs.getInt(KEY_APPLIED_TEMPLATE_VERSION, 0)
-        set(value) = statePrefs.edit().putInt(KEY_APPLIED_TEMPLATE_VERSION, value).apply()
-
     /**
-     * Initializes the workspace directory and starter files if not already present, and upgrades
-     * older starter templates on existing devices.
-     *
-     * An upgrade only happens when every code file still matches a previously shipped version
-     * byte-for-byte. If the user has edited anything, their files are never touched — they are told
-     * where to find the new template instead.
+     * Initializes the workspace directory and starter files if not already present.
      */
     fun ensureWorkspaceInitialized() {
         if (!workspaceDir.exists()) {
@@ -74,42 +49,6 @@ class WorkspaceManager(
         val logFile = File(workspaceDir, "app.log")
         if (!logFile.exists()) {
             writeFile("app.log", "[System] App² workspace initialized.\n")
-        }
-
-        if (appliedTemplateVersion >= DefaultWebApp.TEMPLATE_VERSION) return
-
-        if (isWorkspacePristine()) {
-            applyTemplate(DefaultWebApp.getStarterFiles(context))
-            // applyTemplate only writes, so files dropped between versions must go explicitly.
-            for (obsolete in DefaultWebApp.OBSOLETE_TEMPLATE_FILES) {
-                val file = File(workspaceDir, obsolete)
-                if (!file.exists()) continue
-                if (DefaultWebApp.isPristine(obsolete, readFile(obsolete))) {
-                    file.delete()
-                    log("[Workspace] Removed obsolete starter file '$obsolete'.")
-                } else {
-                    log("[Workspace] Kept '$obsolete' — it contains your data.")
-                }
-            }
-            log("[Workspace] Upgraded untouched starter template to v${DefaultWebApp.TEMPLATE_VERSION}.")
-        } else {
-            pendingTemplateUpgradeNotice = true
-            appendToFile(
-                "app.log",
-                "[System] A new App² starter template (v${DefaultWebApp.TEMPLATE_VERSION}) is available. " +
-                    "Open </> → History → ⭐ Official Starter Template to load it. " +
-                    "Your current files were left untouched.\n"
-            )
-        }
-        appliedTemplateVersion = DefaultWebApp.TEMPLATE_VERSION
-    }
-
-    /** True only if every code file on disk is byte-identical to a previously shipped version. */
-    private fun isWorkspacePristine(): Boolean {
-        val trackedFiles = listOf("index.html", "style.css", "app.js")
-        return trackedFiles.all { name ->
-            val file = File(workspaceDir, name)
-            file.exists() && DefaultWebApp.isPristine(name, readFile(name))
         }
     }
 
@@ -143,7 +82,6 @@ class WorkspaceManager(
         val starterFiles = DefaultWebApp.getStarterFiles(context)
         val success = applyTemplate(starterFiles)
         if (success) {
-            appliedTemplateVersion = DefaultWebApp.TEMPLATE_VERSION
             appendToFile("app.log", "[System] App² workspace reset to starter template.\n")
         }
         return success
@@ -156,11 +94,10 @@ class WorkspaceManager(
         return try {
             val files = workspaceDir.listFiles() ?: emptyArray()
             for (file in files) {
-                file.delete()
+                file.deleteRecursively()
             }
             val starterFiles = DefaultWebApp.getStarterFiles(context)
             val success = applyTemplate(starterFiles)
-            appliedTemplateVersion = DefaultWebApp.TEMPLATE_VERSION
             writeFile("app.log", "[System] App² factory reset completed.\n")
             log("[Workspace] Factory reset workspace successfully.")
             success
@@ -182,13 +119,13 @@ class WorkspaceManager(
 
     /**
      * Lists all files in the workspace directory recursively.
-     * Core files (index.html, style.css, app.js, manifest.json, app.log) are prioritized at the top.
+     * Core files (index.html, css/style.css, js/app.js, manifest.json, app.log) are prioritized at the top.
      */
     fun listFiles(): List<WorkspaceFile> {
         if (!workspaceDir.exists()) return emptyList()
         val coreNames = setOf(
-            "index.html", "style.css", "app.js", "bridge.js", "store.js", "ui.js",
-            "manifest.json", "AGENTS.md", "app.log"
+            "index.html", "css/style.css", "js/app.js", "js/bridge.js", "js/store.js", "js/ui.js",
+            "manifest.json", "AGENTS.md", "data/entries.json", "app.log"
         )
 
         return workspaceDir.walkTopDown()
@@ -206,8 +143,8 @@ class WorkspaceManager(
                 .thenBy {
                     when (it.name) {
                         "index.html" -> 0
-                        "style.css" -> 1
-                        "app.js" -> 2
+                        "css/style.css" -> 1
+                        "js/app.js" -> 2
                         "manifest.json" -> 3
                         "app.log" -> 4
                         else -> 5
@@ -337,8 +274,6 @@ class WorkspaceManager(
     }
 
     companion object {
-        private const val KEY_APPLIED_TEMPLATE_VERSION = "applied_template_version"
-
         /**
          * Sanitizes a relative file path, preserving forward slashes for subdirectories
          * while preventing directory traversal (such as ..) and removing invalid characters.

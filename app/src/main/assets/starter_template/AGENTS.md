@@ -12,22 +12,22 @@ workspace directly. The user taps **▶ Run** to reload. Keep everything vanilla
 
 | File | Owns |
 | :--- | :--- |
-| `index.html` | Markup and the shell. Most content is rendered by JS. |
-| `style.css` | All styling. One `--accent` custom property drives the theme colour. |
-| `app.js` | Entry point. Boots the app, wires modules, handles tab navigation. |
-| `bridge.js` | **The only file that touches the native bridge.** |
-| `store.js` | Data: reads/writes `entries.json`, photo lifecycle, preferences. |
-| `ui.js` | DOM rendering. Never calls the bridge directly. |
+| `index.html` | Markup and the shell. Entrypoint referencing `css/style.css` and `js/app.js`. |
+| `css/style.css` | All styling. One `--accent` custom property drives the theme colour. |
+| `js/app.js` | Entry point. Boots the app, wires modules, handles tab navigation. |
+| `js/bridge.js` | **The only file that touches the native bridge.** |
+| `js/store.js` | Data: reads/writes `data/entries.json`, photo lifecycle, preferences. |
+| `js/ui.js` | DOM rendering. Never calls the bridge directly. |
 | `manifest.json` | App metadata. `main` sets the entry point and must stay accurate. |
-| `entries.json` | The user's saved notes. |
+| `data/entries.json` | The user's saved notes. |
 
 **Dependencies point one way: `ui → store → bridge`.** Follow it and changes land in the right
 place: a new visual feature goes in `ui.js`; a new thing to persist goes in `store.js`; a new native
 capability goes in `bridge.js`. Never call `window.AndroidStorage` from `ui.js`.
 
-Modules are loaded with `<script type="module" src="app.js">`, so:
+Modules are loaded with `<script type="module" src="js/app.js">`, so:
 
-- **Use flat relative imports with the `.js` extension**: `import { load } from './store.js'`.
+- **Use relative imports with the `.js` extension**: `import { load } from './store.js'`.
   Bare specifiers (`from 'store'`) do not work — there is no resolver.
 - **`type="module"` defers execution.** By the time your module runs, `DOMContentLoaded` has usually
   already fired. Initialise at module top level; do **not** wrap setup in a `DOMContentLoaded`
@@ -176,7 +176,6 @@ Design for that:
 
 - **Do not rename or delete `index.html` or `manifest.json`.** The host protects and depends on them.
 - **Update `manifest.json`'s `files` array** when you add a file.
+- **Do not maintain legacy code unless explicitly stated otherwise.** Refactor cleanly and drop dead patterns.
 - Keep it vanilla — no frameworks, no build tooling, no package manager.
 - Prefer `textContent` over `innerHTML` when inserting user-entered text.
-- Do not reference `NativeMemoryBridge` or call `AndroidMemory.allocate()`. That class exists in the
-  Android host but is never registered, so those methods do not exist at runtime.

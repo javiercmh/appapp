@@ -3,7 +3,7 @@
 
 import * as bridge from './bridge.js';
 
-const FILE = 'entries.json';
+const FILE = 'data/entries.json';
 const ACCENT_KEY = 'demo.accent';
 const TIP_KEY = 'demo.tip.v3';
 

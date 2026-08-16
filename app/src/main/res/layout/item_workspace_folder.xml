@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/folder_item_root"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="8dp"
+    android:orientation="vertical">
+
+    <!-- Folder Header Bar -->
+    <LinearLayout
+        android:id="@+id/folder_header"
+        android:layout_width="match_parent"
+        android:layout_height="46dp"
+        android:background="@drawable/bg_tab_unselected"
+        android:clickable="true"
+        android:focusable="true"
+        android:foreground="?attr/selectableItemBackground"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="12dp">
+
+        <!-- Folder Icon -->
+        <TextView
+            android:id="@+id/folder_icon"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="@drawable/bg_tab_selected"
+            android:gravity="center"
+            android:text="📁"
+            android:textSize="16sp" />
+
+        <!-- Folder Name -->
+        <TextView
+            android:id="@+id/folder_name"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:fontFamily="monospace"
+            android:text="css/"
+            android:textColor="@color/on_surface"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <!-- Child Count Badge -->
+        <TextView
+            android:id="@+id/folder_count_badge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:background="@drawable/bg_tab_selected"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="2dp"
+            android:text="2 files"
+            android:textColor="@color/on_surface_muted"
+            android:textSize="11sp" />
+
+        <!-- Expand / Collapse Indicator -->
+        <TextView
+            android:id="@+id/folder_caret"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:gravity="center"
+            android:text="▼"
+            android:textColor="@color/on_surface_muted"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <!-- Children Container (Indented) -->
+    <LinearLayout
+        android:id="@+id/folder_children_container"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:orientation="vertical"
+        android:paddingStart="16dp" />
+
+</LinearLayout>

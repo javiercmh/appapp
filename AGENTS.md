@@ -19,10 +19,7 @@ This document provides architectural context, coding standards, and operational 
 | `com.example.runtimecompiler.workspace.WorkspaceHistoryManager` | Manages up to 5 full version snapshots (FIFO) of the workspace in `filesDir/workspace_history.json` with timestamps, enabling one-tap rollback. |
 | `com.example.runtimecompiler.workspace.WorkspacePackageManager` | Handles selective ZIP export/packaging, Android Sharesheet integration, direct stream export, and secure ZIP extraction with Zip-Slip defense and auto-backup snapshots. |
 | `com.example.runtimecompiler.bridge.NativeStorageBridge` | Main `@JavascriptInterface` exposed to the web runtime as `window.AndroidStorage`, `window.AndroidMemory`, and `window.AndroidNotification`. Manages persistent key-value state, unified file I/O directly in `workspace/`, and native system notifications. |
-| `com.example.runtimecompiler.bridge.NativeMemoryBridge` | **Not registered.** Defines memory methods that are unreachable from JavaScript — `window.AndroidMemory` is an alias of `NativeStorageBridge`. Do not document or use it as a web-facing API. |
-| `com.example.runtimecompiler.bridge.MemoryBlock` | Off-heap direct `java.nio.ByteBuffer` wrapper for low-level byte operations. |
-| `com.example.runtimecompiler.bridge.SystemMemoryManager` | Queries device RAM (`ActivityManager.MemoryInfo`), JVM heap, and native memory allocations. |
-| `com.example.runtimecompiler.templates.DefaultWebApp` | Loads the starter template files dynamically from standalone assets (`app/src/main/assets/starter_template/`). Owns `TEMPLATE_VERSION` and the pristine-content hashes used to decide whether a workspace can be safely upgraded in place. |
+| `com.example.runtimecompiler.templates.DefaultWebApp` | Loads the starter template files dynamically from standalone assets (`app/src/main/assets/starter_template/`). |
 
 ---
 
@@ -32,16 +29,20 @@ All project code and runtime app files live together in the unified internal sto
 ```
 filesDir/workspace/
 ├── index.html       # Primary HTML entrypoint & UI layout
-├── style.css        # Stylesheet with safe-area variables
-├── app.js           # ES module entry point (<script type="module">)
-├── bridge.js        # Sole wrapper around the AndroidStorage bridge
-├── store.js         # Persistence: data files, photos, preferences
-├── ui.js            # DOM rendering
 ├── manifest.json    # App metadata & identity configuration
 ├── AGENTS.md        # Platform contract for AI agents editing the web app
+├── css/
+│   └── style.css    # Stylesheet with safe-area variables
+├── js/
+│   ├── app.js       # ES module entry point (<script type="module" src="js/app.js">)
+│   ├── bridge.js    # Sole wrapper around the AndroidStorage bridge
+│   ├── store.js     # Persistence: data files, photos, preferences
+│   └── ui.js        # DOM rendering & interactions
+├── data/
+│   └── entries.json # User data store
 ├── icon.png         # Custom app icon asset (if configured)
 ├── app.log          # Runtime console, error & bridge logs
-└── [data files]     # Created at runtime (e.g. entries.json, photo_*.jpg)
+└── [custom files]   # Created at runtime (e.g. nested assets, photo_*.jpg)
 ```
 
 The starter template ships **its own `AGENTS.md`** into the workspace, documenting the runtime from
@@ -154,8 +155,7 @@ binary file that the `app.local` interceptor can then serve via `<img src="...">
      JavaScript **must** pass both arguments.
    - `readFile` returns `""` for both "missing" and "empty" — pair with `fileExists`.
    - `showNotificationWithId` takes an `Int`; `Date.now()` overflows it. Prefer `showNotification`.
-   - `NativeMemoryBridge` is never registered. `window.AndroidMemory` is an alias of
-     `NativeStorageBridge`, so its memory methods do not exist at runtime.
+   - **Do not maintain legacy code unless explicitly stated otherwise.** Refactor cleanly and delete dead code rather than keeping migration shims.
 9. **Kotlin Block Comments Nest — `/*` and `*/` Inside a Comment Will Break the Build**:
    - **Kotlin block comments nest**, unlike Java, C, or JavaScript. The lexer tracks depth, so a
      `/*` appearing *inside* a comment opens a **second** level, and the `*/` that looks like it

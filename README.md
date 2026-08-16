@@ -73,9 +73,7 @@ appapp/
         ├── java/com/example/runtimecompiler/
         │   ├── MainActivity.kt                  # Main Activity hosting WebView & dialogs
         │   ├── bridge/
-        │   │   ├── NativeStorageBridge.kt      # JavaScript interface for file I/O, state, and notifications
-        │   │   ├── MemoryBlock.kt              # Off-heap direct ByteBuffer native memory wrapper
-        │   │   └── SystemMemoryManager.kt      # RAM & disk storage telemetry
+        │   │   └── NativeStorageBridge.kt      # JavaScript interface for file I/O, state, and notifications
         │   ├── editor/
         │   │   ├── SyntaxHighlighter.kt        # In-editor syntax coloring for HTML, CSS, JS, JSON
         │   │   └── SearchHelper.kt             # In-file text search & match navigation

@@ -331,11 +331,6 @@ class MainActivity : AppCompatActivity() {
         setupListeners()
         reloadApp()
 
-        // A newer starter template shipped, but this workspace had user edits so it was left alone.
-        if (workspaceManager.consumeTemplateUpgradeNotice()) {
-            Toast.makeText(this, getString(R.string.template_upgrade_available), Toast.LENGTH_LONG).show()
-        }
-
         // Handle Back button for WebView history
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -787,23 +782,24 @@ class MainActivity : AppCompatActivity() {
 
         fun getFileCategoryInfo(name: String): Pair<String, String> {
             val lower = name.lowercase()
+            val simple = lower.substringAfterLast('/')
             return when {
-                lower == "index.html" -> Pair("🌐", "Web Entrypoint & Layout")
-                lower == "style.css" -> Pair("🎨", "App Stylesheet")
-                lower == "app.js" -> Pair("⚡", "App Entry Point & Bootstrap")
-                lower == "bridge.js" -> Pair("🔌", "Native Bridge Wrapper")
-                lower == "store.js" -> Pair("💾", "Data & Persistence Layer")
-                lower == "ui.js" -> Pair("🖌️", "UI Rendering Layer")
-                lower == "agents.md" -> Pair("🤖", "AI Agent Instructions")
-                lower == "manifest.json" -> Pair("📦", "App Metadata & Manifest")
-                lower == "icon.png" || lower == "app_icon.png" -> Pair("🖼️", "App Icon Asset")
-                lower == "app.log" -> Pair("📜", "Console & Runtime Logs")
-                lower.endsWith(".html") || lower.endsWith(".htm") -> Pair("🌐", "HTML View")
-                lower.endsWith(".css") -> Pair("🎨", "Stylesheet")
-                lower.endsWith(".js") || lower.endsWith(".mjs") -> Pair("⚡", "JavaScript Module")
-                lower.endsWith(".json") -> Pair("📄", "JSON Data File")
-                lower.endsWith(".md") -> Pair("📝", "Markdown Document")
-                lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".svg") || lower.endsWith(".webp") -> Pair("🖼️", "Image Asset")
+                simple == "index.html" -> Pair("🌐", "Web Entrypoint & Layout")
+                simple == "style.css" -> Pair("🎨", "App Stylesheet")
+                simple == "app.js" -> Pair("⚡", "App Entry Point & Bootstrap")
+                simple == "bridge.js" -> Pair("🔌", "Native Bridge Wrapper")
+                simple == "store.js" -> Pair("💾", "Data & Persistence Layer")
+                simple == "ui.js" -> Pair("🖌️", "UI Rendering Layer")
+                simple == "agents.md" -> Pair("🤖", "AI Agent Instructions")
+                simple == "manifest.json" -> Pair("📦", "App Metadata & Manifest")
+                simple == "icon.png" || simple == "app_icon.png" -> Pair("🖼️", "App Icon Asset")
+                simple == "app.log" -> Pair("📜", "Console & Runtime Logs")
+                simple.endsWith(".html") || simple.endsWith(".htm") -> Pair("🌐", "HTML View")
+                simple.endsWith(".css") -> Pair("🎨", "Stylesheet")
+                simple.endsWith(".js") || simple.endsWith(".mjs") -> Pair("⚡", "JavaScript Module")
+                simple.endsWith(".json") -> Pair("📄", "JSON Data File")
+                simple.endsWith(".md") -> Pair("📝", "Markdown Document")
+                simple.endsWith(".png") || simple.endsWith(".jpg") || simple.endsWith(".svg") || simple.endsWith(".webp") -> Pair("🖼️", "Image Asset")
                 else -> Pair("📄", "Workspace File")
             }
         }
@@ -831,14 +827,74 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        fun refreshFileList() {
-            filesContainer.removeAllViews()
-            val files = workspaceManager.listFiles()
-            fileCountBadge.text = "${files.size} files"
+        data class DirectoryNode(
+            val name: String,
+            val fullPath: String,
+            val subFolders: MutableMap<String, DirectoryNode> = sortedMapOf(),
+            val files: MutableList<WorkspaceFile> = mutableListOf()
+        ) {
+            fun totalFiles(): Int = files.size + subFolders.values.sumOf { it.totalFiles() }
+        }
 
-            val inflater = LayoutInflater.from(this)
+        fun buildTree(files: List<WorkspaceFile>): DirectoryNode {
+            val root = DirectoryNode("", "")
             for (file in files) {
-                val itemView = inflater.inflate(R.layout.item_workspace_file, filesContainer, false)
+                val parts = file.name.split('/')
+                var current = root
+                var currentPath = ""
+                for (i in 0 until parts.size - 1) {
+                    val folderName = parts[i]
+                    currentPath = if (currentPath.isEmpty()) folderName else "$currentPath/$folderName"
+                    current = current.subFolders.getOrPut(folderName) {
+                        DirectoryNode(folderName, currentPath)
+                    }
+                }
+                current.files.add(file)
+            }
+            return root
+        }
+
+        val inflater = LayoutInflater.from(this)
+        lateinit var refreshFileList: () -> Unit
+
+        fun renderDirectory(node: DirectoryNode, targetContainer: LinearLayout) {
+            for ((_, subFolder) in node.subFolders) {
+                val folderView = inflater.inflate(R.layout.item_workspace_folder, targetContainer, false)
+                val folderHeader = folderView.findViewById<LinearLayout>(R.id.folder_header)
+                val folderNameView = folderView.findViewById<TextView>(R.id.folder_name)
+                val folderCountBadge = folderView.findViewById<TextView>(R.id.folder_count_badge)
+                val folderCaret = folderView.findViewById<TextView>(R.id.folder_caret)
+                val childrenContainer = folderView.findViewById<LinearLayout>(R.id.folder_children_container)
+
+                folderNameView.text = "${subFolder.name}/"
+                val count = subFolder.totalFiles()
+                folderCountBadge.text = "$count ${if (count == 1) "file" else "files"}"
+
+                var isExpanded = true
+                folderHeader.setOnClickListener {
+                    isExpanded = !isExpanded
+                    childrenContainer.visibility = if (isExpanded) View.VISIBLE else View.GONE
+                    folderCaret.text = if (isExpanded) "▼" else "▶"
+                }
+
+                renderDirectory(subFolder, childrenContainer)
+                targetContainer.addView(folderView)
+            }
+
+            val sortedFiles = node.files.sortedWith { a, b ->
+                val aName = a.name.substringAfterLast('/')
+                val bName = b.name.substringAfterLast('/')
+                val priority = listOf("index.html", "manifest.json", "AGENTS.md")
+                val aIdx = priority.indexOf(aName)
+                val bIdx = priority.indexOf(bName)
+                if (aIdx != -1 && bIdx != -1) aIdx.compareTo(bIdx)
+                else if (aIdx != -1) -1
+                else if (bIdx != -1) 1
+                else aName.compareTo(bName, ignoreCase = true)
+            }
+
+            for (file in sortedFiles) {
+                val itemView = inflater.inflate(R.layout.item_workspace_file, targetContainer, false)
                 val iconView = itemView.findViewById<TextView>(R.id.file_item_icon)
                 val nameView = itemView.findViewById<TextView>(R.id.file_item_name)
                 val catView = itemView.findViewById<TextView>(R.id.file_item_category)
@@ -846,7 +902,7 @@ class MainActivity : AppCompatActivity() {
 
                 val (emoji, categoryDesc) = getFileCategoryInfo(file.name)
                 iconView.text = emoji
-                nameView.text = file.name
+                nameView.text = file.name.substringAfterLast('/')
                 catView.text = categoryDesc
                 sizeView.text = formatFileSize(file.size)
 
@@ -864,8 +920,17 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
 
-                filesContainer.addView(itemView)
+                targetContainer.addView(itemView)
             }
+        }
+
+        refreshFileList = {
+            filesContainer.removeAllViews()
+            val files = workspaceManager.listFiles()
+            fileCountBadge.text = "${files.size} files"
+
+            val tree = buildTree(files)
+            renderDirectory(tree, filesContainer)
         }
 
         // Close Hub
@@ -912,7 +977,7 @@ class MainActivity : AppCompatActivity() {
         // New File Creation
         btnNewFile.setOnClickListener {
             val input = EditText(this).apply {
-                hint = "data.json / helper.js / styles.css"
+                hint = "js/helper.js, css/theme.css, data.json"
                 setSingleLine()
             }
             MaterialAlertDialogBuilder(this)

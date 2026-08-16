@@ -251,12 +251,6 @@ class WorkspaceHistoryManager(
                 // 2. Apply starter template files
                 workspaceManager.applyTemplate(starterFiles)
 
-                // 3. Purge legacy SharedPreferences shadow state if any exists
-                try {
-                    val sp = context.getSharedPreferences("runtime_app_state", Context.MODE_PRIVATE)
-                    sp.edit().remove("saved_items_state").apply()
-                } catch (_: Exception) {}
-
                 log("[History] Successfully restored workspace to official starter template.")
                 return true
             }
