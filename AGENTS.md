@@ -32,6 +32,7 @@ filesDir/workspace/
 ├── style.css        # Modular CSS stylesheet with safe-area variables
 ├── app.js           # JavaScript logic & AndroidStorage bridge calls
 ├── manifest.json    # App metadata
+├── app.log          # Runtime console, error & bridge logs
 └── [data files]     # Dynamic files created by app (e.g. saved_items.json)
 ```
 
@@ -94,6 +95,21 @@ When adding new bridge methods for the runtime web app:
 
 ## 6. Testing & Verification
 
-- **Gradle Validation**: Ensure Gradle syncs without version conflicts.
+- **Gradle Validation**: Ensure Gradle files (`build.gradle.kts`, `libs.versions.toml`) sync without syntax or version conflicts.
 - **Persistence Verification**: When modifying storage logic, test by adding items, terminating the process, and verifying that state reloads identically on restart.
 - **History & Snapshots**: Verify that workspace snapshots are taken before "Run" and that snapshot restoration properly updates the editor and runtime.
+
+---
+
+## 7. Common Gotchas & Environment Quirks
+
+1. **Missing `./gradlew` Wrapper & CLI `gradle` Command**:
+   - The repository does **not** check in the root `./gradlew` / `./gradlew.bat` wrapper scripts or `gradle-wrapper.jar`.
+   - Standalone `gradle` is not installed on the system `$PATH`.
+   - **Agent Rule**: Do **not** run `./gradlew` commands or spend tool calls hunting for Gradle installations across `/tmp`, `/home`, or SDK folders. Code changes, dependencies, and resources are built and synchronized directly within **Android Studio**.
+2. **Terminal Sandbox Isolation**:
+   - The execution sandbox isolates filesystem access outside the workspace (`/home/melo/Android/Sdk` etc. cannot be probed from standard sandbox mode).
+3. **Resource Binding CamelCase**:
+   - XML view IDs like `btn_reset` or `btn_edit_code` map to ViewBinding properties `binding.btnReset` and `binding.btnEditCode`. When updating layouts, ensure all references in `MainActivity.kt` stay synchronized.
+4. **MIME Resolution & Asset URLs**:
+   - All internal requests to `https://app.local/*` are intercepted by `WebViewClient.shouldInterceptRequest` from `filesDir/workspace/`. Ensure any new file types are registered in `WorkspaceManager.getMimeType()`.

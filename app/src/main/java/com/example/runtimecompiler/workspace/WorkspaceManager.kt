@@ -43,6 +43,11 @@ class WorkspaceManager(
         val indexFile = File(workspaceDir, "index.html")
         if (!indexFile.exists()) {
             resetWorkspace()
+        } else {
+            val logFile = File(workspaceDir, "app.log")
+            if (!logFile.exists()) {
+                writeFile("app.log", "[System] AppApp workspace initialized.\n")
+            }
         }
     }
 
@@ -58,6 +63,7 @@ class WorkspaceManager(
             writeFile("style.css", DefaultWebApp.DEFAULT_STYLE_CSS)
             writeFile("app.js", DefaultWebApp.DEFAULT_APP_JS)
             writeFile("manifest.json", DefaultWebApp.DEFAULT_MANIFEST_JSON)
+            writeFile("app.log", "[System] AppApp workspace reset to starter template.\n")
             log("[Workspace] Workspace reset to default AppApp starter template.")
             true
         } catch (e: Exception) {
@@ -77,11 +83,11 @@ class WorkspaceManager(
 
     /**
      * Lists all files in the workspace directory.
-     * Core files (index.html, style.css, app.js) are prioritized at the top.
+     * Core files (index.html, style.css, app.js, manifest.json, app.log) are prioritized at the top.
      */
     fun listFiles(): List<WorkspaceFile> {
         val files = workspaceDir.listFiles() ?: emptyArray()
-        val coreNames = setOf("index.html", "style.css", "app.js", "manifest.json")
+        val coreNames = setOf("index.html", "style.css", "app.js", "manifest.json", "app.log")
 
         return files
             .filter { it.isFile }
@@ -100,7 +106,8 @@ class WorkspaceManager(
                         "style.css" -> 1
                         "app.js" -> 2
                         "manifest.json" -> 3
-                        else -> 4
+                        "app.log" -> 4
+                        else -> 5
                     }
                 }
                 .thenBy { it.name }
@@ -139,6 +146,34 @@ class WorkspaceManager(
             true
         } catch (e: Exception) {
             log("[Workspace Error] Failed to write '$fileName': ${e.message}")
+            false
+        }
+    }
+
+    /**
+     * Appends text content to a workspace file (e.g. app.log) in a thread-safe manner.
+     * Automatically truncates/rolls over if the file exceeds maxBytes (default: 200KB).
+     */
+    @Synchronized
+    fun appendToFile(fileName: String, content: String, maxBytes: Long = 200_000): Boolean {
+        return try {
+            val file = getFile(fileName)
+            if (!file.exists()) {
+                file.createNewFile()
+            } else if (file.length() > maxBytes) {
+                // Keep the last ~half of the log content on rollover
+                val existing = readFile(fileName)
+                val halfLen = (maxBytes / 2).toInt()
+                val trimmed = if (existing.length > halfLen) {
+                    "[System] Log truncated due to size limit...\n" + existing.substring(existing.length - halfLen)
+                } else existing
+                writeFile(fileName, trimmed)
+            }
+            FileOutputStream(file, true).use { output ->
+                output.write(content.toByteArray(StandardCharsets.UTF_8))
+            }
+            true
+        } catch (e: Exception) {
             false
         }
     }

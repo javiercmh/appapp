@@ -149,12 +149,12 @@ class MainActivity : AppCompatActivity() {
             windowInsets
         }
 
-        appendLog("[System] AppApp initialized with Edge-to-Edge & Unified Workspace.")
-
         // Initialize Workspace Manager
         workspaceManager = WorkspaceManager(this) { msg ->
             runOnUiThread { appendLog(msg) }
         }
+
+        appendLog("[System] AppApp initialized with Edge-to-Edge & Unified Workspace.")
 
         // Initialize Workspace History Manager
         historyManager = WorkspaceHistoryManager(this) { msg ->
@@ -297,11 +297,6 @@ class MainActivity : AppCompatActivity() {
         // Deploy / Add to Home Screen Pinned Shortcut
         binding.btnDeploy.setOnClickListener {
             deployToHomeScreen()
-        }
-
-        // Console & Storage Logs Dialog
-        binding.btnLogs.setOnClickListener {
-            showLogsDialog()
         }
 
         // Top Bar Refresh Button: Refresh site & clear cache
@@ -458,6 +453,9 @@ class MainActivity : AppCompatActivity() {
         val timestamp = timeFormat.format(Date())
         val formattedLog = "$timestamp $message\n"
         logBuffer.append(formattedLog)
+        if (::workspaceManager.isInitialized) {
+            workspaceManager.appendToFile("app.log", formattedLog)
+        }
     }
 
     /**
@@ -519,6 +517,7 @@ class MainActivity : AppCompatActivity() {
                 lower.endsWith(".css") -> "🎨"
                 lower.endsWith(".js") || lower.endsWith(".mjs") -> "⚡"
                 lower.endsWith(".json") -> "📦"
+                lower.endsWith(".log") -> "📜"
                 else -> "📄"
             }
         }
@@ -977,36 +976,7 @@ class MainActivity : AppCompatActivity() {
         dialog.show()
     }
 
-    /**
-     * Opens runtime console and native storage telemetry logs dialog.
-     */
-    private fun showLogsDialog() {
-        val dialog = Dialog(this, com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog)
-        dialog.setContentView(R.layout.dialog_console_logs)
-        dialog.window?.setLayout(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT
-        )
 
-        val logsView = dialog.findViewById<TextView>(R.id.logs_text_view)
-        val scrollView = dialog.findViewById<ScrollView>(R.id.logs_scroll_view)
-        val btnClear = dialog.findViewById<MaterialButton>(R.id.logs_btn_clear)
-        val btnClose = dialog.findViewById<MaterialButton>(R.id.logs_btn_close)
-
-        logsView.text = logBuffer.toString()
-        scrollView.post { scrollView.fullScroll(View.FOCUS_DOWN) }
-
-        btnClear.setOnClickListener {
-            logBuffer.setLength(0)
-            logsView.text = "[System] Logs cleared.\n"
-        }
-
-        btnClose.setOnClickListener {
-            dialog.dismiss()
-        }
-
-        dialog.show()
-    }
 
     override fun onDestroy() {
         super.onDestroy()

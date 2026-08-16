@@ -41,17 +41,6 @@
                     android:src="@drawable/ic_refresh"
                     app:tint="@color/on_surface_muted" />
 
-                <!-- Console & Memory Logs Button -->
-                <ImageButton
-                    android:id="@+id/btn_logs"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
-                    android:layout_marginStart="4dp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:contentDescription="@string/action_view_logs"
-                    android:src="@drawable/ic_terminal"
-                    app:tint="@color/accent_green" />
-
                 <!-- Edit Code Studio Button (Plain </> Icon) -->
                 <ImageButton
                     android:id="@+id/btn_edit_code"

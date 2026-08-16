@@ -26,8 +26,9 @@ An Android application written in **Kotlin** that allows you to create, edit, co
   - Key-value state persistence (`saveState`, `loadState`, `removeState`).
   - Workspace inspection (`getWorkspaceFiles`, `readWorkspaceFile`, `writeWorkspaceFile`).
   - Real-time disk space and RAM telemetry.
-- **Console & Storage Logs Terminal**:
-  - Intercepts JavaScript `console.log`, `console.warn`, `console.error`, and native storage events.
+- **Console & Storage Logs (`app.log`)**:
+  - Automatically records JavaScript `console.log`, `console.warn`, `console.error`, and native storage events into `filesDir/workspace/app.log`.
+  - Directly accessible and editable as an editor tab (`📜 app.log`), included in version history snapshots, and selectively packageable into ZIP exports.
 
 ---
 
