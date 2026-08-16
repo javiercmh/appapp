@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="primary">#2563EB</color>
-    <color name="primary_variant">#1D4ED8</color>
+    <color name="primary">#3B82F6</color>
+    <color name="primary_variant">#2563EB</color>
     <color name="on_primary">#FFFFFF</color>
     
     <color name="secondary">#0F172A</color>
@@ -9,14 +9,19 @@
     <color name="on_secondary">#F8FAFC</color>
 
     <color name="background">#090D16</color>
-    <color name="surface">#111827</color>
-    <color name="surface_variant">#1F2937</color>
+    <color name="surface">#0F172A</color>
+    <color name="surface_variant">#1E293B</color>
+    <color name="surface_elevated">#26334D</color>
     <color name="on_surface">#F9FAFB</color>
-    <color name="on_surface_muted">#9CA3AF</color>
+    <color name="on_surface_muted">#94A3B8</color>
+    <color name="on_surface_subtle">#64748B</color>
 
     <color name="accent_green">#10B981</color>
     <color name="accent_blue">#38BDF8</color>
+    <color name="accent_indigo">#6366F1</color>
     <color name="accent_red">#EF4444</color>
-    <color name="border_color">#374151</color>
-    <color name="code_editor_bg">#0D1117</color>
+    <color name="border_color">#334155</color>
+    <color name="code_editor_bg">#0B0F19</color>
+    <color name="tab_active_bg">#1E293B</color>
+    <color name="tab_inactive_bg">#0F172A</color>
 </resources>

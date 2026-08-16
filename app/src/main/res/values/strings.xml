@@ -1,13 +1,16 @@
 <resources>
-    <string name="app_name">Runtime Web Compiler</string>
-    <string name="title_live_preview">Runtime App</string>
-    <string name="action_edit_code">Edit Code</string>
-    <string name="action_compile_run">Compile &amp; Run</string>
+    <string name="app_name">AppApp</string>
+    <string name="title_brand">App²</string>
+    <string name="title_live_preview">App²</string>
+    <string name="action_edit_code">Edit</string>
+    <string name="action_compile_run">Run App</string>
     <string name="action_view_logs">Console Logs</string>
-    <string name="action_reset_code">Reset to Default</string>
+    <string name="action_reset_code">Reset Project</string>
+    <string name="action_new_file">New File</string>
+    <string name="action_delete_file">Delete File</string>
     <string name="memory_status_label">Native RAM Bridge</string>
-    <string name="editor_title">Runtime Code Editor</string>
-    <string name="logs_title">Runtime Console &amp; Memory Logs</string>
+    <string name="editor_title">App² Studio</string>
+    <string name="logs_title">Console &amp; Storage Logs</string>
     <string name="clear_logs">Clear Logs</string>
     <string name="close">Close</string>
 </resources>

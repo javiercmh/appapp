@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="36dp"
+    android:height="36dp"
+    android:viewportWidth="36"
+    android:viewportHeight="36">
+    
+    <!-- Outer App Container / Rounded Tile -->
+    <path
+        android:fillColor="#1E293B"
+        android:pathData="M8,4h20c2.2,0 4,1.8 4,4v20c0,2.2 -1.8,4 -4,4H8c-2.2,0 -4,-1.8 -4,-4V8c0,-2.2 1.8,-4 4,-4z" />
+    
+    <!-- App Container Border -->
+    <path
+        android:strokeColor="#38BDF8"
+        android:strokeWidth="1.5"
+        android:pathData="M8,4h20c2.2,0 4,1.8 4,4v20c0,2.2 -1.8,4 -4,4H8c-2.2,0 -4,-1.8 -4,-4V8c0,-2.2 1.8,-4 4,-4z" />
+
+    <!-- Window Header Bar Line -->
+    <path
+        android:fillColor="#334155"
+        android:pathData="M4,10h28v1.5H4z" />
+
+    <!-- Mini Window Indicator Dots -->
+    <path
+        android:fillColor="#EF4444"
+        android:pathData="M7,7a1,1 0 1,0 2,0a1,1 0 1,0 -2,0" />
+    <path
+        android:fillColor="#F59E0B"
+        android:pathData="M10.5,7a1,1 0 1,0 2,0a1,1 0 1,0 -2,0" />
+    <path
+        android:fillColor="#10B981"
+        android:pathData="M14,7a1,1 0 1,0 2,0a1,1 0 1,0 -2,0" />
+
+    <!-- Nested "App" Window Glyph inside (Creating App within App) -->
+    <path
+        android:fillColor="#0F172A"
+        android:pathData="M8,14h12c1.1,0 2,0.9 2,2v10c0,1.1 -0.9,2 -2,2H8c-1.1,0 -2,-0.9 -2,-2V16c0,-1.1 0.9,-2 2,-2z" />
+    <path
+        android:strokeColor="#3B82F6"
+        android:strokeWidth="1.2"
+        android:pathData="M8,14h12c1.1,0 2,0.9 2,2v10c0,1.1 -0.9,2 -2,2H8c-1.1,0 -2,-0.9 -2,-2V16c0,-1.1 0.9,-2 2,-2z" />
+
+    <!-- Inner Code Glyph < / > -->
+    <path
+        android:strokeColor="#34D399"
+        android:strokeWidth="1.2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M11,19l-2,2 2,2M17,19l2,2 -2,2" />
+
+    <!-- Superscript "²" Badge Background Pill -->
+    <path
+        android:fillColor="#2563EB"
+        android:pathData="M23,5h8c1.1,0 2,0.9 2,2v6c0,1.1 -0.9,2 -2,2h-8c-1.1,0 -2,-0.9 -2,-2V7c0,-1.1 0.9,-2 2,-2z" />
+    <path
+        android:strokeColor="#38BDF8"
+        android:strokeWidth="1"
+        android:pathData="M23,5h8c1.1,0 2,0.9 2,2v6c0,1.1 -0.9,2 -2,2h-8c-1.1,0 -2,-0.9 -2,-2V7c0,-1.1 0.9,-2 2,-2z" />
+
+    <!-- Superscript "2" Numeral -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M25.5,8c0,-0.8 0.7,-1.5 1.5,-1.5c0.8,0 1.5,0.7 1.5,1.5c0,0.6 -0.4,1.1 -0.9,1.4l-1.6,1.1h2.5v1h-4v-0.8l2,-1.4c0.3,-0.2 0.5,-0.5 0.5,-0.8c0,-0.3 -0.2,-0.5 -0.5,-0.5c-0.3,0 -0.5,0.2 -0.5,0.5h-1z" />
+</vector>

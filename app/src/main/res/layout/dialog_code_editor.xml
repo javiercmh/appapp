@@ -1,54 +1,162 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/editor_root_container"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/surface"
     android:orientation="vertical">
 
-    <!-- Editor Header Toolbar -->
+    <!-- Top Action Bar -->
     <LinearLayout
+        android:id="@+id/editor_header"
         android:layout_width="match_parent"
         android:layout_height="56dp"
-        android:background="@color/surface_variant"
+        android:background="@color/surface"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingHorizontal="16dp">
 
+        <ImageView
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_app_logo" />
+
         <TextView
             android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
             android:layout_weight="1"
             android:text="@string/editor_title"
             android:textColor="@color/on_surface"
             android:textSize="16sp"
             android:textStyle="bold" />
 
-        <!-- Reset Button -->
+        <!-- Reset Current File -->
         <com.google.android.material.button.MaterialButton
-            android:id="@+id/editor_btn_reset"
+            android:id="@+id/editor_btn_reset_file"
             style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Reset"
-            android:textColor="@color/on_surface_muted" />
+            android:textColor="@color/on_surface_muted"
+            android:textSize="12sp" />
 
-        <!-- Compile & Run Button -->
+        <!-- Close / Cancel Button -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/editor_btn_close"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/close"
+            android:textColor="@color/on_surface_muted"
+            android:textSize="12sp" />
+
+        <!-- Compile & Run App Button -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/editor_btn_run"
             style="@style/Widget.Material3.Button"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="6dp"
             android:backgroundTint="@color/primary"
+            android:paddingHorizontal="14dp"
             android:text="@string/action_compile_run"
             android:textColor="@color/on_primary"
+            android:textSize="13sp"
+            android:textStyle="bold"
             app:icon="@drawable/ic_play"
             app:iconSize="16dp" />
     </LinearLayout>
 
+    <!-- Horizontal File Tab Switcher -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:background="@color/code_editor_bg"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="8dp">
+
+        <HorizontalScrollView
+            android:id="@+id/editor_tab_scroll"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:fillViewport="true"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:id="@+id/editor_tabs_container"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:gravity="center_vertical"
+                android:orientation="horizontal" />
+        </HorizontalScrollView>
+
+        <!-- New File Button -->
+        <ImageButton
+            android:id="@+id/editor_btn_new_file"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_marginStart="4dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/action_new_file"
+            android:src="@drawable/ic_add"
+            app:tint="@color/accent_blue" />
+
+        <!-- Delete Current Custom File Button -->
+        <ImageButton
+            android:id="@+id/editor_btn_delete_file"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_marginStart="2dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/action_delete_file"
+            android:src="@drawable/ic_delete"
+            android:visibility="gone"
+            app:tint="@color/accent_red" />
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/border_color" />
+
+    <!-- Active File Info Banner -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="28dp"
+        android:background="@color/surface_variant"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp">
+
+        <TextView
+            android:id="@+id/editor_active_file_label"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:fontFamily="monospace"
+            android:text="index.html"
+            android:textColor="@color/accent_blue"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/editor_file_stats"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:text="0 chars"
+            android:textColor="@color/on_surface_muted"
+            android:textSize="11sp" />
+    </LinearLayout>
+
     <!-- Source Code Text Editor -->
     <ScrollView
+        android:id="@+id/editor_scroll_view"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
@@ -62,7 +170,7 @@
             android:background="@null"
             android:fontFamily="monospace"
             android:gravity="top|start"
-            android:hint="Type HTML, CSS, JavaScript here..."
+            android:hint="Type code here..."
             android:importantForAutofill="no"
             android:inputType="textMultiLine|textNoSuggestions"
             android:padding="16dp"

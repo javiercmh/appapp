@@ -8,18 +8,20 @@
     tools:context=".MainActivity">
 
     <com.google.android.material.appbar.AppBarLayout
+        android:id="@+id/app_bar_layout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@color/surface">
+        android:background="@color/surface"
+        app:elevation="0dp">
 
         <com.google.android.material.appbar.MaterialToolbar
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
-            app:title="@string/app_name"
+            app:logo="@drawable/ic_app_logo"
+            app:title="@string/title_brand"
             app:titleTextColor="@color/on_surface"
-            app:subtitle="Runtime WebView &amp; Direct Memory"
-            app:subtitleTextColor="@color/on_surface_muted">
+            app:titleTextAppearance="@style/TextAppearance.Material3.TitleLarge">
 
             <LinearLayout
                 android:layout_width="wrap_content"
@@ -27,9 +29,9 @@
                 android:layout_gravity="end"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
-                android:paddingEnd="8dp">
+                android:paddingEnd="12dp">
 
-                <!-- Reset Default Code Button -->
+                <!-- Reset Project Button -->
                 <ImageButton
                     android:id="@+id/btn_reset"
                     android:layout_width="40dp"
@@ -50,19 +52,23 @@
                     android:src="@drawable/ic_terminal"
                     app:tint="@color/accent_green" />
 
-                <!-- Edit Code Button -->
+                <!-- Edit Code Studio Button -->
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btn_edit_code"
                     style="@style/Widget.Material3.Button.TonalButton"
                     android:layout_width="wrap_content"
                     android:layout_height="38dp"
                     android:layout_marginStart="8dp"
-                    android:paddingHorizontal="12dp"
+                    android:paddingHorizontal="14dp"
                     android:text="@string/action_edit_code"
-                    android:textSize="12sp"
+                    android:textColor="@color/on_surface"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    app:backgroundTint="@color/surface_variant"
                     app:icon="@drawable/ic_code"
-                    app:iconPadding="4dp"
-                    app:iconSize="16dp" />
+                    app:iconPadding="6dp"
+                    app:iconSize="16dp"
+                    app:iconTint="@color/accent_blue" />
             </LinearLayout>
         </com.google.android.material.appbar.MaterialToolbar>
     </com.google.android.material.appbar.AppBarLayout>

@@ -165,4 +165,61 @@ class NativeStorageBridge(
         }
         return json.toString()
     }
+
+    // --- Workspace Project Access ---
+
+    @JavascriptInterface
+    fun getWorkspaceFiles(): String {
+        val workspaceDir = File(context.filesDir, "workspace")
+        val files = workspaceDir.listFiles() ?: emptyArray()
+        val jsonArray = JSONArray()
+        for (file in files) {
+            if (file.isFile) {
+                val obj = JSONObject().apply {
+                    put("name", file.name)
+                    put("size", file.length())
+                    put("lastModified", file.lastModified())
+                }
+                jsonArray.put(obj)
+            }
+        }
+        return jsonArray.toString()
+    }
+
+    @JavascriptInterface
+    fun readWorkspaceFile(fileName: String): String {
+        val sanitized = fileName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+        val workspaceDir = File(context.filesDir, "workspace")
+        val file = File(workspaceDir, sanitized)
+        if (!file.exists() || !file.isFile) {
+            log("[Storage] Workspace file '$sanitized' not found.")
+            return ""
+        }
+        return try {
+            FileInputStream(file).use { input ->
+                input.bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
+            }
+        } catch (e: Exception) {
+            log("[Storage Error] Failed to read workspace file '$sanitized': ${e.message}")
+            ""
+        }
+    }
+
+    @JavascriptInterface
+    fun writeWorkspaceFile(fileName: String, content: String): Boolean {
+        val sanitized = fileName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+        val workspaceDir = File(context.filesDir, "workspace")
+        if (!workspaceDir.exists()) workspaceDir.mkdirs()
+        val file = File(workspaceDir, sanitized)
+        return try {
+            FileOutputStream(file).use { output ->
+                output.write(content.toByteArray(StandardCharsets.UTF_8))
+            }
+            log("[Storage] Wrote ${content.length} chars to workspace file '$sanitized'")
+            true
+        } catch (e: Exception) {
+            log("[Storage Error] Failed to write workspace file '$sanitized': ${e.message}")
+            false
+        }
+    }
 }

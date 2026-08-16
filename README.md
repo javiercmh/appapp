@@ -1,27 +1,31 @@
-# Runtime Web Compiler & Memory Bridge for Android
+# AppApp (App²) — The App for Creating Apps
 
-A modern Android application written in **Kotlin** that compiles, executes, and renders web applications (HTML5, CSS3, JavaScript, and WebAssembly) dynamically at runtime inside a hardware-accelerated `WebView`, equipped with **persistent state memory** and **native file storage access**.
+An Android application written in **Kotlin** that allows you to create, edit, compile, and run modular web apps (`index.html`, `style.css`, `app.js`, etc.) dynamically inside a hardware-accelerated `WebView`, featuring **persistent state memory**, **native file system bridge**, **notch & cutout safe-area awareness**, and an **in-app multi-file studio**.
 
 ---
 
-## Features
+## Key Features
 
-- **Dynamic Runtime Web Engine**: Executes raw HTML, CSS, and ES6+ JavaScript dynamically using the Chromium-based Android `WebView` without requiring asset recompilation.
+- **AppApp Multi-File Workspace**:
+  - Structured modular project directory in internal storage (`workspace/`):
+    - `index.html`: Semantic markup and UI container.
+    - `style.css`: Design system, CSS variables, and safe-area responsive layouts.
+    - `app.js`: Interactive logic and native Android storage bridge calls.
+    - `manifest.json`: App metadata.
+  - Create, edit, rename, and delete custom project files (`.js`, `.css`, `.json`, etc.).
+- **Android-Aware Display (Edge-to-Edge & Cutouts)**:
+  - Built with modern Android 15 Edge-to-Edge (`enableEdgeToEdge()`) and `WindowInsetsCompat`.
+  - Dynamically calculates status bar height, display cutouts/notches, navigation bars, and soft keyboard (IME) insets across phones, foldables, and tablets.
+- **In-App Tabbed Studio Editor**:
+  - Horizontal tab switcher with file extension badges (`HTML`, `CSS`, `JS`, `JSON`).
+  - Fast tab switching with in-memory caching of unsaved edits.
+  - One-tap "Run App" to save and hot-reload changes instantly.
+  - "Reset File" and "Reset Project" options.
 - **Native File & State Bridge (`window.AndroidStorage` / `window.AndroidMemory`)**:
   - Direct file I/O (`writeFile`, `readFile`, `deleteFile`, `listFiles`) in the app's internal protected storage.
   - Key-value state persistence (`saveState`, `loadState`, `removeState`).
-  - Off-heap direct memory management (`ByteBuffer.allocateDirect`).
+  - Workspace inspection (`getWorkspaceFiles`, `readWorkspaceFile`, `writeWorkspaceFile`).
   - Real-time disk space and RAM telemetry.
-- **Persistent State Across Sessions**: The default web application retains all saved list items across app restarts and process kills via `saved_items.json`.
-- **Default Interactive App**:
-  - Text input field with auto-focus and Enter-key submission.
-  - **Submit Button**: Adds items to the active list and immediately writes them to disk.
-  - **Undo Button**: Safely removes the latest added item and synchronizes disk storage (gracefully disabled when empty).
-  - Storage telemetry badge showing restored items count, active storage file, and free disk space.
-- **In-App Live Code Editor**:
-  - View and edit the running HTML, CSS, and JS directly on your Android device.
-  - **Compile & Run**: Hot-reloads and re-executes code in real-time.
-  - **Reset to Default**: Instantly restores the original sample application.
 - **Console & Storage Logs Terminal**:
   - Intercepts JavaScript `console.log`, `console.warn`, `console.error`, and native storage events.
 
@@ -30,10 +34,10 @@ A modern Android application written in **Kotlin** that compiles, executes, and 
 ## Tech Stack & Architecture
 
 - **Language**: Kotlin
-- **Build System**: Gradle 8.9 with Kotlin DSL (`build.gradle.kts`) and Version Catalog (`gradle/libs.versions.toml`)
+- **Build System**: Gradle with Kotlin DSL (`build.gradle.kts`) and Version Catalog (`gradle/libs.versions.toml`)
 - **Target SDK**: Android 35 (Android 15)
 - **Minimum SDK**: Android 26 (Android 8.0 Oreo)
-- **UI Framework**: Android Material Design 3 with ViewBinding
+- **UI Framework**: Android Material Design 3 with ViewBinding & Edge-to-Edge
 
 ---
 
@@ -58,16 +62,21 @@ appapp/
         │   │   ├── NativeStorageBridge.kt      # JavaScript interface for file I/O & state persistence
         │   │   ├── MemoryBlock.kt              # Off-heap direct ByteBuffer native memory wrapper
         │   │   └── SystemMemoryManager.kt      # RAM & disk storage telemetry
-        │   └── templates/
-        │       └── DefaultWebApp.kt            # Default HTML/CSS/JS with Submit/Undo & persistence
+        │   ├── templates/
+        │   │   └── DefaultWebApp.kt            # Modular starter template files
+        │   └── workspace/
+        │       └── WorkspaceManager.kt         # Multi-file workspace manager
         └── res/
             ├── layout/
             │   ├── activity_main.xml           # Main layout with Toolbar and WebView
-            │   ├── dialog_code_editor.xml      # Runtime live code editor
-            │   └── dialog_console_logs.xml     # Console logs & storage telemetry
+            │   ├── dialog_code_editor.xml      # Multi-file tabbed code editor
+            │   ├── dialog_console_logs.xml     # Console logs & storage telemetry
+            │   └── item_editor_tab.xml         # Editor file tab item
             ├── values/
             │   ├── strings.xml, colors.xml, themes.xml
             └── drawable/ & mipmap-.../
+                ├── ic_app_logo.xml             # App² brand logo
+                └── ic_launcher_foreground.xml  # App² launcher icon
 ```
 
 ---
@@ -76,11 +85,11 @@ appapp/
 
 ### Prerequisites
 - **Android Studio** (Koala, Ladybug, Iguana, or later)
-- **JDK 17** or **JDK 21** (Use Android Studio's Embedded JDK: *Settings → Build, Execution, Deployment → Build Tools → Gradle → Gradle JVM*)
+- **JDK 17** or **JDK 21** (Embedded in Android Studio)
 
 ### Running the App
 1. Open Android Studio and select **Open**.
-2. Navigate to this project folder and click **OK**.
+2. Navigate to this project folder (`appapp`) and click **OK**.
 3. Allow Android Studio to sync Gradle dependencies.
 4. Select an Emulator or connected Android device (API 26+) and click **Run (`Shift + F10`)**.
 
@@ -90,38 +99,36 @@ appapp/
 
 The following APIs are accessible to any JavaScript code running inside the WebView under `window.AndroidStorage` (and aliased as `window.AndroidMemory`):
 
-### Persistent File I/O
+### Workspace Project Files
+```javascript
+// List all files in the current workspace project
+const workspaceFiles = JSON.parse(window.AndroidStorage.getWorkspaceFiles());
+
+// Read any workspace file
+const css = window.AndroidStorage.readWorkspaceFile("style.css");
+
+// Write to a workspace file
+window.AndroidStorage.writeWorkspaceFile("style.css", "body { background: #000; }");
+```
+
+### Persistent Data Storage
 ```javascript
 // Write text/JSON to app's internal protected storage
-window.AndroidStorage.writeFile("filename.json", JSON.stringify(data));
+window.AndroidStorage.writeFile("saved_items.json", JSON.stringify(items));
 
-// Read content from file (returns empty string if file doesn't exist)
-const content = window.AndroidStorage.readFile("filename.json");
+// Read content from file
+const content = window.AndroidStorage.readFile("saved_items.json");
 
-// Delete file
-window.AndroidStorage.deleteFile("filename.json");
-
-// List all saved files in internal directory (returns JSON string)
-const filesJson = window.AndroidStorage.listFiles();
+// Key-value state persistence
+window.AndroidStorage.saveState("theme_preference", "dark");
+const theme = window.AndroidStorage.loadState("theme_preference", "dark");
 ```
 
-### Key-Value State
+### Storage Telemetry
 ```javascript
-// Save string state
-window.AndroidStorage.saveState("my_key", "my_value");
-
-// Load string state with fallback default
-const val = window.AndroidStorage.loadState("my_key", "default_value");
-
-// Remove state key
-window.AndroidStorage.removeState("my_key");
-```
-
-### Storage & Telemetry
-```javascript
-// Get disk space and file metrics
+// Get disk space and metrics
 const stats = JSON.parse(window.AndroidStorage.getStorageStats());
-console.log("Free space MB:", stats.usableSpaceBytes / (1024 * 1024));
+console.log("Free MB:", Math.round(stats.usableSpaceBytes / (1024 * 1024)));
 ```
 
 ---

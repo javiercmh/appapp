@@ -22,5 +22,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "RuntimeWebCompiler"
+rootProject.name = "AppApp"
 include(":app")
