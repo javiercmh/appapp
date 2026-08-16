@@ -7,7 +7,7 @@ object DefaultWebApp {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>AppApp Project</title>
+  <title>App² Project</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -16,7 +16,7 @@ object DefaultWebApp {
     <!-- Header -->
     <header class="header-card">
       <div class="brand-pill">App² Runtime</div>
-      <h1 class="header-title">AppApp Project</h1>
+      <h1 class="header-title">My App</h1>
       <p class="header-subtitle">Interactive On-Device App with State Persistence</p>
       <div class="storage-badge">
         <span class="storage-dot"></span>
@@ -420,7 +420,7 @@ body {
 }
 """
 
-    const val DEFAULT_APP_JS = """// --- AppApp Logic & Persistent Storage Integration ---
+    const val DEFAULT_APP_JS = """// --- App² Logic & Persistent Storage Integration ---
 const STORAGE_FILE = "saved_items.json";
 let items = [];
 
@@ -604,10 +604,10 @@ window.addEventListener('DOMContentLoaded', () => {
 """
 
     const val DEFAULT_MANIFEST_JSON = """{
-  "name": "AppApp Project",
-  "short_name": "AppApp",
+  "name": "My App",
+  "short_name": "My App",
   "version": "1.0.0",
-  "description": "On-device app built with AppApp",
+  "description": "On-device app built with App²",
   "main": "index.html",
   "files": [
     "index.html",

@@ -46,7 +46,7 @@ class WorkspaceManager(
         } else {
             val logFile = File(workspaceDir, "app.log")
             if (!logFile.exists()) {
-                writeFile("app.log", "[System] AppApp workspace initialized.\n")
+                writeFile("app.log", "[System] App² workspace initialized.\n")
             }
         }
     }
@@ -63,8 +63,8 @@ class WorkspaceManager(
             writeFile("style.css", DefaultWebApp.DEFAULT_STYLE_CSS)
             writeFile("app.js", DefaultWebApp.DEFAULT_APP_JS)
             writeFile("manifest.json", DefaultWebApp.DEFAULT_MANIFEST_JSON)
-            writeFile("app.log", "[System] AppApp workspace reset to starter template.\n")
-            log("[Workspace] Workspace reset to default AppApp starter template.")
+            writeFile("app.log", "[System] App² workspace reset to starter template.\n")
+            log("[Workspace] Workspace reset to default App² starter template.")
             true
         } catch (e: Exception) {
             log("[Workspace Error] Failed to reset workspace: ${e.message}")

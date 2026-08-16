@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">AppApp</string>
+    <string name="app_name">App²</string>
     <string name="title_brand">App²</string>
     <string name="title_live_preview">App²</string>
     <string name="action_edit_code">Edit</string>
@@ -11,7 +11,8 @@
     <string name="action_new_file">New File</string>
     <string name="action_delete_file">Delete File</string>
     <string name="memory_status_label">Native RAM Bridge</string>
-    <string name="editor_title">Editor</string>
+    <string name="editor_title">App Editor</string>
+    <string name="app_editor_title">App Editor</string>
     <string name="logs_title">Console &amp; Storage Logs</string>
     <string name="history_title">Version History</string>
     <string name="history_empty">No snapshots recorded yet.</string>
@@ -46,4 +47,32 @@
     <string name="shortcut_requested">Shortcut created for \'%1$s\'</string>
     <string name="shortcut_not_supported">Your home screen launcher does not support shortcut pinning.</string>
     <string name="close">Close</string>
+
+    <!-- App Configuration & Workspace Hub -->
+    <string name="app_config_title">Configure App</string>
+    <string name="app_config_btn">Configure App</string>
+    <string name="app_name_label">App Name</string>
+    <string name="app_name_hint">My App</string>
+    <string name="app_description_label">Description</string>
+    <string name="app_description_hint">Brief description of what this app does</string>
+    <string name="app_icon_label">App Icon</string>
+    <string name="app_icon_change">Choose from Gallery</string>
+    <string name="app_icon_change_short">Choose</string>
+    <string name="app_icon_reset">Reset</string>
+    <string name="cropper_action_rotate">Rotate</string>
+    <string name="cropper_action_recenter">Reset</string>
+    <string name="project_files_header">Project Files &amp; Assets</string>
+    <string name="save_file">Save</string>
+    <string name="cancel">Cancel</string>
+    <string name="save_changes">Save Changes</string>
+    <string name="search_hint">Find in file…</string>
+    <string name="search_no_matches">0 of 0</string>
+    <string name="search_match_count">%1$d of %2$d</string>
+    <string name="action_search">Search</string>
+    <string name="file_saved_toast">Saved \'%1$s\'</string>
+    <string name="config_saved_toast">App configuration updated</string>
+    <string name="app_reloaded">App reloaded successfully!</string>
+    <string name="crop_image_title">Crop App Icon</string>
+    <string name="crop_image_apply">Crop &amp; Set Icon</string>
+    <string name="delete_file_confirm">Delete \'%1$s\'? This action cannot be undone.</string>
 </resources>

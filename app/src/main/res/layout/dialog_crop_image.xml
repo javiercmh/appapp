@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@color/surface"
+    android:orientation="vertical"
+    android:padding="20dp">
+
+    <!-- Header -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <ImageView
+            android:layout_width="26dp"
+            android:layout_height="26dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_upload"
+            app:tint="@color/accent_blue" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/crop_image_title"
+                android:textColor="@color/on_surface"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Drag to position • Pinch to zoom"
+                android:textColor="@color/on_surface_muted"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginVertical="16dp"
+        android:background="@color/border_color" />
+
+    <!-- Interactive 1:1 Square Crop View -->
+    <com.example.runtimecompiler.editor.SquareCropView
+        android:id="@+id/crop_square_view"
+        android:layout_width="match_parent"
+        android:layout_height="270dp"
+        android:background="@color/surface_elevated" />
+
+    <!-- Cropper Controls Toolbar (Rotate & Recenter) -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:gravity="center"
+        android:orientation="horizontal">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/crop_btn_rotate"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="wrap_content"
+            android:layout_height="38dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minHeight="0dp"
+            android:minWidth="0dp"
+            android:paddingHorizontal="14dp"
+            android:text="@string/cropper_action_rotate"
+            android:textColor="@color/on_surface"
+            android:textSize="12sp"
+            app:backgroundTint="@color/surface_variant"
+            app:icon="@drawable/ic_rotate_right"
+            app:iconPadding="6dp"
+            app:iconSize="16dp"
+            app:iconTint="@color/accent_blue" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/crop_btn_recenter"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="wrap_content"
+            android:layout_height="38dp"
+            android:layout_marginStart="10dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minHeight="0dp"
+            android:minWidth="0dp"
+            android:paddingHorizontal="14dp"
+            android:text="@string/cropper_action_recenter"
+            android:textColor="@color/on_surface"
+            android:textSize="12sp"
+            app:backgroundTint="@color/surface_variant"
+            app:icon="@drawable/ic_restore"
+            app:iconPadding="6dp"
+            app:iconSize="16dp"
+            app:iconTint="@color/on_surface_muted" />
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginTop="14dp"
+        android:layout_marginBottom="16dp"
+        android:background="@color/border_color" />
+
+    <!-- Actions -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="end"
+        android:orientation="horizontal">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/crop_btn_cancel"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/cancel"
+            android:textColor="@color/on_surface_muted" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/crop_btn_apply"
+            style="@style/Widget.Material3.Button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:backgroundTint="@color/primary"
+            android:text="@string/crop_image_apply"
+            android:textColor="@color/on_primary" />
+    </LinearLayout>
+
+</LinearLayout>

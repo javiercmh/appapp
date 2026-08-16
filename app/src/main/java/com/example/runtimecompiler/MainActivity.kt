@@ -13,6 +13,8 @@ import android.graphics.Shader
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.KeyEvent
@@ -29,6 +31,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.EditText
 import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -47,20 +50,34 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import com.example.runtimecompiler.bridge.NativeStorageBridge
 import com.example.runtimecompiler.databinding.ActivityMainBinding
+import com.example.runtimecompiler.editor.ImageCropManager
+import com.example.runtimecompiler.editor.SearchHelper
+import com.example.runtimecompiler.editor.SyntaxHighlighter
 import com.example.runtimecompiler.workspace.WorkspaceFile
 import com.example.runtimecompiler.workspace.WorkspaceHistoryManager
 import com.example.runtimecompiler.workspace.WorkspaceManager
 import com.example.runtimecompiler.workspace.WorkspacePackageManager
 import com.example.runtimecompiler.workspace.WorkspaceSnapshot
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.card.MaterialCardView
 import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.ByteArrayInputStream
+import java.io.File
 import java.io.FileInputStream
+import java.io.FileOutputStream
 import java.nio.charset.StandardCharsets
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
+data class AppConfigData(
+    val name: String,
+    val description: String,
+    val iconFileName: String?
+)
 
 class MainActivity : AppCompatActivity() {
 
@@ -74,6 +91,7 @@ class MainActivity : AppCompatActivity() {
 
     private var pendingExportFiles: Set<String>? = null
     private var onImportCompletedCallback: (() -> Unit)? = null
+    private var onIconUpdatedCallback: (() -> Unit)? = null
 
     private val saveZipLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri: Uri? ->
         val filesToExport = pendingExportFiles
@@ -105,6 +123,27 @@ class MainActivity : AppCompatActivity() {
             }
         }
         onImportCompletedCallback = null
+    }
+
+    private val pickIconLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        if (uri != null) {
+            ImageCropManager.openCropper(this, uri) { croppedBitmap ->
+                try {
+                    val iconFile = workspaceManager.getFile("icon.png")
+                    FileOutputStream(iconFile).use { out ->
+                        croppedBitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+                    }
+                    val currentConfig = loadAppConfig()
+                    saveAppConfig(currentConfig.copy(iconFileName = "icon.png"))
+                    appendLog("[Workspace] Updated app icon: icon.png")
+                    Toast.makeText(this, "Custom icon updated", Toast.LENGTH_SHORT).show()
+                    onIconUpdatedCallback?.invoke()
+                } catch (e: Exception) {
+                    appendLog("[Workspace Error] Failed to save icon: ${e.message}")
+                    Toast.makeText(this, "Failed to save icon: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -154,7 +193,7 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread { appendLog(msg) }
         }
 
-        appendLog("[System] AppApp initialized with Edge-to-Edge & Unified Workspace.")
+        appendLog("[System] App² initialized with Edge-to-Edge & Unified Workspace.")
 
         // Initialize Workspace History Manager
         historyManager = WorkspaceHistoryManager(this) { msg ->
@@ -289,9 +328,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupListeners() {
-        // Edit Code Studio Dialog
+        // App Editor Hub Dialog
         binding.btnEditCode.setOnClickListener {
-            showMultiFileEditorDialog()
+            showAppEditorDialog()
         }
 
         // Deploy / Add to Home Screen Pinned Shortcut
@@ -318,7 +357,78 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Creates a pinned Home Screen shortcut for the current web app using manifest.json metadata.
+     * Reads app identity configuration from manifest.json.
+     */
+    private fun loadAppConfig(): AppConfigData {
+        var name = "App² Project"
+        var description = "On-device app built with App²"
+        var iconFileName: String? = null
+
+        try {
+            val manifestContent = workspaceManager.readFile("manifest.json")
+            if (manifestContent.isNotBlank()) {
+                val json = JSONObject(manifestContent)
+                val rawName = json.optString("name", json.optString("short_name", name))
+                name = if (rawName == "AppApp Project" || rawName == "AppApp" || rawName.isBlank()) "App² Project" else rawName
+
+                val rawDesc = json.optString("description", description)
+                description = if (rawDesc.contains("built with AppApp") || rawDesc.isBlank()) "On-device app built with App²" else rawDesc
+
+                val iconsArray = json.optJSONArray("icons")
+                if (iconsArray != null && iconsArray.length() > 0) {
+                    val firstIcon = iconsArray.optJSONObject(0)
+                    iconFileName = firstIcon?.optString("src")
+                }
+            }
+        } catch (e: Exception) {
+            appendLog("[Config Warning] Could not parse manifest.json: ${e.message}")
+        }
+
+        if (iconFileName == null && workspaceManager.getFile("icon.png").exists()) {
+            iconFileName = "icon.png"
+        }
+
+        return AppConfigData(name, description, iconFileName)
+    }
+
+    /**
+     * Writes app identity configuration back to manifest.json.
+     */
+    private fun saveAppConfig(config: AppConfigData) {
+        try {
+            val manifestContent = workspaceManager.readFile("manifest.json")
+            val json = if (manifestContent.isNotBlank()) {
+                try { JSONObject(manifestContent) } catch (_: Exception) { JSONObject() }
+            } else JSONObject()
+
+            json.put("name", config.name)
+            json.put("short_name", config.name)
+            json.put("description", config.description)
+            if (!json.has("version")) json.put("version", "1.0.0")
+            if (!json.has("main")) json.put("main", "index.html")
+
+            if (config.iconFileName != null) {
+                val iconArray = JSONArray()
+                val iconObj = JSONObject().apply {
+                    put("src", config.iconFileName)
+                    put("sizes", "512x512")
+                    put("type", "image/png")
+                }
+                iconArray.put(iconObj)
+                json.put("icons", iconArray)
+            } else {
+                json.remove("icons")
+            }
+
+            workspaceManager.writeFile("manifest.json", json.toString(2))
+            appendLog("[Config] Updated manifest.json for '${config.name}'")
+        } catch (e: Exception) {
+            appendLog("[Config Error] Failed to write manifest.json: ${e.message}")
+        }
+    }
+
+    /**
+     * Creates a pinned Home Screen shortcut for the current web app using manifest.json metadata and icon.
      */
     private fun deployToHomeScreen() {
         if (!ShortcutManagerCompat.isRequestPinShortcutSupported(this)) {
@@ -327,33 +437,12 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        // 1. Read app metadata from manifest.json
-        var fullAppName = "AppApp Project"
-        var shortAppName = "AppApp"
-        var customIconFileName: String? = null
+        val config = loadAppConfig()
+        val appName = config.name
 
-        try {
-            val manifestContent = workspaceManager.readFile("manifest.json")
-            if (manifestContent.isNotBlank()) {
-                val json = org.json.JSONObject(manifestContent)
-                fullAppName = json.optString("name", fullAppName)
-                shortAppName = json.optString("short_name", fullAppName)
-
-                val iconsArray = json.optJSONArray("icons")
-                if (iconsArray != null && iconsArray.length() > 0) {
-                    val firstIcon = iconsArray.optJSONObject(0)
-                    customIconFileName = firstIcon?.optString("src")
-                }
-            }
-        } catch (e: Exception) {
-            appendLog("[Deploy Warning] Could not parse manifest.json: ${e.message}")
-        }
-
-        // 2. Resolve icon (custom workspace file or crisp rendered Install Mobile icon)
-        val iconFile = customIconFileName?.let { workspaceManager.getFile(it) }
+        // Resolve custom workspace icon or default App² logo
+        val iconFile = config.iconFileName?.let { workspaceManager.getFile(it) }
             ?: workspaceManager.getFile("icon.png").takeIf { it.exists() }
-            ?: workspaceManager.getFile("app_icon.png").takeIf { it.exists() }
-            ?: workspaceManager.getFile("icon.jpg").takeIf { it.exists() }
 
         val iconCompat = if (iconFile != null && iconFile.exists() && iconFile.isFile) {
             try {
@@ -370,26 +459,26 @@ class MainActivity : AppCompatActivity() {
             renderAppShortcutIcon()
         }
 
-        // 3. Build launch Intent with standalone mode flag
+        // Build launch Intent with standalone mode flag
         val shortcutIntent = Intent(this, MainActivity::class.java).apply {
             action = Intent.ACTION_VIEW
             putExtra("EXTRA_STANDALONE_MODE", true)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         }
 
-        // 4. Build and request pinned shortcut
-        val shortcutId = "appapp_shortcut_${shortAppName.lowercase().replace(Regex("[^a-z0-9_-]"), "_")}"
+        // Build and request pinned shortcut
+        val shortcutId = "appapp_shortcut_${appName.lowercase().replace(Regex("[^a-z0-9_-]"), "_")}"
         val pinShortcutInfo = ShortcutInfoCompat.Builder(this, shortcutId)
-            .setShortLabel(shortAppName)
-            .setLongLabel(fullAppName)
+            .setShortLabel(appName)
+            .setLongLabel(appName)
             .setIcon(iconCompat)
             .setIntent(shortcutIntent)
             .build()
 
         val pinned = ShortcutManagerCompat.requestPinShortcut(this, pinShortcutInfo, null)
         if (pinned) {
-            appendLog("[Deploy] Requested Home Screen shortcut for '$fullAppName' ($shortAppName)")
-            Toast.makeText(this, getString(R.string.shortcut_requested, shortAppName), Toast.LENGTH_SHORT).show()
+            appendLog("[Deploy] Requested Home Screen shortcut for '$appName'")
+            Toast.makeText(this, getString(R.string.shortcut_requested, appName), Toast.LENGTH_SHORT).show()
         } else {
             appendLog("[Deploy Error] Failed to request pinned shortcut.")
             Toast.makeText(this, R.string.shortcut_not_supported, Toast.LENGTH_SHORT).show()
@@ -397,14 +486,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Renders a high-resolution adaptive icon bitmap featuring the Install Mobile icon for Home Screen shortcuts.
+     * Renders a high-resolution adaptive icon bitmap featuring the App² logo for Home Screen shortcuts.
      */
     private fun renderAppShortcutIcon(): IconCompat {
         val size = 512
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
 
-        // 1. Full-bleed background gradient (Deep Navy to Indigo)
+        // 1. Full-bleed background gradient
         val gradient = LinearGradient(
             0f, 0f, size.toFloat(), size.toFloat(),
             Color.parseColor("#0F172A"),
@@ -416,17 +505,16 @@ class MainActivity : AppCompatActivity() {
         }
         canvas.drawRect(0f, 0f, size.toFloat(), size.toFloat(), bgPaint)
 
-        // 2. Subtle glowing circular backdrop behind the icon
+        // 2. Subtle glowing circular backdrop behind the logo
         val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.parseColor("#1E293B")
         }
         canvas.drawCircle(size / 2f, size / 2f, size * 0.36f, glowPaint)
 
-        // 3. Draw Install Mobile vector in the center safe area
-        val drawable = ContextCompat.getDrawable(this, R.drawable.ic_install_mobile)?.mutate()
+        // 3. Draw App Logo vector in the center safe area
+        val drawable = ContextCompat.getDrawable(this, R.drawable.ic_app_logo)?.mutate()
         if (drawable != null) {
-            drawable.setTint(Color.parseColor("#38BDF8"))
-            val iconSize = 220
+            val iconSize = 240
             val left = (size - iconSize) / 2
             val top = (size - iconSize) / 2
             drawable.setBounds(left, top, left + iconSize, top + iconSize)
@@ -444,7 +532,7 @@ class MainActivity : AppCompatActivity() {
      * Loads the workspace project (https://app.local/index.html) into the WebView.
      */
     fun reloadApp() {
-        appendLog("[Compiler] Loading AppApp workspace into runtime...")
+        appendLog("[Compiler] Loading App² workspace into runtime...")
         binding.webView.clearCache(true)
         binding.webView.loadUrl("https://app.local/index.html")
     }
@@ -458,29 +546,37 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+
+
     /**
-     * Opens in-app multi-file code editor dialog.
+     * Opens the revamped App Editor Workspace Hub dialog (Full screen dimensions matching parent).
      */
-    private fun showMultiFileEditorDialog() {
-        val dialog = Dialog(this, com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog)
-        dialog.setContentView(R.layout.dialog_code_editor)
+    private fun showAppEditorDialog() {
+        val dialog = Dialog(this, R.style.Theme_AppApp_FullScreenDialog)
+        dialog.setContentView(R.layout.dialog_workspace_hub)
         dialog.window?.setLayout(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT
         )
 
-        val rootContainer = dialog.findViewById<LinearLayout>(R.id.editor_root_container)
-        val tabsContainer = dialog.findViewById<LinearLayout>(R.id.editor_tabs_container)
-        val activeFileLabel = dialog.findViewById<TextView>(R.id.editor_active_file_label)
-        val fileStats = dialog.findViewById<TextView>(R.id.editor_file_stats)
-        val codeInput = dialog.findViewById<EditText>(R.id.editor_code_input)
-        val btnHistory = dialog.findViewById<ImageButton>(R.id.editor_btn_history)
-        val btnPackage = dialog.findViewById<ImageButton>(R.id.editor_btn_package)
-        val btnRun = dialog.findViewById<MaterialButton>(R.id.editor_btn_run)
-        val btnNewFile = dialog.findViewById<ImageButton>(R.id.editor_btn_new_file)
-        val btnDeleteFile = dialog.findViewById<ImageButton>(R.id.editor_btn_delete_file)
+        val rootContainer = dialog.findViewById<LinearLayout>(R.id.hub_root_container)
+        val btnClose = dialog.findViewById<ImageButton>(R.id.hub_btn_close)
+        val subtitleText = dialog.findViewById<TextView>(R.id.hub_subtitle)
+        val btnHistory = dialog.findViewById<ImageButton>(R.id.hub_btn_history)
+        val btnPackage = dialog.findViewById<ImageButton>(R.id.hub_btn_package)
+        val btnRun = dialog.findViewById<MaterialButton>(R.id.hub_btn_run)
 
-        // Handle insets for dialog (IME keyboard & cutouts)
+        val appConfigCard = dialog.findViewById<MaterialCardView>(R.id.hub_app_config_card)
+        val appIconPreview = dialog.findViewById<ImageView>(R.id.hub_app_icon_preview)
+        val appNameText = dialog.findViewById<TextView>(R.id.hub_app_name)
+        val appDescText = dialog.findViewById<TextView>(R.id.hub_app_desc)
+        val btnConfigureApp = dialog.findViewById<MaterialButton>(R.id.hub_btn_configure_app)
+
+        val fileCountBadge = dialog.findViewById<TextView>(R.id.hub_file_count_badge)
+        val btnNewFile = dialog.findViewById<MaterialButton>(R.id.hub_btn_new_file)
+        val filesContainer = dialog.findViewById<LinearLayout>(R.id.hub_files_container)
+
+        // Handle insets for Edge-to-Edge dialog
         dialog.window?.decorView?.let { decor ->
             ViewCompat.setOnApplyWindowInsetsListener(decor) { _, insets ->
                 val statusBarInset = insets.getInsets(
@@ -497,151 +593,130 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Original on-disk content baseline (to detect unsaved changes)
-        val initialDiskContent = mutableMapOf<String, String>()
-        val unsavedEdits = mutableMapOf<String, String>()
-        val files = workspaceManager.listFiles().toMutableList()
-
-        for (f in files) {
-            val content = workspaceManager.readFile(f.name)
-            initialDiskContent[f.name] = content
-            unsavedEdits[f.name] = content
-        }
-
-        var activeFileName = if (unsavedEdits.containsKey("index.html")) "index.html" else (files.firstOrNull()?.name ?: "index.html")
-
-        fun getFileIcon(name: String): String {
-            val lower = name.lowercase()
+        fun formatFileSize(bytes: Long): String {
             return when {
-                lower.endsWith(".html") || lower.endsWith(".htm") -> "🌐"
-                lower.endsWith(".css") -> "🎨"
-                lower.endsWith(".js") || lower.endsWith(".mjs") -> "⚡"
-                lower.endsWith(".json") -> "📦"
-                lower.endsWith(".log") -> "📜"
-                else -> "📄"
+                bytes < 1024 -> "$bytes B"
+                bytes < 1024 * 1024 -> String.format(Locale.getDefault(), "%.1f KB", bytes / 1024.0)
+                else -> String.format(Locale.getDefault(), "%.1f MB", bytes / (1024.0 * 1024.0))
             }
         }
 
-        fun updateEditorContent(fileName: String) {
-            activeFileName = fileName
-            activeFileLabel.text = fileName
-            val content = unsavedEdits[fileName] ?: ""
-            codeInput.setText(content)
-            fileStats.text = "${content.length} chars"
-
-            // Show delete button only for non-core files
-            val currentFileObj = files.find { it.name == fileName }
-            btnDeleteFile.visibility = if (currentFileObj != null && !currentFileObj.isCore) View.VISIBLE else View.GONE
+        fun getFileCategoryInfo(name: String): Pair<String, String> {
+            val lower = name.lowercase()
+            return when {
+                lower == "index.html" -> Pair("🌐", "Web Entrypoint & Layout")
+                lower == "style.css" -> Pair("🎨", "App Stylesheet")
+                lower == "app.js" -> Pair("⚡", "App Logic & Native Bridge")
+                lower == "manifest.json" -> Pair("📦", "App Metadata & Manifest")
+                lower == "icon.png" || lower == "app_icon.png" -> Pair("🖼️", "App Icon Asset")
+                lower == "app.log" -> Pair("📜", "Console & Runtime Logs")
+                lower.endsWith(".html") || lower.endsWith(".htm") -> Pair("🌐", "HTML View")
+                lower.endsWith(".css") -> Pair("🎨", "Stylesheet")
+                lower.endsWith(".js") || lower.endsWith(".mjs") -> Pair("⚡", "JavaScript Module")
+                lower.endsWith(".json") -> Pair("📄", "JSON Data File")
+                lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".svg") || lower.endsWith(".webp") -> Pair("🖼️", "Image Asset")
+                else -> Pair("📄", "Workspace File")
+            }
         }
 
-        fun rebuildTabs() {
-            tabsContainer.removeAllViews()
+        fun refreshAppCard() {
+            val config = loadAppConfig()
+            subtitleText.text = config.name
+            appNameText.text = config.name
+            appDescText.text = config.description
+
+            val iconFile = workspaceManager.getFile("icon.png")
+            if (iconFile.exists() && iconFile.isFile) {
+                try {
+                    val bmp = BitmapFactory.decodeFile(iconFile.absolutePath)
+                    if (bmp != null) {
+                        appIconPreview.setImageBitmap(bmp)
+                    } else {
+                        appIconPreview.setImageResource(R.drawable.ic_app_logo)
+                    }
+                } catch (_: Exception) {
+                    appIconPreview.setImageResource(R.drawable.ic_app_logo)
+                }
+            } else {
+                appIconPreview.setImageResource(R.drawable.ic_app_logo)
+            }
+        }
+
+        fun refreshFileList() {
+            filesContainer.removeAllViews()
+            val files = workspaceManager.listFiles()
+            fileCountBadge.text = "${files.size} files"
+
             val inflater = LayoutInflater.from(this)
-
             for (file in files) {
-                val tabView = inflater.inflate(R.layout.item_editor_tab, tabsContainer, false)
-                val tabRoot = tabView.findViewById<LinearLayout>(R.id.tab_root)
-                val tabIcon = tabView.findViewById<TextView>(R.id.tab_icon)
-                val tabTitle = tabView.findViewById<TextView>(R.id.tab_title)
+                val itemView = inflater.inflate(R.layout.item_workspace_file, filesContainer, false)
+                val iconView = itemView.findViewById<TextView>(R.id.file_item_icon)
+                val nameView = itemView.findViewById<TextView>(R.id.file_item_name)
+                val catView = itemView.findViewById<TextView>(R.id.file_item_category)
+                val sizeView = itemView.findViewById<TextView>(R.id.file_item_size)
 
-                tabIcon.text = getFileIcon(file.name)
-                tabTitle.text = file.name
+                val (emoji, categoryDesc) = getFileCategoryInfo(file.name)
+                iconView.text = emoji
+                nameView.text = file.name
+                catView.text = categoryDesc
+                sizeView.text = formatFileSize(file.size)
 
-                val isSelected = file.name == activeFileName
-                tabRoot.setBackgroundResource(
-                    if (isSelected) R.drawable.bg_tab_selected else R.drawable.bg_tab_unselected
-                )
-                tabTitle.setTextColor(
-                    resources.getColor(
-                        if (isSelected) R.color.on_surface else R.color.on_surface_muted,
-                        theme
-                    )
-                )
-
-                tabView.setOnClickListener {
-                    if (file.name != activeFileName) {
-                        unsavedEdits[activeFileName] = codeInput.text.toString()
-                        updateEditorContent(file.name)
-                        rebuildTabs()
+                itemView.setOnClickListener {
+                    showFileEditorDialog(file.name) {
+                        refreshFileList()
+                        refreshAppCard()
                     }
                 }
 
-                tabsContainer.addView(tabView)
+                filesContainer.addView(itemView)
             }
         }
 
-        fun hasUnsavedChanges(): Boolean {
-            unsavedEdits[activeFileName] = codeInput.text.toString()
-            if (unsavedEdits.size != initialDiskContent.size) return true
-            for ((key, value) in unsavedEdits) {
-                if (initialDiskContent[key] != value) return true
-            }
-            return false
+        // Close Hub
+        btnClose.setOnClickListener {
+            dialog.dismiss()
         }
 
-        // Live text change listener to update stats and unsaved cache
-        codeInput.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                val len = s?.length ?: 0
-                fileStats.text = "$len chars"
-                unsavedEdits[activeFileName] = s?.toString() ?: ""
+        // Configure App Form
+        val openConfigAction = View.OnClickListener {
+            showAppConfigDialog {
+                refreshAppCard()
+                refreshFileList()
             }
-            override fun afterTextChanged(s: Editable?) {}
-        })
+        }
+        btnConfigureApp.setOnClickListener(openConfigAction)
+        appConfigCard.setOnClickListener(openConfigAction)
 
-        // Version History Dialog
+        // Version History
         btnHistory.setOnClickListener {
-            unsavedEdits[activeFileName] = codeInput.text.toString()
             showHistoryDialog {
-                // On snapshot restored, reload editor content
-                files.clear()
-                files.addAll(workspaceManager.listFiles())
-                initialDiskContent.clear()
-                unsavedEdits.clear()
-                for (f in files) {
-                    val content = workspaceManager.readFile(f.name)
-                    initialDiskContent[f.name] = content
-                    unsavedEdits[f.name] = content
-                }
-                updateEditorContent("index.html")
-                rebuildTabs()
+                refreshAppCard()
+                refreshFileList()
                 reloadApp()
             }
         }
 
-        // Share & Package Dialog
+        // Share & Package
         btnPackage.setOnClickListener {
-            unsavedEdits[activeFileName] = codeInput.text.toString()
-            for ((name, content) in unsavedEdits) {
-                workspaceManager.writeFile(name, content)
-            }
-            initialDiskContent.clear()
-            initialDiskContent.putAll(unsavedEdits)
-
             showImportExportDialog {
-                // On workspace replaced by import, refresh editor state & tabs
-                files.clear()
-                files.addAll(workspaceManager.listFiles())
-                initialDiskContent.clear()
-                unsavedEdits.clear()
-                for (f in files) {
-                    val content = workspaceManager.readFile(f.name)
-                    initialDiskContent[f.name] = content
-                    unsavedEdits[f.name] = content
-                }
-                updateEditorContent("index.html")
-                rebuildTabs()
+                refreshAppCard()
+                refreshFileList()
                 reloadApp()
             }
+        }
+
+        // Run
+        btnRun.setOnClickListener {
+            historyManager.saveSnapshot(workspaceManager, "Run Snapshot")
+            reloadApp()
+            Toast.makeText(this, getString(R.string.app_reloaded), Toast.LENGTH_SHORT).show()
+            dialog.dismiss()
         }
 
         // New File Creation
         btnNewFile.setOnClickListener {
-            unsavedEdits[activeFileName] = codeInput.text.toString()
-
             val input = EditText(this).apply {
-                hint = "data.json / utils.js / style.css"
+                hint = "data.json / helper.js / styles.css"
                 setSingleLine()
             }
             MaterialAlertDialogBuilder(this)
@@ -651,12 +726,11 @@ class MainActivity : AppCompatActivity() {
                     val newName = input.text.toString().trim()
                     if (newName.isNotBlank()) {
                         if (workspaceManager.createFile(newName, "")) {
-                            unsavedEdits[newName] = ""
-                            files.clear()
-                            files.addAll(workspaceManager.listFiles())
-                            updateEditorContent(newName)
-                            rebuildTabs()
+                            refreshFileList()
                             Toast.makeText(this, "Created '$newName'", Toast.LENGTH_SHORT).show()
+                            showFileEditorDialog(newName) {
+                                refreshFileList()
+                            }
                         } else {
                             Toast.makeText(this, "File already exists or invalid name", Toast.LENGTH_SHORT).show()
                         }
@@ -666,69 +740,262 @@ class MainActivity : AppCompatActivity() {
                 .show()
         }
 
-        // Delete Custom File
-        btnDeleteFile.setOnClickListener {
+        refreshAppCard()
+        refreshFileList()
+
+        dialog.show()
+    }
+
+    /**
+     * Opens dedicated single-file code editor with syntax highlighting, search auto-scrolling, checkmark save, and delete.
+     * Dimensions match the parent screen 100%.
+     */
+    private fun showFileEditorDialog(fileName: String, onDismiss: () -> Unit) {
+        val dialog = Dialog(this, R.style.Theme_AppApp_FullScreenDialog)
+        dialog.setContentView(R.layout.dialog_file_editor)
+        dialog.window?.setLayout(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
+        )
+
+        val rootContainer = dialog.findViewById<LinearLayout>(R.id.file_editor_root)
+        val btnBack = dialog.findViewById<ImageButton>(R.id.editor_btn_back)
+        val fileNameTitle = dialog.findViewById<TextView>(R.id.editor_file_name_title)
+        val statsBadge = dialog.findViewById<TextView>(R.id.editor_file_stats_badge)
+        val btnSearch = dialog.findViewById<ImageButton>(R.id.editor_btn_search)
+        val btnDelete = dialog.findViewById<ImageButton>(R.id.editor_btn_delete)
+        val btnSave = dialog.findViewById<ImageButton>(R.id.editor_btn_save)
+
+        val searchBar = dialog.findViewById<LinearLayout>(R.id.editor_search_bar)
+        val searchInput = dialog.findViewById<EditText>(R.id.editor_search_input)
+        val matchesCount = dialog.findViewById<TextView>(R.id.editor_search_matches_count)
+        val btnSearchPrev = dialog.findViewById<ImageButton>(R.id.editor_btn_search_prev)
+        val btnSearchNext = dialog.findViewById<ImageButton>(R.id.editor_btn_search_next)
+        val btnSearchClose = dialog.findViewById<ImageButton>(R.id.editor_btn_search_close)
+
+        val scrollView = dialog.findViewById<ScrollView>(R.id.editor_scroll_view)
+        val codeInput = dialog.findViewById<EditText>(R.id.editor_code_input)
+
+        // Handle insets for dialog
+        dialog.window?.decorView?.let { decor ->
+            ViewCompat.setOnApplyWindowInsetsListener(decor) { _, insets ->
+                val statusBarInset = insets.getInsets(
+                    WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+                )
+                val imeInset = insets.getInsets(WindowInsetsCompat.Type.ime())
+                rootContainer.updatePadding(
+                    top = statusBarInset.top,
+                    bottom = maxOf(statusBarInset.bottom, imeInset.bottom),
+                    left = statusBarInset.left,
+                    right = statusBarInset.right
+                )
+                insets
+            }
+        }
+
+        fileNameTitle.text = fileName
+        var initialContent = workspaceManager.readFile(fileName)
+        codeInput.setText(initialContent)
+        statsBadge.text = "${initialContent.length} chars"
+
+        // Check if file is a non-core deletable file
+        val coreFiles = setOf("index.html", "style.css", "app.js", "manifest.json", "app.log")
+        val isDeletable = !coreFiles.contains(fileName) && fileName != "icon.png"
+        btnDelete.visibility = if (isDeletable) View.VISIBLE else View.GONE
+
+        btnDelete.setOnClickListener {
             MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.action_delete_file)
-                .setMessage("Are you sure you want to delete '$activeFileName'?")
+                .setMessage(getString(R.string.delete_file_confirm, fileName))
                 .setPositiveButton(R.string.discard) { _, _ ->
-                    val fileToDelete = activeFileName
-                    if (workspaceManager.deleteFile(fileToDelete)) {
-                        unsavedEdits.remove(fileToDelete)
-                        initialDiskContent.remove(fileToDelete)
-                        files.clear()
-                        files.addAll(workspaceManager.listFiles())
-                        updateEditorContent("index.html")
-                        rebuildTabs()
-                        Toast.makeText(this, "Deleted '$fileToDelete'", Toast.LENGTH_SHORT).show()
+                    if (workspaceManager.deleteFile(fileName)) {
+                        Toast.makeText(this, "Deleted '$fileName'", Toast.LENGTH_SHORT).show()
+                        dialog.dismiss()
+                        onDismiss()
                     }
                 }
                 .setNegativeButton("Cancel", null)
                 .show()
         }
 
-        // Compile & Run All Files
-        btnRun.setOnClickListener {
-            unsavedEdits[activeFileName] = codeInput.text.toString()
+        // Apply syntax highlighting
+        SyntaxHighlighter.highlight(codeInput.text, fileName)
 
-            // 1. Capture snapshot of pre-run state in history
-            historyManager.saveSnapshot(workspaceManager, "Run Snapshot")
+        val handler = Handler(Looper.getMainLooper())
+        var highlightRunnable: Runnable? = null
 
-            // 2. Persist all edited files to disk
-            for ((name, content) in unsavedEdits) {
-                workspaceManager.writeFile(name, content)
+        // Live text change listener for character count and debounced highlighting
+        codeInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                statsBadge.text = "${s?.length ?: 0} chars"
             }
+            override fun afterTextChanged(s: Editable?) {
+                highlightRunnable?.let { handler.removeCallbacks(it) }
+                highlightRunnable = Runnable {
+                    if (s != null) {
+                        SyntaxHighlighter.highlight(s, fileName)
+                    }
+                }
+                handler.postDelayed(highlightRunnable!!, 400)
+            }
+        })
 
-            reloadApp()
-            Toast.makeText(this, "AppApp reloaded successfully!", Toast.LENGTH_SHORT).show()
-            dialog.dismiss()
+        // Search integration with auto-scrolling
+        val searchHelper = SearchHelper(codeInput, scrollView) { current, total ->
+            matchesCount.text = if (total == 0) getString(R.string.search_no_matches) else getString(R.string.search_match_count, current, total)
         }
 
-        // Handle Back button with unsaved changes confirmation
+        btnSearch.setOnClickListener {
+            if (searchBar.visibility == View.VISIBLE) {
+                searchBar.visibility = View.GONE
+                searchHelper.clear()
+            } else {
+                searchBar.visibility = View.VISIBLE
+                searchInput.requestFocus()
+                searchHelper.search(searchInput.text.toString())
+            }
+        }
+
+        searchInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                searchHelper.search(s?.toString() ?: "")
+            }
+            override fun afterTextChanged(s: Editable?) {}
+        })
+
+        btnSearchNext.setOnClickListener { searchHelper.nextMatch() }
+        btnSearchPrev.setOnClickListener { searchHelper.prevMatch() }
+        btnSearchClose.setOnClickListener {
+            searchBar.visibility = View.GONE
+            searchHelper.clear()
+        }
+
+        fun hasUnsavedChanges(): Boolean {
+            return codeInput.text.toString() != initialContent
+        }
+
+        fun saveFile() {
+            val content = codeInput.text.toString()
+            workspaceManager.writeFile(fileName, content)
+            initialContent = content
+            Toast.makeText(this, getString(R.string.file_saved_toast, fileName), Toast.LENGTH_SHORT).show()
+        }
+
+        btnSave.setOnClickListener {
+            saveFile()
+        }
+
+        fun handleBack() {
+            if (hasUnsavedChanges()) {
+                MaterialAlertDialogBuilder(this)
+                    .setTitle(R.string.discard_changes_title)
+                    .setMessage(R.string.discard_changes_msg)
+                    .setPositiveButton(R.string.discard) { _, _ ->
+                        dialog.dismiss()
+                        onDismiss()
+                    }
+                    .setNegativeButton(R.string.keep_editing, null)
+                    .show()
+            } else {
+                dialog.dismiss()
+                onDismiss()
+            }
+        }
+
+        btnBack.setOnClickListener {
+            handleBack()
+        }
+
         dialog.setOnKeyListener { _, keyCode, event ->
             if (keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_UP) {
-                if (hasUnsavedChanges()) {
-                    MaterialAlertDialogBuilder(this)
-                        .setTitle(R.string.discard_changes_title)
-                        .setMessage(R.string.discard_changes_msg)
-                        .setPositiveButton(R.string.discard) { _, _ ->
-                            dialog.dismiss()
-                        }
-                        .setNegativeButton(R.string.keep_editing, null)
-                        .show()
-                    true
-                } else {
-                    dialog.dismiss()
-                    true
-                }
+                handleBack()
+                true
             } else {
                 false
             }
         }
 
-        // Initial setup
-        updateEditorContent(activeFileName)
-        rebuildTabs()
+        dialog.show()
+    }
+
+    /**
+     * Opens visual App Configuration dialog for manifest.json and custom app icon.
+     */
+    private fun showAppConfigDialog(onConfigSaved: () -> Unit) {
+        val dialog = Dialog(this, com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog)
+        dialog.setContentView(R.layout.dialog_app_config)
+        dialog.window?.setLayout(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+
+        val iconPreview = dialog.findViewById<ImageView>(R.id.config_app_icon_preview)
+        val btnPickIcon = dialog.findViewById<MaterialButton>(R.id.config_btn_pick_icon)
+        val btnResetIcon = dialog.findViewById<MaterialButton>(R.id.config_btn_reset_icon)
+        val inputName = dialog.findViewById<EditText>(R.id.config_input_app_name)
+        val inputDesc = dialog.findViewById<EditText>(R.id.config_input_app_desc)
+        val btnCancel = dialog.findViewById<MaterialButton>(R.id.config_btn_cancel)
+        val btnSave = dialog.findViewById<MaterialButton>(R.id.config_btn_save)
+
+        val currentConfig = loadAppConfig()
+        inputName.setText(currentConfig.name)
+        inputDesc.setText(currentConfig.description)
+
+        fun updateIconPreview() {
+            val iconFile = workspaceManager.getFile("icon.png")
+            if (iconFile.exists() && iconFile.isFile) {
+                try {
+                    val bmp = BitmapFactory.decodeFile(iconFile.absolutePath)
+                    if (bmp != null) {
+                        iconPreview.setImageBitmap(bmp)
+                    } else {
+                        iconPreview.setImageResource(R.drawable.ic_app_logo)
+                    }
+                } catch (_: Exception) {
+                    iconPreview.setImageResource(R.drawable.ic_app_logo)
+                }
+            } else {
+                iconPreview.setImageResource(R.drawable.ic_app_logo)
+            }
+        }
+
+        updateIconPreview()
+
+        btnPickIcon.setOnClickListener {
+            onIconUpdatedCallback = {
+                updateIconPreview()
+            }
+            pickIconLauncher.launch("image/*")
+        }
+
+        btnResetIcon.setOnClickListener {
+            workspaceManager.deleteFile("icon.png")
+            saveAppConfig(loadAppConfig().copy(iconFileName = null))
+            updateIconPreview()
+            Toast.makeText(this, "Reset to default App² logo", Toast.LENGTH_SHORT).show()
+        }
+
+        btnCancel.setOnClickListener {
+            dialog.dismiss()
+        }
+
+        btnSave.setOnClickListener {
+            val newName = inputName.text.toString().trim().ifBlank { "My App" }
+            val newDesc = inputDesc.text.toString().trim().ifBlank { "On-device app built with App²" }
+            val iconExists = workspaceManager.getFile("icon.png").exists()
+
+            val updatedConfig = AppConfigData(
+                name = newName,
+                description = newDesc,
+                iconFileName = if (iconExists) "icon.png" else null
+            )
+            saveAppConfig(updatedConfig)
+            Toast.makeText(this, R.string.config_saved_toast, Toast.LENGTH_SHORT).show()
+            dialog.dismiss()
+            onConfigSaved()
+        }
 
         dialog.show()
     }
@@ -814,14 +1081,10 @@ class MainActivity : AppCompatActivity() {
 
         // Attempt to prefill package name from manifest.json
         val defaultPackageName = try {
-            val manifestContent = workspaceManager.readFile("manifest.json")
-            if (manifestContent.isNotBlank()) {
-                val json = org.json.JSONObject(manifestContent)
-                val rawAppName = json.optString("name", json.optString("short_name", "my-app"))
-                rawAppName.lowercase().replace(Regex("[^a-z0-9_-]"), "_")
-            } else "my-app"
+            val config = loadAppConfig()
+            config.name.lowercase().replace(Regex("[^a-z0-9_-]"), "_")
         } catch (_: Exception) {
-            "my-app"
+            "my_app"
         }
         nameInput.setText(defaultPackageName)
 
@@ -889,7 +1152,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         val toggleMaster = {
-            // If all files are currently selected, deselect all; otherwise, select all.
             val shouldSelectAll = selectedFiles.size < workspaceFiles.size
             selectedFiles.clear()
             if (shouldSelectAll) {
@@ -917,7 +1179,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             val rawName = nameInput.text?.toString() ?: ""
-            val customPackageName = WorkspacePackageManager.sanitizePackageName(rawName, "my-app")
+            val customPackageName = WorkspacePackageManager.sanitizePackageName(rawName, "my_app")
 
             try {
                 val zipFile = WorkspacePackageManager.exportToZipFile(this, workspaceManager, selectedFiles, customPackageName)
@@ -948,7 +1210,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             val rawName = nameInput.text?.toString() ?: ""
-            val customPackageName = WorkspacePackageManager.sanitizePackageName(rawName, "my-app")
+            val customPackageName = WorkspacePackageManager.sanitizePackageName(rawName, "my_app")
 
             pendingExportFiles = selectedFiles.toSet()
             saveZipLauncher.launch("$customPackageName.zip")
@@ -975,8 +1237,6 @@ class MainActivity : AppCompatActivity() {
 
         dialog.show()
     }
-
-
 
     override fun onDestroy() {
         super.onDestroy()

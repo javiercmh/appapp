@@ -7,4 +7,14 @@
         <item name="android:windowBackground">@color/background</item>
         <item name="android:windowLightStatusBar">false</item>
     </style>
+
+    <!-- Fullscreen Dialog Theme that matches parent dimensions 100% without floating margins -->
+    <style name="Theme.AppApp.FullScreenDialog" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="android:windowIsFloating">false</item>
+        <item name="android:windowBackground">@color/background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
 </resources>

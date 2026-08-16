@@ -12,7 +12,9 @@ This document provides architectural context, coding standards, and operational 
 
 | Package / File | Purpose |
 | :--- | :--- |
-| `com.example.runtimecompiler.MainActivity` | Main Android Activity. Configures Edge-to-Edge window insets, initializes `WebView`, intercepts relative asset loading (`https://app.local/*`), and hosts the tabbed multi-file studio editor and console logs dialogs. |
+| `com.example.runtimecompiler.MainActivity` | Main Android Activity. Configures Edge-to-Edge window insets, initializes `WebView`, intercepts relative asset loading (`https://app.local/*`), and hosts the App Editor Hub, File Editor, and App Configuration dialogs. |
+| `com.example.runtimecompiler.editor.SyntaxHighlighter` | Fast regex-based syntax highlighter for HTML, CSS, JavaScript, and JSON code in `EditText`. |
+| `com.example.runtimecompiler.editor.SearchHelper` | In-file text search and match navigation helper for `EditText`. |
 | `com.example.runtimecompiler.workspace.WorkspaceManager` | Manages the unified multi-file project workspace stored in internal storage (`filesDir/workspace/`). Handles file reading, writing, creation, deletion, template initialization, and MIME type resolution. |
 | `com.example.runtimecompiler.workspace.WorkspaceHistoryManager` | Manages up to 5 full version snapshots (FIFO) of the workspace in `filesDir/workspace_history.json` with timestamps, enabling one-tap rollback. |
 | `com.example.runtimecompiler.workspace.WorkspacePackageManager` | Handles selective ZIP export/packaging, Android Sharesheet integration, direct stream export, and secure ZIP extraction with Zip-Slip defense and auto-backup snapshots. |
@@ -31,7 +33,8 @@ filesDir/workspace/
 ├── index.html       # Primary HTML entrypoint & UI layout
 ├── style.css        # Modular CSS stylesheet with safe-area variables
 ├── app.js           # JavaScript logic & AndroidStorage bridge calls
-├── manifest.json    # App metadata
+├── manifest.json    # App metadata & identity configuration
+├── icon.png         # Custom app icon asset (if configured)
 ├── app.log          # Runtime console, error & bridge logs
 └── [data files]     # Dynamic files created by app (e.g. saved_items.json)
 ```
@@ -49,9 +52,9 @@ The `WebView` loads `https://app.local/index.html`. Requests to `https://app.loc
    - Do **not** hardcode top status bar margins or fixed heights.
 2. **Web Safe Areas**:
    - Web stylesheets should use `env(safe-area-inset-top)` and `env(safe-area-inset-bottom)` to adapt when rendered full-bleed.
-3. **Editor Responsiveness**:
+3. **Editor Responsiveness & Flow**:
    - Dialog toolbars must remain horizontally scrollable (`HorizontalScrollView`) to accommodate narrow screens.
-   - When closing the editor with unsaved changes, prompt the user for confirmation.
+   - When closing the single-file editor with unsaved changes, prompt the user for confirmation.
 
 ---
 

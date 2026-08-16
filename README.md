@@ -1,6 +1,6 @@
 # AppApp (App²) — The App for Creating Apps
 
-An Android application written in **Kotlin** that allows you to create, edit, compile, and run modular web apps (`index.html`, `style.css`, `app.js`, etc.) dynamically inside a hardware-accelerated `WebView`, featuring **persistent state memory**, **native file system bridge**, **notch & cutout safe-area awareness**, and an **in-app multi-file studio**.
+An Android application written in **Kotlin** that allows you to create, edit, compile, and run modular web apps (`index.html`, `style.css`, `app.js`, etc.) dynamically inside a hardware-accelerated `WebView`, featuring **persistent state memory**, **native file system bridge**, **notch & cutout safe-area awareness**, and an **in-app App Editor Studio with directory file browser, syntax highlighting, and visual app configuration**.
 
 ---
 
@@ -11,16 +11,25 @@ An Android application written in **Kotlin** that allows you to create, edit, co
     - `index.html`: Semantic markup and UI container.
     - `style.css`: Design system, CSS variables, and safe-area responsive layouts.
     - `app.js`: Interactive logic and native Android storage bridge calls.
-    - `manifest.json`: App metadata.
-  - Create, edit, rename, and delete custom project files (`.js`, `.css`, `.json`, etc.).
+    - `manifest.json`: App metadata and identity configuration.
+    - `icon.png`: Custom app icon asset.
+  - Create, edit, and delete custom project files (`.js`, `.css`, `.json`, etc.).
+- **App Editor Hub & Directory Browser**:
+  - Project overview screen listing all workspace files categorized by type (Layout, Stylesheet, Script, Manifest, Data, Asset).
+  - Tap any file to open the dedicated focused code editor.
+  - Quick file creation (+ New File) and contextual deletion for custom files.
+- **Dedicated Code Editor (Syntax Highlighting & Search)**:
+  - Fast, zero-dependency regex syntax colorizer for HTML, CSS, JavaScript, and JSON.
+  - Inline text search with match highlighting, live counter (e.g., 2 of 5), and previous/next navigation.
+  - Character counter and unsaved changes protection on exit.
+- **Visual App Configuration Studio**:
+  - Configure the app identity without manually editing JSON.
+  - Customize the unified **App Name** and **Description**.
+  - Choose a custom **App Icon** from the device photo gallery or reset to the default AppApp logo.
+  - Instantly synchronizes with `manifest.json` and Android Home Screen shortcuts.
 - **Android-Aware Display (Edge-to-Edge & Cutouts)**:
   - Built with modern Android 15 Edge-to-Edge (`enableEdgeToEdge()`) and `WindowInsetsCompat`.
   - Dynamically calculates status bar height, display cutouts/notches, navigation bars, and soft keyboard (IME) insets across phones, foldables, and tablets.
-- **In-App Tabbed Studio Editor**:
-  - Horizontal tab switcher with file extension badges (`HTML`, `CSS`, `JS`, `JSON`).
-  - Fast tab switching with in-memory caching of unsaved edits.
-  - One-tap "Run App" to save and hot-reload changes instantly.
-  - "Reset File" and "Reset Project" options.
 - **Native File & State Bridge (`window.AndroidStorage` / `window.AndroidMemory`)**:
   - Direct file I/O (`writeFile`, `readFile`, `deleteFile`, `listFiles`) in the app's internal protected storage.
   - Key-value state persistence (`saveState`, `loadState`, `removeState`).
@@ -28,7 +37,7 @@ An Android application written in **Kotlin** that allows you to create, edit, co
   - Real-time disk space and RAM telemetry.
 - **Console & Storage Logs (`app.log`)**:
   - Automatically records JavaScript `console.log`, `console.warn`, `console.error`, and native storage events into `filesDir/workspace/app.log`.
-  - Directly accessible and editable as an editor tab (`📜 app.log`), included in version history snapshots, and selectively packageable into ZIP exports.
+  - Accessible directly in the workspace file list, version history snapshots, and ZIP export/import packages.
 
 ---
 
@@ -63,73 +72,32 @@ appapp/
         │   │   ├── NativeStorageBridge.kt      # JavaScript interface for file I/O & state persistence
         │   │   ├── MemoryBlock.kt              # Off-heap direct ByteBuffer native memory wrapper
         │   │   └── SystemMemoryManager.kt      # RAM & disk storage telemetry
+        │   ├── editor/
+        │   │   ├── SyntaxHighlighter.kt        # In-editor syntax coloring for HTML, CSS, JS, JSON
+        │   │   └── SearchHelper.kt             # In-file text search & match navigation
         │   ├── templates/
         │   │   └── DefaultWebApp.kt            # Modular starter template files
         │   └── workspace/
-        │       └── WorkspaceManager.kt         # Multi-file workspace manager
+        │       ├── WorkspaceManager.kt         # Multi-file workspace manager
+        │       ├── WorkspaceHistoryManager.kt  # Snapshots & version history
+        │       └── WorkspacePackageManager.kt   # Selective ZIP export/import
         └── res/
             ├── layout/
             │   ├── activity_main.xml           # Main layout with Toolbar and WebView
-            │   ├── dialog_code_editor.xml      # Multi-file tabbed code editor
-            │   ├── dialog_console_logs.xml     # Console logs & storage telemetry
-            │   └── item_editor_tab.xml         # Editor file tab item
+            │   ├── dialog_workspace_hub.xml    # App Editor directory hub & project card
+            │   ├── dialog_file_editor.xml      # Single-file code editor with search & syntax highlighting
+            │   ├── dialog_app_config.xml       # App Configuration dialog (manifest & icon)
+            │   ├── dialog_import_export.xml    # Share & package ZIP dialog
+            │   ├── dialog_version_history.xml  # Version history snapshot dialog
+            │   ├── item_workspace_file.xml     # Workspace file item in directory list
+            │   ├── item_export_file_checkbox.xml # Checkbox file item for export
+            │   └── item_history_snapshot.xml   # Snapshot item in history list
             ├── values/
             │   ├── strings.xml, colors.xml, themes.xml
-            └── drawable/ & mipmap-.../
+            │   └── bg_*.xml drawables
+            └── drawable/
                 ├── ic_app_logo.xml             # App² brand logo
-                └── ic_launcher_foreground.xml  # App² launcher icon
-```
-
----
-
-## Getting Started
-
-### Prerequisites
-- **Android Studio** (Koala, Ladybug, Iguana, or later)
-- **JDK 17** or **JDK 21** (Embedded in Android Studio)
-
-### Running the App
-1. Open Android Studio and select **Open**.
-2. Navigate to this project folder (`appapp`) and click **OK**.
-3. Allow Android Studio to sync Gradle dependencies.
-4. Select an Emulator or connected Android device (API 26+) and click **Run (`Shift + F10`)**.
-
----
-
-## JavaScript Bridge API Reference
-
-The following APIs are accessible to any JavaScript code running inside the WebView under `window.AndroidStorage` (and aliased as `window.AndroidMemory`):
-
-### Workspace Project Files
-```javascript
-// List all files in the current workspace project
-const workspaceFiles = JSON.parse(window.AndroidStorage.getWorkspaceFiles());
-
-// Read any workspace file
-const css = window.AndroidStorage.readWorkspaceFile("style.css");
-
-// Write to a workspace file
-window.AndroidStorage.writeWorkspaceFile("style.css", "body { background: #000; }");
-```
-
-### Persistent Data Storage
-```javascript
-// Write text/JSON to app's internal protected storage
-window.AndroidStorage.writeFile("saved_items.json", JSON.stringify(items));
-
-// Read content from file
-const content = window.AndroidStorage.readFile("saved_items.json");
-
-// Key-value state persistence
-window.AndroidStorage.saveState("theme_preference", "dark");
-const theme = window.AndroidStorage.loadState("theme_preference", "dark");
-```
-
-### Storage Telemetry
-```javascript
-// Get disk space and metrics
-const stats = JSON.parse(window.AndroidStorage.getStorageStats());
-console.log("Free MB:", Math.round(stats.usableSpaceBytes / (1024 * 1024)));
+                └── ic_*.xml                    # Material vector icons
 ```
 
 ---
