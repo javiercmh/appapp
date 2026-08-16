@@ -41,5 +41,9 @@
     <string name="import_confirm_title">Replace Workspace?</string>
     <string name="import_confirm_msg">Importing will replace current files in your workspace with the ZIP package. A backup snapshot will be automatically saved in History. Proceed?</string>
     <string name="import_action_proceed">Import &amp; Replace</string>
+    <string name="action_deploy">Deploy to Home Screen</string>
+    <string name="action_install">Install</string>
+    <string name="shortcut_requested">Shortcut created for \'%1$s\'</string>
+    <string name="shortcut_not_supported">Your home screen launcher does not support shortcut pinning.</string>
     <string name="close">Close</string>
 </resources>

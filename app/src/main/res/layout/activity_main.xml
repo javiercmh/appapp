@@ -52,20 +52,31 @@
                     android:src="@drawable/ic_terminal"
                     app:tint="@color/accent_green" />
 
-                <!-- Edit Code Studio Button -->
-                <com.google.android.material.button.MaterialButton
+                <!-- Edit Code Studio Button (Plain </> Icon) -->
+                <ImageButton
                     android:id="@+id/btn_edit_code"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_marginStart="4dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/action_edit_code"
+                    android:src="@drawable/ic_code"
+                    app:tint="@color/accent_blue" />
+
+                <!-- Install / Add to Home Screen Button (Pill Button) -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_deploy"
                     style="@style/Widget.Material3.Button.TonalButton"
                     android:layout_width="wrap_content"
                     android:layout_height="38dp"
                     android:layout_marginStart="8dp"
                     android:paddingHorizontal="14dp"
-                    android:text="@string/action_edit_code"
+                    android:text="@string/action_install"
                     android:textColor="@color/on_surface"
                     android:textSize="13sp"
                     android:textStyle="bold"
                     app:backgroundTint="@color/surface_variant"
-                    app:icon="@drawable/ic_code"
+                    app:icon="@drawable/ic_install_mobile"
                     app:iconPadding="6dp"
                     app:iconSize="16dp"
                     app:iconTint="@color/accent_blue" />

@@ -3,7 +3,15 @@ package com.example.runtimecompiler
 import android.annotation.SuppressLint
 import android.app.Dialog
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.LinearGradient
+import android.graphics.Paint
+import android.graphics.Shader
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
@@ -29,7 +37,11 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.core.content.pm.ShortcutInfoCompat
+import androidx.core.content.pm.ShortcutManagerCompat
+import androidx.core.graphics.drawable.IconCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
@@ -103,21 +115,37 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        // Check if launched from a Deployed Home Screen Shortcut
+        val isStandalone = intent.getBooleanExtra("EXTRA_STANDALONE_MODE", false)
+        if (isStandalone) {
+            binding.appBarLayout.visibility = View.GONE
+        }
+
         // Handle dynamic system window insets (Notches, Cutouts, Status Bar, Navigation Bar)
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, windowInsets ->
             val insets = windowInsets.getInsets(
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
             )
-            binding.appBarLayout.updatePadding(
-                top = insets.top,
-                left = insets.left,
-                right = insets.right
-            )
-            binding.webView.updatePadding(
-                bottom = insets.bottom,
-                left = insets.left,
-                right = insets.right
-            )
+            if (binding.appBarLayout.visibility != View.GONE) {
+                binding.appBarLayout.updatePadding(
+                    top = insets.top,
+                    left = insets.left,
+                    right = insets.right
+                )
+                binding.webView.updatePadding(
+                    top = 0,
+                    bottom = insets.bottom,
+                    left = insets.left,
+                    right = insets.right
+                )
+            } else {
+                binding.webView.updatePadding(
+                    top = insets.top,
+                    bottom = insets.bottom,
+                    left = insets.left,
+                    right = insets.right
+                )
+            }
             windowInsets
         }
 
@@ -266,6 +294,11 @@ class MainActivity : AppCompatActivity() {
             showMultiFileEditorDialog()
         }
 
+        // Deploy / Add to Home Screen Pinned Shortcut
+        binding.btnDeploy.setOnClickListener {
+            deployToHomeScreen()
+        }
+
         // Console & Storage Logs Dialog
         binding.btnLogs.setOnClickListener {
             showLogsDialog()
@@ -276,6 +309,139 @@ class MainActivity : AppCompatActivity() {
             binding.webView.clearCache(true)
             reloadApp()
             Toast.makeText(this, "Site refreshed & cache cleared", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val isStandalone = intent.getBooleanExtra("EXTRA_STANDALONE_MODE", false)
+        binding.appBarLayout.visibility = if (isStandalone) View.GONE else View.VISIBLE
+        if (isStandalone) {
+            reloadApp()
+        }
+    }
+
+    /**
+     * Creates a pinned Home Screen shortcut for the current web app using manifest.json metadata.
+     */
+    private fun deployToHomeScreen() {
+        if (!ShortcutManagerCompat.isRequestPinShortcutSupported(this)) {
+            Toast.makeText(this, R.string.shortcut_not_supported, Toast.LENGTH_LONG).show()
+            appendLog("[Deploy Error] Device launcher does not support pinned shortcuts.")
+            return
+        }
+
+        // 1. Read app metadata from manifest.json
+        var fullAppName = "AppApp Project"
+        var shortAppName = "AppApp"
+        var customIconFileName: String? = null
+
+        try {
+            val manifestContent = workspaceManager.readFile("manifest.json")
+            if (manifestContent.isNotBlank()) {
+                val json = org.json.JSONObject(manifestContent)
+                fullAppName = json.optString("name", fullAppName)
+                shortAppName = json.optString("short_name", fullAppName)
+
+                val iconsArray = json.optJSONArray("icons")
+                if (iconsArray != null && iconsArray.length() > 0) {
+                    val firstIcon = iconsArray.optJSONObject(0)
+                    customIconFileName = firstIcon?.optString("src")
+                }
+            }
+        } catch (e: Exception) {
+            appendLog("[Deploy Warning] Could not parse manifest.json: ${e.message}")
+        }
+
+        // 2. Resolve icon (custom workspace file or crisp rendered Install Mobile icon)
+        val iconFile = customIconFileName?.let { workspaceManager.getFile(it) }
+            ?: workspaceManager.getFile("icon.png").takeIf { it.exists() }
+            ?: workspaceManager.getFile("app_icon.png").takeIf { it.exists() }
+            ?: workspaceManager.getFile("icon.jpg").takeIf { it.exists() }
+
+        val iconCompat = if (iconFile != null && iconFile.exists() && iconFile.isFile) {
+            try {
+                val bitmap = BitmapFactory.decodeFile(iconFile.absolutePath)
+                if (bitmap != null) {
+                    IconCompat.createWithBitmap(bitmap)
+                } else {
+                    renderAppShortcutIcon()
+                }
+            } catch (_: Exception) {
+                renderAppShortcutIcon()
+            }
+        } else {
+            renderAppShortcutIcon()
+        }
+
+        // 3. Build launch Intent with standalone mode flag
+        val shortcutIntent = Intent(this, MainActivity::class.java).apply {
+            action = Intent.ACTION_VIEW
+            putExtra("EXTRA_STANDALONE_MODE", true)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        }
+
+        // 4. Build and request pinned shortcut
+        val shortcutId = "appapp_shortcut_${shortAppName.lowercase().replace(Regex("[^a-z0-9_-]"), "_")}"
+        val pinShortcutInfo = ShortcutInfoCompat.Builder(this, shortcutId)
+            .setShortLabel(shortAppName)
+            .setLongLabel(fullAppName)
+            .setIcon(iconCompat)
+            .setIntent(shortcutIntent)
+            .build()
+
+        val pinned = ShortcutManagerCompat.requestPinShortcut(this, pinShortcutInfo, null)
+        if (pinned) {
+            appendLog("[Deploy] Requested Home Screen shortcut for '$fullAppName' ($shortAppName)")
+            Toast.makeText(this, getString(R.string.shortcut_requested, shortAppName), Toast.LENGTH_SHORT).show()
+        } else {
+            appendLog("[Deploy Error] Failed to request pinned shortcut.")
+            Toast.makeText(this, R.string.shortcut_not_supported, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * Renders a high-resolution adaptive icon bitmap featuring the Install Mobile icon for Home Screen shortcuts.
+     */
+    private fun renderAppShortcutIcon(): IconCompat {
+        val size = 512
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+
+        // 1. Full-bleed background gradient (Deep Navy to Indigo)
+        val gradient = LinearGradient(
+            0f, 0f, size.toFloat(), size.toFloat(),
+            Color.parseColor("#0F172A"),
+            Color.parseColor("#1E1B4B"),
+            Shader.TileMode.CLAMP
+        )
+        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            shader = gradient
+        }
+        canvas.drawRect(0f, 0f, size.toFloat(), size.toFloat(), bgPaint)
+
+        // 2. Subtle glowing circular backdrop behind the icon
+        val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor("#1E293B")
+        }
+        canvas.drawCircle(size / 2f, size / 2f, size * 0.36f, glowPaint)
+
+        // 3. Draw Install Mobile vector in the center safe area
+        val drawable = ContextCompat.getDrawable(this, R.drawable.ic_install_mobile)?.mutate()
+        if (drawable != null) {
+            drawable.setTint(Color.parseColor("#38BDF8"))
+            val iconSize = 220
+            val left = (size - iconSize) / 2
+            val top = (size - iconSize) / 2
+            drawable.setBounds(left, top, left + iconSize, top + iconSize)
+            drawable.draw(canvas)
+        }
+
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            IconCompat.createWithAdaptiveBitmap(bitmap)
+        } else {
+            IconCompat.createWithBitmap(bitmap)
         }
     }
 
