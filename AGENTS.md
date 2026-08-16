@@ -116,3 +116,5 @@ When adding new bridge methods for the runtime web app:
    - XML view IDs like `btn_reset` or `btn_edit_code` map to ViewBinding properties `binding.btnReset` and `binding.btnEditCode`. When updating layouts, ensure all references in `MainActivity.kt` stay synchronized.
 4. **MIME Resolution & Asset URLs**:
    - All internal requests to `https://app.local/*` are intercepted by `WebViewClient.shouldInterceptRequest` from `filesDir/workspace/`. Ensure any new file types are registered in `WorkspaceManager.getMimeType()`.
+5. **Git Commit & Push Restrictions**:
+   - **Agent Rule**: Do **not** run `git commit` or `git push` autonomously. Only execute commit and push commands when the user explicitly gives a direct instruction to do so.

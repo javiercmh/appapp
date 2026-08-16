@@ -20,6 +20,7 @@
     <color name="accent_blue">#38BDF8</color>
     <color name="accent_indigo">#6366F1</color>
     <color name="accent_red">#EF4444</color>
+    <color name="error">#EF4444</color>
     <color name="border_color">#334155</color>
     <color name="code_editor_bg">#0B0F19</color>
     <color name="tab_active_bg">#1E293B</color>

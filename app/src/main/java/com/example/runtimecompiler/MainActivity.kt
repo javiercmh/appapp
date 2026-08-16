@@ -662,9 +662,16 @@ class MainActivity : AppCompatActivity() {
                 sizeView.text = formatFileSize(file.size)
 
                 itemView.setOnClickListener {
-                    showFileEditorDialog(file.name) {
-                        refreshFileList()
-                        refreshAppCard()
+                    if (isImageFile(file.name)) {
+                        showImagePreviewDialog(file.name) {
+                            refreshFileList()
+                            refreshAppCard()
+                        }
+                    } else {
+                        showFileEditorDialog(file.name) {
+                            refreshFileList()
+                            refreshAppCard()
+                        }
                     }
                 }
 
@@ -742,6 +749,116 @@ class MainActivity : AppCompatActivity() {
 
         refreshAppCard()
         refreshFileList()
+
+        dialog.show()
+    }
+
+    private fun isImageFile(name: String): Boolean {
+        val lower = name.lowercase()
+        return lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") ||
+                lower.endsWith(".webp") || lower.endsWith(".gif") || lower.endsWith(".bmp") ||
+                lower.endsWith(".ico") || lower.endsWith(".svg")
+    }
+
+    private fun formatFileSize(bytes: Long): String {
+        return when {
+            bytes < 1024 -> "$bytes B"
+            bytes < 1024 * 1024 -> String.format(Locale.getDefault(), "%.1f KB", bytes / 1024.0)
+            else -> String.format(Locale.getDefault(), "%.1f MB", bytes / (1024.0 * 1024.0))
+        }
+    }
+
+    /**
+     * Opens dedicated full-screen image preview dialog with dimensions, file stats, and delete/trash action.
+     */
+    private fun showImagePreviewDialog(fileName: String, onDismiss: () -> Unit) {
+        val dialog = Dialog(this, R.style.Theme_AppApp_FullScreenDialog)
+        dialog.setContentView(R.layout.dialog_image_preview)
+        dialog.window?.setLayout(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
+        )
+
+        val rootContainer = dialog.findViewById<LinearLayout>(R.id.image_preview_root)
+        val btnBack = dialog.findViewById<ImageButton>(R.id.preview_btn_back)
+        val titleView = dialog.findViewById<TextView>(R.id.preview_file_name_title)
+        val statsBadge = dialog.findViewById<TextView>(R.id.preview_file_stats_badge)
+        val btnDelete = dialog.findViewById<ImageButton>(R.id.preview_btn_delete)
+        val imageView = dialog.findViewById<ImageView>(R.id.preview_image_view)
+        val dimenView = dialog.findViewById<TextView>(R.id.preview_info_dimensions)
+        val mimeView = dialog.findViewById<TextView>(R.id.preview_info_mime)
+        val sizeView = dialog.findViewById<TextView>(R.id.preview_info_size)
+
+        // Handle insets for Edge-to-Edge dialog
+        dialog.window?.decorView?.let { decor ->
+            ViewCompat.setOnApplyWindowInsetsListener(decor) { _, insets ->
+                val statusBarInset = insets.getInsets(
+                    WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+                )
+                val imeInset = insets.getInsets(WindowInsetsCompat.Type.ime())
+                rootContainer.updatePadding(
+                    top = statusBarInset.top,
+                    bottom = maxOf(statusBarInset.bottom, imeInset.bottom),
+                    left = statusBarInset.left,
+                    right = statusBarInset.right
+                )
+                insets
+            }
+        }
+
+        titleView.text = fileName
+        val file = workspaceManager.getFile(fileName)
+        val mimeType = WorkspaceManager.getMimeType(fileName)
+        val fileSizeFormatted = formatFileSize(file.length())
+        mimeView.text = "MIME Type: $mimeType"
+        sizeView.text = fileSizeFormatted
+
+        if (file.exists() && file.isFile) {
+            try {
+                val bitmap = BitmapFactory.decodeFile(file.absolutePath)
+                if (bitmap != null) {
+                    imageView.setImageBitmap(bitmap)
+                    val w = bitmap.width
+                    val h = bitmap.height
+                    statsBadge.text = "${w} × ${h} px • $fileSizeFormatted"
+                    dimenView.text = "Resolution: ${w} × ${h} px"
+                } else {
+                    imageView.setImageResource(R.drawable.ic_app_logo)
+                    statsBadge.text = fileSizeFormatted
+                    dimenView.text = "Vector / SVG Asset"
+                }
+            } catch (_: Exception) {
+                imageView.setImageResource(R.drawable.ic_app_logo)
+                statsBadge.text = fileSizeFormatted
+                dimenView.text = "Image Asset"
+            }
+        }
+
+        btnBack.setOnClickListener {
+            dialog.dismiss()
+            onDismiss()
+        }
+
+        btnDelete.setOnClickListener {
+            MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.action_delete_file)
+                .setMessage(getString(R.string.delete_file_confirm, fileName))
+                .setPositiveButton(R.string.discard) { _, _ ->
+                    if (workspaceManager.deleteFile(fileName)) {
+                        if (fileName == "icon.png") {
+                            val currentConfig = loadAppConfig()
+                            saveAppConfig(currentConfig.copy(iconFileName = null))
+                            Toast.makeText(this, "Reset custom app icon to default", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(this, "Deleted '$fileName'", Toast.LENGTH_SHORT).show()
+                        }
+                        dialog.dismiss()
+                        onDismiss()
+                    }
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
 
         dialog.show()
     }
