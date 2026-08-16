@@ -2,6 +2,8 @@ package com.example.runtimecompiler
 
 import android.annotation.SuppressLint
 import android.app.Dialog
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
@@ -25,7 +27,9 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
@@ -34,8 +38,10 @@ import com.example.runtimecompiler.databinding.ActivityMainBinding
 import com.example.runtimecompiler.workspace.WorkspaceFile
 import com.example.runtimecompiler.workspace.WorkspaceHistoryManager
 import com.example.runtimecompiler.workspace.WorkspaceManager
+import com.example.runtimecompiler.workspace.WorkspacePackageManager
 import com.example.runtimecompiler.workspace.WorkspaceSnapshot
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import java.io.ByteArrayInputStream
 import java.io.FileInputStream
@@ -53,6 +59,41 @@ class MainActivity : AppCompatActivity() {
 
     private val logBuffer = StringBuilder()
     private val timeFormat = SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault())
+
+    private var pendingExportFiles: Set<String>? = null
+    private var onImportCompletedCallback: (() -> Unit)? = null
+
+    private val saveZipLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri: Uri? ->
+        val filesToExport = pendingExportFiles
+        if (uri != null && filesToExport != null) {
+            try {
+                contentResolver.openOutputStream(uri)?.use { os ->
+                    WorkspacePackageManager.exportToOutputStream(workspaceManager, filesToExport, os)
+                }
+                appendLog("[Package] Saved ${filesToExport.size} files to ZIP via Storage Access Framework.")
+                Toast.makeText(this, getString(R.string.export_success, filesToExport.size), Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                appendLog("[Package Error] Failed to write ZIP: ${e.message}")
+                Toast.makeText(this, "Save failed: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+        pendingExportFiles = null
+    }
+
+    private val importZipLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri != null) {
+            val result = WorkspacePackageManager.importFromZip(this, uri, workspaceManager, historyManager)
+            result.onSuccess { importedList ->
+                appendLog("[Package] Successfully imported ${importedList.size} files from ZIP: ${importedList.joinToString(", ")}")
+                Toast.makeText(this, getString(R.string.import_success, importedList.size), Toast.LENGTH_LONG).show()
+                onImportCompletedCallback?.invoke()
+            }.onFailure { err ->
+                appendLog("[Package Error] ZIP Import failed: ${err.message}")
+                Toast.makeText(this, "${getString(R.string.import_error)}: ${err.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+        onImportCompletedCallback = null
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // Enable Edge-to-Edge display for notches, display cutouts, and status/navigation bars
@@ -269,7 +310,8 @@ class MainActivity : AppCompatActivity() {
         val activeFileLabel = dialog.findViewById<TextView>(R.id.editor_active_file_label)
         val fileStats = dialog.findViewById<TextView>(R.id.editor_file_stats)
         val codeInput = dialog.findViewById<EditText>(R.id.editor_code_input)
-        val btnHistory = dialog.findViewById<MaterialButton>(R.id.editor_btn_history)
+        val btnHistory = dialog.findViewById<ImageButton>(R.id.editor_btn_history)
+        val btnPackage = dialog.findViewById<ImageButton>(R.id.editor_btn_package)
         val btnRun = dialog.findViewById<MaterialButton>(R.id.editor_btn_run)
         val btnNewFile = dialog.findViewById<ImageButton>(R.id.editor_btn_new_file)
         val btnDeleteFile = dialog.findViewById<ImageButton>(R.id.editor_btn_delete_file)
@@ -388,6 +430,32 @@ class MainActivity : AppCompatActivity() {
             unsavedEdits[activeFileName] = codeInput.text.toString()
             showHistoryDialog {
                 // On snapshot restored, reload editor content
+                files.clear()
+                files.addAll(workspaceManager.listFiles())
+                initialDiskContent.clear()
+                unsavedEdits.clear()
+                for (f in files) {
+                    val content = workspaceManager.readFile(f.name)
+                    initialDiskContent[f.name] = content
+                    unsavedEdits[f.name] = content
+                }
+                updateEditorContent("index.html")
+                rebuildTabs()
+                reloadApp()
+            }
+        }
+
+        // Share & Package Dialog
+        btnPackage.setOnClickListener {
+            unsavedEdits[activeFileName] = codeInput.text.toString()
+            for ((name, content) in unsavedEdits) {
+                workspaceManager.writeFile(name, content)
+            }
+            initialDiskContent.clear()
+            initialDiskContent.putAll(unsavedEdits)
+
+            showImportExportDialog {
+                // On workspace replaced by import, refresh editor state & tabs
                 files.clear()
                 files.addAll(workspaceManager.listFiles())
                 initialDiskContent.clear()
@@ -550,6 +618,190 @@ class MainActivity : AppCompatActivity() {
 
                 container.addView(itemView)
             }
+        }
+
+        btnClose.setOnClickListener {
+            dialog.dismiss()
+        }
+
+        dialog.show()
+    }
+
+    /**
+     * Opens modal dialog for selective ZIP export, direct packaging & sharing, and ZIP import.
+     */
+    private fun showImportExportDialog(onWorkspaceUpdated: () -> Unit) {
+        val dialog = Dialog(this, com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog)
+        dialog.setContentView(R.layout.dialog_import_export)
+        dialog.window?.setLayout(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+
+        val filesContainer = dialog.findViewById<LinearLayout>(R.id.package_files_container)
+        val nameInput = dialog.findViewById<EditText>(R.id.package_name_input)
+        val masterCheckbox = dialog.findViewById<MaterialCheckBox>(R.id.package_master_checkbox)
+        val masterCheckboxRow = dialog.findViewById<LinearLayout>(R.id.package_master_checkbox_row)
+        val btnShareZip = dialog.findViewById<MaterialButton>(R.id.package_btn_share_zip)
+        val btnSaveZip = dialog.findViewById<MaterialButton>(R.id.package_btn_save_zip)
+        val btnImportZip = dialog.findViewById<MaterialButton>(R.id.package_btn_import_zip)
+        val btnClose = dialog.findViewById<MaterialButton>(R.id.package_btn_close)
+
+        // Attempt to prefill package name from manifest.json
+        val defaultPackageName = try {
+            val manifestContent = workspaceManager.readFile("manifest.json")
+            if (manifestContent.isNotBlank()) {
+                val json = org.json.JSONObject(manifestContent)
+                val rawAppName = json.optString("name", json.optString("short_name", "my-app"))
+                rawAppName.lowercase().replace(Regex("[^a-z0-9_-]"), "_")
+            } else "my-app"
+        } catch (_: Exception) {
+            "my-app"
+        }
+        nameInput.setText(defaultPackageName)
+
+        val workspaceFiles = workspaceManager.listFiles()
+        val selectedFiles = workspaceFiles.map { it.name }.toMutableSet()
+        val checkboxMap = mutableMapOf<String, MaterialCheckBox>()
+
+        fun updateMasterCheckboxState() {
+            masterCheckbox.checkedState = when {
+                workspaceFiles.isEmpty() || selectedFiles.isEmpty() -> MaterialCheckBox.STATE_UNCHECKED
+                selectedFiles.size == workspaceFiles.size -> MaterialCheckBox.STATE_CHECKED
+                else -> MaterialCheckBox.STATE_INDETERMINATE
+            }
+        }
+
+        fun formatFileSize(bytes: Long): String {
+            return when {
+                bytes < 1024 -> "$bytes B"
+                bytes < 1024 * 1024 -> String.format(Locale.getDefault(), "%.1f KB", bytes / 1024.0)
+                else -> String.format(Locale.getDefault(), "%.1f MB", bytes / (1024.0 * 1024.0))
+            }
+        }
+
+        fun getFileEmoji(name: String): String {
+            val lower = name.lowercase()
+            return when {
+                lower.endsWith(".html") || lower.endsWith(".htm") -> "🌐"
+                lower.endsWith(".css") -> "🎨"
+                lower.endsWith(".js") || lower.endsWith(".mjs") -> "⚡"
+                lower.endsWith(".json") -> "📦"
+                else -> "📄"
+            }
+        }
+
+        filesContainer.removeAllViews()
+        val inflater = LayoutInflater.from(this)
+
+        for (file in workspaceFiles) {
+            val itemView = inflater.inflate(R.layout.item_export_file_checkbox, filesContainer, false)
+            val iconView = itemView.findViewById<TextView>(R.id.export_item_icon)
+            val nameView = itemView.findViewById<TextView>(R.id.export_item_name)
+            val sizeView = itemView.findViewById<TextView>(R.id.export_item_size)
+            val checkBox = itemView.findViewById<MaterialCheckBox>(R.id.export_item_checkbox)
+
+            iconView.text = getFileEmoji(file.name)
+            nameView.text = file.name
+            sizeView.text = formatFileSize(file.size)
+            checkBox.isChecked = true
+            checkboxMap[file.name] = checkBox
+
+            val toggleAction = {
+                val newState = !checkBox.isChecked
+                checkBox.isChecked = newState
+                if (newState) selectedFiles.add(file.name) else selectedFiles.remove(file.name)
+                updateMasterCheckboxState()
+            }
+
+            itemView.setOnClickListener { toggleAction() }
+            checkBox.setOnClickListener {
+                if (checkBox.isChecked) selectedFiles.add(file.name) else selectedFiles.remove(file.name)
+                updateMasterCheckboxState()
+            }
+
+            filesContainer.addView(itemView)
+        }
+
+        val toggleMaster = {
+            // If all files are currently selected, deselect all; otherwise, select all.
+            val shouldSelectAll = selectedFiles.size < workspaceFiles.size
+            selectedFiles.clear()
+            if (shouldSelectAll) {
+                for (file in workspaceFiles) {
+                    selectedFiles.add(file.name)
+                    checkboxMap[file.name]?.isChecked = true
+                }
+            } else {
+                for (cb in checkboxMap.values) {
+                    cb.isChecked = false
+                }
+            }
+            updateMasterCheckboxState()
+        }
+
+        masterCheckbox.setOnClickListener { toggleMaster() }
+        masterCheckboxRow.setOnClickListener { toggleMaster() }
+
+        updateMasterCheckboxState()
+
+        btnShareZip.setOnClickListener {
+            if (selectedFiles.isEmpty()) {
+                Toast.makeText(this, R.string.export_no_files_selected, Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            val rawName = nameInput.text?.toString() ?: ""
+            val customPackageName = WorkspacePackageManager.sanitizePackageName(rawName, "my-app")
+
+            try {
+                val zipFile = WorkspacePackageManager.exportToZipFile(this, workspaceManager, selectedFiles, customPackageName)
+                val contentUri = FileProvider.getUriForFile(
+                    this,
+                    "${packageName}.fileprovider",
+                    zipFile
+                )
+
+                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = "application/zip"
+                    putExtra(Intent.EXTRA_STREAM, contentUri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+
+                startActivity(Intent.createChooser(shareIntent, getString(R.string.action_share_zip)))
+                appendLog("[Package] Exported ${selectedFiles.size} files to '$customPackageName.zip' and triggered Sharesheet.")
+            } catch (e: Exception) {
+                appendLog("[Package Error] Export failed: ${e.message}")
+                Toast.makeText(this, "Export failed: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        btnSaveZip.setOnClickListener {
+            if (selectedFiles.isEmpty()) {
+                Toast.makeText(this, R.string.export_no_files_selected, Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            val rawName = nameInput.text?.toString() ?: ""
+            val customPackageName = WorkspacePackageManager.sanitizePackageName(rawName, "my-app")
+
+            pendingExportFiles = selectedFiles.toSet()
+            saveZipLauncher.launch("$customPackageName.zip")
+        }
+
+        btnImportZip.setOnClickListener {
+            MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.import_confirm_title)
+                .setMessage(R.string.import_confirm_msg)
+                .setPositiveButton(R.string.import_action_proceed) { _, _ ->
+                    onImportCompletedCallback = {
+                        onWorkspaceUpdated()
+                        dialog.dismiss()
+                    }
+                    importZipLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream", "*/*"))
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
         }
 
         btnClose.setOnClickListener {

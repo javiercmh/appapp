@@ -20,5 +20,26 @@
     <string name="discard">Discard</string>
     <string name="keep_editing">Keep Editing</string>
     <string name="clear_logs">Clear Logs</string>
+    <string name="package_dialog_title">Share &amp; Package App</string>
+    <string name="package_dialog_subtitle">Export selected workspace files as a ZIP archive or import an existing project.</string>
+    <string name="action_package_share">Share &amp; Package</string>
+    <string name="export_section_title">EXPORT TO ZIP</string>
+    <string name="package_name_label">Package Name</string>
+    <string name="package_name_hint">my-awesome-app</string>
+    <string name="export_select_files_label">Select files to include:</string>
+    <string name="action_select_all">Select All</string>
+    <string name="action_deselect_all">Deselect All</string>
+    <string name="action_share_zip">Share ZIP</string>
+    <string name="action_save_zip">Save to Device</string>
+    <string name="import_section_title">IMPORT FROM ZIP</string>
+    <string name="import_section_desc">Import a ZIP package into your workspace. An automatic backup snapshot will be saved to your History before replacing current files.</string>
+    <string name="action_import_zip">Import ZIP Archive</string>
+    <string name="export_no_files_selected">Please select at least one file to export.</string>
+    <string name="export_success">Exported %1$d files to ZIP</string>
+    <string name="import_success">Successfully imported %1$d files from ZIP!</string>
+    <string name="import_error">Failed to import ZIP archive.</string>
+    <string name="import_confirm_title">Replace Workspace?</string>
+    <string name="import_confirm_msg">Importing will replace current files in your workspace with the ZIP package. A backup snapshot will be automatically saved in History. Proceed?</string>
+    <string name="import_action_proceed">Import &amp; Replace</string>
     <string name="close">Close</string>
 </resources>

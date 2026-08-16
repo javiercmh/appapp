@@ -46,21 +46,26 @@
                 android:layout_height="1dp"
                 android:layout_weight="1" />
 
-            <!-- History Button -->
-            <com.google.android.material.button.MaterialButton
+            <!-- History Button (Plain Icon) -->
+            <ImageButton
                 android:id="@+id/editor_btn_history"
-                style="@style/Widget.Material3.Button.TonalButton"
-                android:layout_width="wrap_content"
-                android:layout_height="38dp"
-                android:backgroundTint="@color/surface_variant"
-                android:paddingHorizontal="12dp"
-                android:text="@string/action_history"
-                android:textColor="@color/on_surface"
-                android:textSize="12sp"
-                app:icon="@drawable/ic_history"
-                app:iconPadding="4dp"
-                app:iconSize="16dp"
-                app:iconTint="@color/accent_blue" />
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/action_history"
+                android:src="@drawable/ic_history"
+                app:tint="@color/accent_blue" />
+
+            <!-- Share & Package Button (Plain Icon) -->
+            <ImageButton
+                android:id="@+id/editor_btn_package"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="4dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/action_package_share"
+                android:src="@drawable/ic_import_export"
+                app:tint="@color/accent_blue" />
 
             <!-- Compile & Run Button -->
             <com.google.android.material.button.MaterialButton
