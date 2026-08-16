@@ -2,10 +2,10 @@ package com.example.runtimecompiler
 
 import android.annotation.SuppressLint
 import android.app.Dialog
-import android.content.DialogInterface
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
+import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -19,28 +19,25 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.EditText
 import android.widget.ImageButton
-import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import com.example.runtimecompiler.bridge.NativeStorageBridge
 import com.example.runtimecompiler.databinding.ActivityMainBinding
-import com.example.runtimecompiler.templates.DefaultWebApp
 import com.example.runtimecompiler.workspace.WorkspaceFile
+import com.example.runtimecompiler.workspace.WorkspaceHistoryManager
 import com.example.runtimecompiler.workspace.WorkspaceManager
+import com.example.runtimecompiler.workspace.WorkspaceSnapshot
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import java.io.ByteArrayInputStream
-import java.io.File
 import java.io.FileInputStream
 import java.nio.charset.StandardCharsets
 import java.text.SimpleDateFormat
@@ -52,6 +49,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var storageBridge: NativeStorageBridge
     private lateinit var workspaceManager: WorkspaceManager
+    private lateinit var historyManager: WorkspaceHistoryManager
 
     private val logBuffer = StringBuilder()
     private val timeFormat = SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault())
@@ -82,11 +80,21 @@ class MainActivity : AppCompatActivity() {
             windowInsets
         }
 
-        appendLog("[System] AppApp initialized with Edge-to-Edge & Multi-File Workspace.")
+        appendLog("[System] AppApp initialized with Edge-to-Edge & Unified Workspace.")
 
         // Initialize Workspace Manager
         workspaceManager = WorkspaceManager(this) { msg ->
             runOnUiThread { appendLog(msg) }
+        }
+
+        // Initialize Workspace History Manager
+        historyManager = WorkspaceHistoryManager(this) { msg ->
+            runOnUiThread { appendLog(msg) }
+        }
+
+        // Save initial snapshot if none exists
+        if (historyManager.getSnapshots().isEmpty()) {
+            historyManager.saveSnapshot(workspaceManager, "Starter Template")
         }
 
         // Initialize Native Storage & State Bridge
@@ -164,10 +172,10 @@ class MainActivity : AppCompatActivity() {
                 val host = url.host ?: ""
                 val scheme = url.scheme ?: ""
 
-                // Intercept https://app.local/* requests to serve local workspace files
-                if ((scheme.equals("https", ignoreCase = true) || scheme.equals("http", ignoreCase = true)) 
+                // Intercept https://app.local/* requests to serve unified local workspace files
+                if ((scheme.equals("https", ignoreCase = true) || scheme.equals("http", ignoreCase = true))
                     && host.equals("app.local", ignoreCase = true)) {
-                    
+
                     var path = url.path ?: "/index.html"
                     if (path.isEmpty() || path == "/") {
                         path = "/index.html"
@@ -222,18 +230,11 @@ class MainActivity : AppCompatActivity() {
             showLogsDialog()
         }
 
-        // Reset Workspace to Default Starter Template
+        // Top Bar Refresh Button: Refresh site & clear cache
         binding.btnReset.setOnClickListener {
-            MaterialAlertDialogBuilder(this)
-                .setTitle("Reset AppApp Workspace?")
-                .setMessage("This will restore index.html, style.css, app.js, and manifest.json to the default starter template.")
-                .setPositiveButton("Reset") { _, _ ->
-                    workspaceManager.resetWorkspace()
-                    reloadApp()
-                    Toast.makeText(this, "Workspace reset to default", Toast.LENGTH_SHORT).show()
-                }
-                .setNegativeButton("Cancel", null)
-                .show()
+            binding.webView.clearCache(true)
+            reloadApp()
+            Toast.makeText(this, "Site refreshed & cache cleared", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -268,8 +269,7 @@ class MainActivity : AppCompatActivity() {
         val activeFileLabel = dialog.findViewById<TextView>(R.id.editor_active_file_label)
         val fileStats = dialog.findViewById<TextView>(R.id.editor_file_stats)
         val codeInput = dialog.findViewById<EditText>(R.id.editor_code_input)
-        val btnResetFile = dialog.findViewById<MaterialButton>(R.id.editor_btn_reset_file)
-        val btnClose = dialog.findViewById<MaterialButton>(R.id.editor_btn_close)
+        val btnHistory = dialog.findViewById<MaterialButton>(R.id.editor_btn_history)
         val btnRun = dialog.findViewById<MaterialButton>(R.id.editor_btn_run)
         val btnNewFile = dialog.findViewById<ImageButton>(R.id.editor_btn_new_file)
         val btnDeleteFile = dialog.findViewById<ImageButton>(R.id.editor_btn_delete_file)
@@ -291,11 +291,15 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Cache unsaved edits per file in-memory
+        // Original on-disk content baseline (to detect unsaved changes)
+        val initialDiskContent = mutableMapOf<String, String>()
         val unsavedEdits = mutableMapOf<String, String>()
         val files = workspaceManager.listFiles().toMutableList()
+
         for (f in files) {
-            unsavedEdits[f.name] = workspaceManager.readFile(f.name)
+            val content = workspaceManager.readFile(f.name)
+            initialDiskContent[f.name] = content
+            unsavedEdits[f.name] = content
         }
 
         var activeFileName = if (unsavedEdits.containsKey("index.html")) "index.html" else (files.firstOrNull()?.name ?: "index.html")
@@ -349,7 +353,6 @@ class MainActivity : AppCompatActivity() {
 
                 tabView.setOnClickListener {
                     if (file.name != activeFileName) {
-                        // Save current code to cache
                         unsavedEdits[activeFileName] = codeInput.text.toString()
                         updateEditorContent(file.name)
                         rebuildTabs()
@@ -358,6 +361,15 @@ class MainActivity : AppCompatActivity() {
 
                 tabsContainer.addView(tabView)
             }
+        }
+
+        fun hasUnsavedChanges(): Boolean {
+            unsavedEdits[activeFileName] = codeInput.text.toString()
+            if (unsavedEdits.size != initialDiskContent.size) return true
+            for ((key, value) in unsavedEdits) {
+                if (initialDiskContent[key] != value) return true
+            }
+            return false
         }
 
         // Live text change listener to update stats and unsaved cache
@@ -371,18 +383,24 @@ class MainActivity : AppCompatActivity() {
             override fun afterTextChanged(s: Editable?) {}
         })
 
-        // Reset Current File
-        btnResetFile.setOnClickListener {
-            val defaultContent = when (activeFileName) {
-                "index.html" -> DefaultWebApp.DEFAULT_INDEX_HTML
-                "style.css" -> DefaultWebApp.DEFAULT_STYLE_CSS
-                "app.js" -> DefaultWebApp.DEFAULT_APP_JS
-                "manifest.json" -> DefaultWebApp.DEFAULT_MANIFEST_JSON
-                else -> ""
+        // Version History Dialog
+        btnHistory.setOnClickListener {
+            unsavedEdits[activeFileName] = codeInput.text.toString()
+            showHistoryDialog {
+                // On snapshot restored, reload editor content
+                files.clear()
+                files.addAll(workspaceManager.listFiles())
+                initialDiskContent.clear()
+                unsavedEdits.clear()
+                for (f in files) {
+                    val content = workspaceManager.readFile(f.name)
+                    initialDiskContent[f.name] = content
+                    unsavedEdits[f.name] = content
+                }
+                updateEditorContent("index.html")
+                rebuildTabs()
+                reloadApp()
             }
-            codeInput.setText(defaultContent)
-            unsavedEdits[activeFileName] = defaultContent
-            Toast.makeText(this, "Reset '$activeFileName'", Toast.LENGTH_SHORT).show()
         }
 
         // New File Creation
@@ -390,11 +408,11 @@ class MainActivity : AppCompatActivity() {
             unsavedEdits[activeFileName] = codeInput.text.toString()
 
             val input = EditText(this).apply {
-                hint = "filename.js / style.css / data.json"
+                hint = "data.json / utils.js / style.css"
                 setSingleLine()
             }
             MaterialAlertDialogBuilder(this)
-                .setTitle("Create New File")
+                .setTitle(R.string.action_new_file)
                 .setView(input)
                 .setPositiveButton("Create") { _, _ ->
                     val newName = input.text.toString().trim()
@@ -418,12 +436,13 @@ class MainActivity : AppCompatActivity() {
         // Delete Custom File
         btnDeleteFile.setOnClickListener {
             MaterialAlertDialogBuilder(this)
-                .setTitle("Delete File?")
+                .setTitle(R.string.action_delete_file)
                 .setMessage("Are you sure you want to delete '$activeFileName'?")
-                .setPositiveButton("Delete") { _, _ ->
+                .setPositiveButton(R.string.discard) { _, _ ->
                     val fileToDelete = activeFileName
                     if (workspaceManager.deleteFile(fileToDelete)) {
                         unsavedEdits.remove(fileToDelete)
+                        initialDiskContent.remove(fileToDelete)
                         files.clear()
                         files.addAll(workspaceManager.listFiles())
                         updateEditorContent("index.html")
@@ -439,7 +458,10 @@ class MainActivity : AppCompatActivity() {
         btnRun.setOnClickListener {
             unsavedEdits[activeFileName] = codeInput.text.toString()
 
-            // Persist all edited files to disk
+            // 1. Capture snapshot of pre-run state in history
+            historyManager.saveSnapshot(workspaceManager, "Run Snapshot")
+
+            // 2. Persist all edited files to disk
             for ((name, content) in unsavedEdits) {
                 workspaceManager.writeFile(name, content)
             }
@@ -449,13 +471,90 @@ class MainActivity : AppCompatActivity() {
             dialog.dismiss()
         }
 
-        btnClose.setOnClickListener {
-            dialog.dismiss()
+        // Handle Back button with unsaved changes confirmation
+        dialog.setOnKeyListener { _, keyCode, event ->
+            if (keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_UP) {
+                if (hasUnsavedChanges()) {
+                    MaterialAlertDialogBuilder(this)
+                        .setTitle(R.string.discard_changes_title)
+                        .setMessage(R.string.discard_changes_msg)
+                        .setPositiveButton(R.string.discard) { _, _ ->
+                            dialog.dismiss()
+                        }
+                        .setNegativeButton(R.string.keep_editing, null)
+                        .show()
+                    true
+                } else {
+                    dialog.dismiss()
+                    true
+                }
+            } else {
+                false
+            }
         }
 
         // Initial setup
         updateEditorContent(activeFileName)
         rebuildTabs()
+
+        dialog.show()
+    }
+
+    /**
+     * Opens version history snapshot dialog allowing user to revert to previous states.
+     */
+    private fun showHistoryDialog(onRestored: () -> Unit) {
+        val dialog = Dialog(this, com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog)
+        dialog.setContentView(R.layout.dialog_version_history)
+        dialog.window?.setLayout(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+
+        val container = dialog.findViewById<LinearLayout>(R.id.history_snapshots_container)
+        val emptyState = dialog.findViewById<TextView>(R.id.history_empty_state)
+        val btnClose = dialog.findViewById<MaterialButton>(R.id.history_dialog_btn_close)
+
+        val snapshots = historyManager.getSnapshots()
+        container.removeAllViews()
+
+        if (snapshots.isEmpty()) {
+            emptyState.visibility = View.VISIBLE
+        } else {
+            emptyState.visibility = View.GONE
+            val inflater = LayoutInflater.from(this)
+
+            for (snap in snapshots) {
+                val itemView = inflater.inflate(R.layout.item_history_snapshot, container, false)
+                val timeView = itemView.findViewById<TextView>(R.id.history_item_time)
+                val detailsView = itemView.findViewById<TextView>(R.id.history_item_details)
+                val btnRestore = itemView.findViewById<MaterialButton>(R.id.history_btn_restore)
+
+                timeView.text = snap.formattedTime
+                detailsView.text = "${snap.fileCount} files • ${snap.label}"
+
+                btnRestore.setOnClickListener {
+                    MaterialAlertDialogBuilder(this)
+                        .setTitle("Revert to Snapshot?")
+                        .setMessage("Revert workspace to state from ${snap.formattedTime}? Current unsaved edits will be replaced.")
+                        .setPositiveButton("Revert") { _, _ ->
+                            if (historyManager.restoreSnapshot(snap.id, workspaceManager)) {
+                                Toast.makeText(this, "Reverted to ${snap.formattedTime}", Toast.LENGTH_SHORT).show()
+                                dialog.dismiss()
+                                onRestored()
+                            }
+                        }
+                        .setNegativeButton("Cancel", null)
+                        .show()
+                }
+
+                container.addView(itemView)
+            }
+        }
+
+        btnClose.setOnClickListener {
+            dialog.dismiss()
+        }
 
         dialog.show()
     }

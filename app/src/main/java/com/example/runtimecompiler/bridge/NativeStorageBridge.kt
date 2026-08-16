@@ -12,7 +12,7 @@ import java.nio.charset.StandardCharsets
 
 /**
  * JavaScript Interface exposed inside WebView as `window.AndroidStorage` and `window.AndroidMemory`.
- * Provides persistent state storage, native file system access (read/write/delete/list),
+ * Provides persistent state storage, unified workspace file system access (read/write/delete/list),
  * and storage telemetry.
  */
 class NativeStorageBridge(
@@ -21,6 +21,13 @@ class NativeStorageBridge(
 ) {
     private val sharedPrefs: SharedPreferences =
         context.getSharedPreferences("runtime_app_state", Context.MODE_PRIVATE)
+
+    private val workspaceDir: File
+        get() {
+            val dir = File(context.filesDir, "workspace")
+            if (!dir.exists()) dir.mkdirs()
+            return dir
+        }
 
     private fun log(message: String) {
         onLogListener?.invoke(message)
@@ -66,12 +73,12 @@ class NativeStorageBridge(
         return true
     }
 
-    // --- Native File System Access ---
+    // --- Unified File System Access (Stored directly in workspace/) ---
 
     private fun getAppFile(fileName: String): File {
-        // Sanitize file name to stay inside app's internal files directory
+        // Sanitize file name to stay inside app's internal workspace directory
         val sanitized = fileName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
-        return File(context.filesDir, sanitized)
+        return File(workspaceDir, sanitized)
     }
 
     @JavascriptInterface
@@ -81,7 +88,7 @@ class NativeStorageBridge(
             FileOutputStream(file).use { output ->
                 output.write(content.toByteArray(StandardCharsets.UTF_8))
             }
-            log("[Storage] Wrote ${content.length} chars to file '${file.name}' (${file.length()} bytes)")
+            log("[Storage] Wrote ${content.length} chars to workspace file '${file.name}' (${file.length()} bytes)")
             true
         } catch (e: Exception) {
             log("[Storage Error] Failed to write file '$fileName': ${e.message}")
@@ -100,7 +107,7 @@ class NativeStorageBridge(
             val content = FileInputStream(file).use { input ->
                 input.bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
             }
-            log("[Storage] Read ${content.length} chars from file '${file.name}'")
+            log("[Storage] Read ${content.length} chars from workspace file '${file.name}'")
             content
         } catch (e: Exception) {
             log("[Storage Error] Failed to read file '$fileName': ${e.message}")
@@ -127,50 +134,6 @@ class NativeStorageBridge(
 
     @JavascriptInterface
     fun listFiles(): String {
-        val files = context.filesDir.listFiles() ?: emptyArray()
-        val jsonArray = JSONArray()
-        for (file in files) {
-            val obj = JSONObject().apply {
-                put("name", file.name)
-                put("size", file.length())
-                put("lastModified", file.lastModified())
-            }
-            jsonArray.put(obj)
-        }
-        return jsonArray.toString()
-    }
-
-    // --- Storage & System Telemetry ---
-
-    @JavascriptInterface
-    fun getStorageStats(): String {
-        val filesDir = context.filesDir
-        val freeSpace = filesDir.freeSpace
-        val totalSpace = filesDir.totalSpace
-        val usableSpace = filesDir.usableSpace
-
-        var appFilesBytes = 0L
-        val files = filesDir.listFiles() ?: emptyArray()
-        for (f in files) {
-            appFilesBytes += f.length()
-        }
-
-        val json = JSONObject().apply {
-            put("freeSpaceBytes", freeSpace)
-            put("totalSpaceBytes", totalSpace)
-            put("usableSpaceBytes", usableSpace)
-            put("appFilesCount", files.size)
-            put("appFilesBytes", appFilesBytes)
-            put("filesDir", filesDir.absolutePath)
-        }
-        return json.toString()
-    }
-
-    // --- Workspace Project Access ---
-
-    @JavascriptInterface
-    fun getWorkspaceFiles(): String {
-        val workspaceDir = File(context.filesDir, "workspace")
         val files = workspaceDir.listFiles() ?: emptyArray()
         val jsonArray = JSONArray()
         for (file in files) {
@@ -186,40 +149,42 @@ class NativeStorageBridge(
         return jsonArray.toString()
     }
 
-    @JavascriptInterface
-    fun readWorkspaceFile(fileName: String): String {
-        val sanitized = fileName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
-        val workspaceDir = File(context.filesDir, "workspace")
-        val file = File(workspaceDir, sanitized)
-        if (!file.exists() || !file.isFile) {
-            log("[Storage] Workspace file '$sanitized' not found.")
-            return ""
-        }
-        return try {
-            FileInputStream(file).use { input ->
-                input.bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
-            }
-        } catch (e: Exception) {
-            log("[Storage Error] Failed to read workspace file '$sanitized': ${e.message}")
-            ""
-        }
-    }
+    // --- Storage & System Telemetry ---
 
     @JavascriptInterface
-    fun writeWorkspaceFile(fileName: String, content: String): Boolean {
-        val sanitized = fileName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
-        val workspaceDir = File(context.filesDir, "workspace")
-        if (!workspaceDir.exists()) workspaceDir.mkdirs()
-        val file = File(workspaceDir, sanitized)
-        return try {
-            FileOutputStream(file).use { output ->
-                output.write(content.toByteArray(StandardCharsets.UTF_8))
+    fun getStorageStats(): String {
+        val filesDir = context.filesDir
+        val freeSpace = filesDir.freeSpace
+        val totalSpace = filesDir.totalSpace
+        val usableSpace = filesDir.usableSpace
+
+        var appFilesBytes = 0L
+        val files = workspaceDir.listFiles() ?: emptyArray()
+        for (f in files) {
+            if (f.isFile) {
+                appFilesBytes += f.length()
             }
-            log("[Storage] Wrote ${content.length} chars to workspace file '$sanitized'")
-            true
-        } catch (e: Exception) {
-            log("[Storage Error] Failed to write workspace file '$sanitized': ${e.message}")
-            false
         }
+
+        val json = JSONObject().apply {
+            put("freeSpaceBytes", freeSpace)
+            put("totalSpaceBytes", totalSpace)
+            put("usableSpaceBytes", usableSpace)
+            put("appFilesCount", files.filter { it.isFile }.size)
+            put("appFilesBytes", appFilesBytes)
+            put("filesDir", workspaceDir.absolutePath)
+        }
+        return json.toString()
     }
+
+    // --- Workspace Project Access Aliases ---
+
+    @JavascriptInterface
+    fun getWorkspaceFiles(): String = listFiles()
+
+    @JavascriptInterface
+    fun readWorkspaceFile(fileName: String): String = readFile(fileName)
+
+    @JavascriptInterface
+    fun writeWorkspaceFile(fileName: String, content: String): Boolean = writeFile(fileName, content)
 }

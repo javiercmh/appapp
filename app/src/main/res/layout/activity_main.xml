@@ -31,13 +31,13 @@
                 android:orientation="horizontal"
                 android:paddingEnd="12dp">
 
-                <!-- Reset Project Button -->
+                <!-- Refresh / Clear Cache Button -->
                 <ImageButton
                     android:id="@+id/btn_reset"
                     android:layout_width="40dp"
                     android:layout_height="40dp"
                     android:background="?attr/selectableItemBackgroundBorderless"
-                    android:contentDescription="@string/action_reset_code"
+                    android:contentDescription="@string/action_refresh"
                     android:src="@drawable/ic_refresh"
                     app:tint="@color/on_surface_muted" />
 

@@ -7,68 +7,79 @@
     android:background="@color/surface"
     android:orientation="vertical">
 
-    <!-- Top Action Bar -->
-    <LinearLayout
-        android:id="@+id/editor_header"
+    <!-- Scrollable Top Action Bar for Narrow Screens -->
+    <HorizontalScrollView
         android:layout_width="match_parent"
         android:layout_height="56dp"
         android:background="@color/surface"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingHorizontal="16dp">
+        android:fillViewport="true"
+        android:scrollbars="none">
 
-        <ImageView
-            android:layout_width="28dp"
-            android:layout_height="28dp"
-            android:contentDescription="@null"
-            android:src="@drawable/ic_app_logo" />
-
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="10dp"
-            android:layout_weight="1"
-            android:text="@string/editor_title"
-            android:textColor="@color/on_surface"
-            android:textSize="16sp"
-            android:textStyle="bold" />
-
-        <!-- Reset Current File -->
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/editor_btn_reset_file"
-            style="@style/Widget.Material3.Button.TextButton"
+        <LinearLayout
+            android:id="@+id/editor_header"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Reset"
-            android:textColor="@color/on_surface_muted"
-            android:textSize="12sp" />
+            android:layout_height="match_parent"
+            android:gravity="center_vertical"
+            android:minWidth="320dp"
+            android:orientation="horizontal"
+            android:paddingHorizontal="16dp">
 
-        <!-- Close / Cancel Button -->
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/editor_btn_close"
-            style="@style/Widget.Material3.Button.TextButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/close"
-            android:textColor="@color/on_surface_muted"
-            android:textSize="12sp" />
+            <ImageView
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_app_logo" />
 
-        <!-- Compile & Run App Button -->
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/editor_btn_run"
-            style="@style/Widget.Material3.Button"
-            android:layout_width="wrap_content"
-            android:layout_height="40dp"
-            android:layout_marginStart="6dp"
-            android:backgroundTint="@color/primary"
-            android:paddingHorizontal="14dp"
-            android:text="@string/action_compile_run"
-            android:textColor="@color/on_primary"
-            android:textSize="13sp"
-            android:textStyle="bold"
-            app:icon="@drawable/ic_play"
-            app:iconSize="16dp" />
-    </LinearLayout>
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_marginEnd="16dp"
+                android:text="@string/editor_title"
+                android:textColor="@color/on_surface"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <!-- Spacer -->
+            <View
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <!-- History Button -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/editor_btn_history"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="wrap_content"
+                android:layout_height="38dp"
+                android:backgroundTint="@color/surface_variant"
+                android:paddingHorizontal="12dp"
+                android:text="@string/action_history"
+                android:textColor="@color/on_surface"
+                android:textSize="12sp"
+                app:icon="@drawable/ic_history"
+                app:iconPadding="4dp"
+                app:iconSize="16dp"
+                app:iconTint="@color/accent_blue" />
+
+            <!-- Compile & Run Button -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/editor_btn_run"
+                style="@style/Widget.Material3.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="38dp"
+                android:layout_marginStart="8dp"
+                android:backgroundTint="@color/primary"
+                android:paddingHorizontal="16dp"
+                android:text="@string/action_compile_run"
+                android:textColor="@color/on_primary"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                app:icon="@drawable/ic_play"
+                app:iconPadding="4dp"
+                app:iconSize="16dp" />
+        </LinearLayout>
+    </HorizontalScrollView>
 
     <!-- Horizontal File Tab Switcher -->
     <LinearLayout
