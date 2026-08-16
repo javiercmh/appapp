@@ -33,7 +33,8 @@ class WorkspaceManager(
     }
 
     /**
-     * Initializes the workspace directory and starter files if not already present.
+     * Initializes the workspace directory and starter files if not already present,
+     * and auto-migrates legacy template files on existing devices.
      */
     fun ensureWorkspaceInitialized() {
         if (!workspaceDir.exists()) {
@@ -44,6 +45,16 @@ class WorkspaceManager(
         if (!indexFile.exists()) {
             resetWorkspace()
         } else {
+            // Auto-migration: check if on-disk app.js contains legacy shadow state fallback
+            val appJsFile = File(workspaceDir, "app.js")
+            if (appJsFile.exists()) {
+                val currentJs = readFile("app.js")
+                if (currentJs.contains("saved_items_state")) {
+                    writeFile("app.js", DefaultWebApp.DEFAULT_APP_JS)
+                    log("[Workspace] Auto-migrated on-device 'app.js' to clean decoupled version.")
+                }
+            }
+
             val logFile = File(workspaceDir, "app.log")
             if (!logFile.exists()) {
                 writeFile("app.log", "[System] App² workspace initialized.\n")
@@ -52,24 +63,37 @@ class WorkspaceManager(
     }
 
     /**
-     * Re-initializes all default workspace template files.
+     * Applies a template file map directly to the workspace directory.
      */
-    fun resetWorkspace(): Boolean {
+    fun applyTemplate(files: Map<String, String>): Boolean {
         return try {
             if (!workspaceDir.exists()) {
                 workspaceDir.mkdirs()
             }
-            writeFile("index.html", DefaultWebApp.DEFAULT_INDEX_HTML)
-            writeFile("style.css", DefaultWebApp.DEFAULT_STYLE_CSS)
-            writeFile("app.js", DefaultWebApp.DEFAULT_APP_JS)
-            writeFile("manifest.json", DefaultWebApp.DEFAULT_MANIFEST_JSON)
-            writeFile("app.log", "[System] App² workspace reset to starter template.\n")
-            log("[Workspace] Workspace reset to default App² starter template.")
+            for ((fileName, content) in files) {
+                writeFile(fileName, content)
+            }
+            val logFile = File(workspaceDir, "app.log")
+            if (!logFile.exists()) {
+                writeFile("app.log", "[System] App² workspace template applied.\n")
+            }
+            log("[Workspace] Successfully applied template with ${files.size} files.")
             true
         } catch (e: Exception) {
-            log("[Workspace Error] Failed to reset workspace: ${e.message}")
+            log("[Workspace Error] Failed to apply template: ${e.message}")
             false
         }
+    }
+
+    /**
+     * Re-initializes all default workspace template files from DefaultWebApp.STARTER_FILES.
+     */
+    fun resetWorkspace(): Boolean {
+        val success = applyTemplate(DefaultWebApp.STARTER_FILES)
+        if (success) {
+            appendToFile("app.log", "[System] App² workspace reset to starter template.\n")
+        }
+        return success
     }
 
     private fun sanitizeFileName(fileName: String): String {
@@ -193,12 +217,12 @@ class WorkspaceManager(
     }
 
     /**
-     * Deletes a file from the workspace. Protects index.html from accidental deletion.
+     * Deletes a file from the workspace. Protects index.html and manifest.json from accidental deletion.
      */
     fun deleteFile(fileName: String): Boolean {
         val sanitized = sanitizeFileName(fileName)
-        if (sanitized == "index.html") {
-            log("[Workspace Warning] Cannot delete root 'index.html'.")
+        if (sanitized == "index.html" || sanitized == "manifest.json") {
+            log("[Workspace Warning] Cannot delete protected core file '$sanitized'.")
             return false
         }
         return try {

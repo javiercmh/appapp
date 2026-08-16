@@ -22,6 +22,13 @@ class NativeStorageBridge(
     private val sharedPrefs: SharedPreferences =
         context.getSharedPreferences("runtime_app_state", Context.MODE_PRIVATE)
 
+    init {
+        // Purge legacy shadow state from earlier versions if present
+        if (sharedPrefs.contains("saved_items_state")) {
+            sharedPrefs.edit().remove("saved_items_state").apply()
+        }
+    }
+
     private val workspaceDir: File
         get() {
             val dir = File(context.filesDir, "workspace")
@@ -116,6 +123,16 @@ class NativeStorageBridge(
     }
 
     @JavascriptInterface
+    fun fileExists(fileName: String): Boolean {
+        return try {
+            val file = getAppFile(fileName)
+            file.exists() && file.isFile
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    @JavascriptInterface
     fun deleteFile(fileName: String): Boolean {
         return try {
             val file = getAppFile(fileName)
@@ -187,4 +204,7 @@ class NativeStorageBridge(
 
     @JavascriptInterface
     fun writeWorkspaceFile(fileName: String, content: String): Boolean = writeFile(fileName, content)
+
+    @JavascriptInterface
+    fun workspaceFileExists(fileName: String): Boolean = fileExists(fileName)
 }

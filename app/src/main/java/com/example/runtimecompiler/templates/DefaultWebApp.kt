@@ -436,21 +436,17 @@ const statBackend = document.getElementById('stat-backend');
 const statDiskSpace = document.getElementById('stat-disk-space');
 const statLastSync = document.getElementById('stat-last-sync');
 
-// Load persistent state from Android file storage on launch
+// Load persistent state directly from Android workspace file on launch
 function loadPersistentState() {
   try {
     let rawData = "";
     
     // 1. Try Native Android Storage Bridge
     if (window.AndroidStorage) {
-      statBackend.textContent = "Android Native Storage (filesDir)";
+      statBackend.textContent = "Android Workspace File";
       rawData = window.AndroidStorage.readFile(STORAGE_FILE);
-      if (!rawData) {
-        // Fallback to key-value state
-        rawData = window.AndroidStorage.loadState("saved_items_state", "");
-      }
     } 
-    // 2. Fallback to Browser localStorage
+    // 2. Fallback to Browser localStorage for standalone browser preview
     else if (window.localStorage) {
       statBackend.textContent = "Browser LocalStorage (Fallback)";
       rawData = localStorage.getItem(STORAGE_FILE) || "";
@@ -458,34 +454,35 @@ function loadPersistentState() {
 
     if (rawData && rawData.trim().length > 0) {
       items = JSON.parse(rawData);
-      console.log("[Storage] Restored " + items.length + " items from " + STORAGE_FILE);
-      storageStatusSpan.textContent = "Restored " + items.length + " items from disk";
+      console.log("[Storage] Loaded " + items.length + " items from " + STORAGE_FILE);
+      storageStatusSpan.textContent = "Loaded " + items.length + " items from disk";
     } else {
-      console.log("[Storage] No existing data in " + STORAGE_FILE + ". Starting fresh.");
-      storageStatusSpan.textContent = "Persistent Storage: Ready";
+      console.log("[Storage] No data in " + STORAGE_FILE + ". Starting with empty list.");
+      items = [];
+      storageStatusSpan.textContent = "Persistent Storage: Ready (Empty)";
     }
   } catch (err) {
-    console.error("[Storage] Error loading saved state:", err);
+    console.error("[Storage] Error loading " + STORAGE_FILE + ":", err);
     items = [];
+    storageStatusSpan.textContent = "Error parsing " + STORAGE_FILE;
   }
 
   updateStorageTelemetry();
   renderList();
 }
 
-// Save current items list to persistent file storage
+// Save current items list directly to persistent workspace file
 function savePersistentState() {
-  const jsonStr = JSON.stringify(items);
+  const jsonStr = JSON.stringify(items, null, 2);
   try {
     if (window.AndroidStorage) {
       window.AndroidStorage.writeFile(STORAGE_FILE, jsonStr);
-      window.AndroidStorage.saveState("saved_items_state", jsonStr);
       console.log("[Storage] Saved " + items.length + " items to " + STORAGE_FILE + " (" + jsonStr.length + " bytes)");
     } else if (window.localStorage) {
       localStorage.setItem(STORAGE_FILE, jsonStr);
     }
   } catch (err) {
-    console.error("[Storage] Failed to save state to disk:", err);
+    console.error("[Storage] Failed to save " + STORAGE_FILE + " to disk:", err);
   }
 
   const now = new Date().toLocaleTimeString();
@@ -603,6 +600,15 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 """
 
+    const val DEFAULT_SAVED_ITEMS_JSON = """[
+  {
+    "id": 1,
+    "text": "Welcome to App²! Try editing saved_items.json in the editor.",
+    "timestamp": "12:00:00 PM"
+  }
+]
+"""
+
     const val DEFAULT_MANIFEST_JSON = """{
   "name": "My App",
   "short_name": "My App",
@@ -613,10 +619,19 @@ window.addEventListener('DOMContentLoaded', () => {
     "index.html",
     "style.css",
     "app.js",
-    "manifest.json"
+    "manifest.json",
+    "saved_items.json"
   ]
 }
 """
+
+    val STARTER_FILES: Map<String, String> = mapOf(
+        "index.html" to DEFAULT_INDEX_HTML,
+        "style.css" to DEFAULT_STYLE_CSS,
+        "app.js" to DEFAULT_APP_JS,
+        "manifest.json" to DEFAULT_MANIFEST_JSON,
+        "saved_items.json" to DEFAULT_SAVED_ITEMS_JSON
+    )
 
     // Backward compatibility helper
     val DEFAULT_HTML: String

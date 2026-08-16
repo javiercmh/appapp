@@ -286,7 +286,15 @@ class MainActivity : AppCompatActivity() {
 
                     var path = url.path ?: "/index.html"
                     if (path.isEmpty() || path == "/") {
-                        path = "/index.html"
+                        val mainFile = try {
+                            val manifestContent = workspaceManager.readFile("manifest.json")
+                            if (manifestContent.isNotBlank()) {
+                                JSONObject(manifestContent).optString("main", "index.html").trim().removePrefix("/")
+                            } else "index.html"
+                        } catch (_: Exception) {
+                            "index.html"
+                        }
+                        path = "/${mainFile.ifBlank { "index.html" }}"
                     }
                     val fileName = path.removePrefix("/")
                     val file = workspaceManager.getFile(fileName)
@@ -529,12 +537,28 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Loads the workspace project (https://app.local/index.html) into the WebView.
+     * Loads the workspace project into the WebView, resolving the entry point from manifest.json.
      */
     fun reloadApp() {
-        appendLog("[Compiler] Loading App² workspace into runtime...")
+        val entryPoint = try {
+            val manifestContent = workspaceManager.readFile("manifest.json")
+            if (manifestContent.isNotBlank()) {
+                val json = JSONObject(manifestContent)
+                val main = json.optString("main", "index.html").trim().removePrefix("/")
+                if (main.isNotBlank() && workspaceManager.getFile(main).exists()) main else "index.html"
+            } else {
+                "index.html"
+            }
+        } catch (_: Exception) {
+            "index.html"
+        }
+
+        appendLog("[Compiler] Loading App² workspace entry '$entryPoint' into runtime...")
+        try {
+            android.webkit.WebStorage.getInstance().deleteAllData()
+        } catch (_: Exception) {}
         binding.webView.clearCache(true)
-        binding.webView.loadUrl("https://app.local/index.html")
+        binding.webView.loadUrl("https://app.local/$entryPoint")
     }
 
     private fun appendLog(message: String) {
@@ -915,9 +939,9 @@ class MainActivity : AppCompatActivity() {
         codeInput.setText(initialContent)
         statsBadge.text = "${initialContent.length} chars"
 
-        // Check if file is a non-core deletable file
-        val coreFiles = setOf("index.html", "style.css", "app.js", "manifest.json", "app.log")
-        val isDeletable = !coreFiles.contains(fileName) && fileName != "icon.png"
+        // Check if file is protected against deletion (only index.html and manifest.json are protected)
+        val protectedFiles = setOf("index.html", "manifest.json")
+        val isDeletable = !protectedFiles.contains(fileName) && fileName != "icon.png"
         btnDelete.visibility = if (isDeletable) View.VISIBLE else View.GONE
 
         btnDelete.setOnClickListener {
@@ -1147,16 +1171,24 @@ class MainActivity : AppCompatActivity() {
                 val detailsView = itemView.findViewById<TextView>(R.id.history_item_details)
                 val btnRestore = itemView.findViewById<MaterialButton>(R.id.history_btn_restore)
 
-                timeView.text = snap.formattedTime
+                val isStarter = snap.id == WorkspaceHistoryManager.STARTER_TEMPLATE_SNAPSHOT_ID
+                timeView.text = if (isStarter) "⭐ ${snap.formattedTime}" else snap.formattedTime
                 detailsView.text = "${snap.fileCount} files • ${snap.label}"
 
                 btnRestore.setOnClickListener {
+                    val title = if (isStarter) "Reset to Starter Template?" else "Revert to Snapshot?"
+                    val message = if (isStarter) {
+                        "Reset workspace to the official latest Starter Template? Current files will be replaced with the clean starter template."
+                    } else {
+                        "Revert workspace to state from ${snap.formattedTime}? Current unsaved edits will be replaced."
+                    }
                     MaterialAlertDialogBuilder(this)
-                        .setTitle("Revert to Snapshot?")
-                        .setMessage("Revert workspace to state from ${snap.formattedTime}? Current unsaved edits will be replaced.")
-                        .setPositiveButton("Revert") { _, _ ->
+                        .setTitle(title)
+                        .setMessage(message)
+                        .setPositiveButton(if (isStarter) "Reset" else "Revert") { _, _ ->
                             if (historyManager.restoreSnapshot(snap.id, workspaceManager)) {
-                                Toast.makeText(this, "Reverted to ${snap.formattedTime}", Toast.LENGTH_SHORT).show()
+                                val toastMsg = if (isStarter) "Reset to Official Starter Template" else "Reverted to ${snap.formattedTime}"
+                                Toast.makeText(this, toastMsg, Toast.LENGTH_SHORT).show()
                                 dialog.dismiss()
                                 onRestored()
                             }
