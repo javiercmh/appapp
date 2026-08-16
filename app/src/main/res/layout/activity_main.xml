@@ -31,11 +31,22 @@
                 android:orientation="horizontal"
                 android:paddingEnd="12dp">
 
+                <!-- Settings Button (to the left of refresh button) -->
+                <ImageButton
+                    android:id="@+id/btn_settings"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/action_settings"
+                    android:src="@drawable/ic_settings"
+                    app:tint="@color/on_surface_muted" />
+
                 <!-- Refresh / Clear Cache Button -->
                 <ImageButton
                     android:id="@+id/btn_reset"
                     android:layout_width="40dp"
                     android:layout_height="40dp"
+                    android:layout_marginStart="2dp"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:contentDescription="@string/action_refresh"
                     android:src="@drawable/ic_refresh"

@@ -27,6 +27,7 @@ import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
+import android.webkit.WebStorage
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.EditText
@@ -53,6 +54,7 @@ import com.example.runtimecompiler.databinding.ActivityMainBinding
 import com.example.runtimecompiler.editor.ImageCropManager
 import com.example.runtimecompiler.editor.SearchHelper
 import com.example.runtimecompiler.editor.SyntaxHighlighter
+import com.example.runtimecompiler.settings.AppSettingsManager
 import com.example.runtimecompiler.workspace.WorkspaceFile
 import com.example.runtimecompiler.workspace.WorkspaceHistoryManager
 import com.example.runtimecompiler.workspace.WorkspaceManager
@@ -85,6 +87,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var storageBridge: NativeStorageBridge
     private lateinit var workspaceManager: WorkspaceManager
     private lateinit var historyManager: WorkspaceHistoryManager
+    private lateinit var settingsManager: AppSettingsManager
 
     private val logBuffer = StringBuilder()
     private val timeFormat = SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault())
@@ -194,6 +197,9 @@ class MainActivity : AppCompatActivity() {
         }
 
         appendLog("[System] App² initialized with Edge-to-Edge & Unified Workspace.")
+
+        // Initialize App Settings Manager
+        settingsManager = AppSettingsManager(this)
 
         // Initialize Workspace History Manager
         historyManager = WorkspaceHistoryManager(this) { msg ->
@@ -336,6 +342,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupListeners() {
+        // App Settings Dialog
+        binding.btnSettings.setOnClickListener {
+            showSettingsDialog()
+        }
+
         // App Editor Hub Dialog
         binding.btnEditCode.setOnClickListener {
             showAppEditorDialog()
@@ -937,6 +948,7 @@ class MainActivity : AppCompatActivity() {
         fileNameTitle.text = fileName
         var initialContent = workspaceManager.readFile(fileName)
         codeInput.setText(initialContent)
+        codeInput.textSize = settingsManager.editorFontSizeSp
         statsBadge.text = "${initialContent.length} chars"
 
         // Check if file is protected against deletion (only index.html and manifest.json are protected)
@@ -1385,6 +1397,161 @@ class MainActivity : AppCompatActivity() {
         }
 
         dialog.show()
+    }
+
+    /**
+     * Opens the centralized App Settings dialog.
+     */
+    private fun showSettingsDialog() {
+        val dialog = Dialog(this)
+        dialog.setContentView(R.layout.dialog_settings)
+        dialog.window?.setLayout(
+            (resources.displayMetrics.widthPixels * 0.94).toInt(),
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        // 1. Version Retention Limit Buttons
+        val btnHist2 = dialog.findViewById<MaterialButton>(R.id.settings_btn_history_2)
+        val btnHist4 = dialog.findViewById<MaterialButton>(R.id.settings_btn_history_4)
+        val btnHist6 = dialog.findViewById<MaterialButton>(R.id.settings_btn_history_6)
+        val btnHist8 = dialog.findViewById<MaterialButton>(R.id.settings_btn_history_8)
+        val btnHist10 = dialog.findViewById<MaterialButton>(R.id.settings_btn_history_10)
+
+        val historyButtons = mapOf(
+            2 to btnHist2,
+            4 to btnHist4,
+            6 to btnHist6,
+            8 to btnHist8,
+            10 to btnHist10
+        )
+
+        fun updateHistoryButtonsUI(selected: Int) {
+            historyButtons.forEach { (count, btn) ->
+                if (btn == null) return@forEach
+                if (count == selected) {
+                    btn.setBackgroundColor(ContextCompat.getColor(this, R.color.primary))
+                    btn.setTextColor(ContextCompat.getColor(this, R.color.on_primary))
+                } else {
+                    btn.setBackgroundColor(ContextCompat.getColor(this, R.color.surface_elevated))
+                    btn.setTextColor(ContextCompat.getColor(this, R.color.on_surface_muted))
+                }
+            }
+        }
+
+        updateHistoryButtonsUI(settingsManager.maxHistorySnapshots)
+
+        historyButtons.forEach { (count, btn) ->
+            btn?.setOnClickListener {
+                settingsManager.maxHistorySnapshots = count
+                historyManager.pruneToMax(count)
+                updateHistoryButtonsUI(count)
+                Toast.makeText(this, "Version history retention set to $count", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        // 2. Editor Font Size Buttons (Vertical Column)
+        val btnFontSmall = dialog.findViewById<MaterialButton>(R.id.settings_btn_font_small)
+        val btnFontNormal = dialog.findViewById<MaterialButton>(R.id.settings_btn_font_normal)
+        val btnFontLarge = dialog.findViewById<MaterialButton>(R.id.settings_btn_font_large)
+
+        val fontButtons = mapOf(
+            AppSettingsManager.FONT_SIZE_SMALL to btnFontSmall,
+            AppSettingsManager.FONT_SIZE_NORMAL to btnFontNormal,
+            AppSettingsManager.FONT_SIZE_LARGE to btnFontLarge
+        )
+
+        fun updateFontButtonsUI(selectedSize: Float) {
+            fontButtons.forEach { (size, btn) ->
+                if (btn == null) return@forEach
+                if (Math.abs(size - selectedSize) < 0.5f) {
+                    btn.setBackgroundColor(ContextCompat.getColor(this, R.color.primary))
+                    btn.setTextColor(ContextCompat.getColor(this, R.color.on_primary))
+                } else {
+                    btn.setBackgroundColor(ContextCompat.getColor(this, R.color.surface_elevated))
+                    btn.setTextColor(ContextCompat.getColor(this, R.color.on_surface_muted))
+                }
+            }
+        }
+
+        updateFontButtonsUI(settingsManager.editorFontSizeSp)
+
+        fontButtons.forEach { (size, btn) ->
+            btn?.setOnClickListener {
+                settingsManager.editorFontSizeSp = size
+                updateFontButtonsUI(size)
+                Toast.makeText(this, "Editor font size updated", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        // 3. Workspace Storage Footprint
+        val tvStorage = dialog.findViewById<TextView>(R.id.settings_tv_storage_footprint)
+        tvStorage?.text = "Workspace: ${settingsManager.getWorkspaceStorageSummary(workspaceManager)}"
+
+        // 4. Clear Cache & Storage Button
+        val btnClearCache = dialog.findViewById<MaterialButton>(R.id.settings_btn_clear_cache)
+        btnClearCache?.setOnClickListener {
+            binding.webView.clearCache(true)
+            binding.webView.clearFormData()
+            WebStorage.getInstance().deleteAllData()
+            workspaceManager.writeFile("app.log", "[System] Logs and cache cleared.\n")
+            logBuffer.clear()
+            reloadApp()
+            tvStorage?.text = "Workspace: ${settingsManager.getWorkspaceStorageSummary(workspaceManager)}"
+            Toast.makeText(this, getString(R.string.settings_clear_cache_success), Toast.LENGTH_SHORT).show()
+        }
+
+        // 5. About App² & WebEngine Version Readout
+        val tvAppVersion = dialog.findViewById<TextView>(R.id.settings_tv_app_version)
+        val tvWebviewVersion = dialog.findViewById<TextView>(R.id.settings_tv_webview_version)
+        tvAppVersion?.text = settingsManager.getAppVersion()
+        tvWebviewVersion?.text = settingsManager.getWebViewEngineVersion()
+
+        // 6. Danger Zone: Factory Reset App²
+        val btnFactoryReset = dialog.findViewById<MaterialButton>(R.id.settings_btn_factory_reset)
+        btnFactoryReset?.setOnClickListener {
+            MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.settings_reset_confirm_title)
+                .setMessage(R.string.settings_reset_confirm_msg)
+                .setNegativeButton(R.string.cancel, null)
+                .setPositiveButton(R.string.settings_reset_confirm_action) { _, _ ->
+                    performFullAppReset()
+                    dialog.dismiss()
+                }
+                .show()
+        }
+
+        // 7. Close Button
+        dialog.findViewById<MaterialButton>(R.id.settings_btn_close)?.setOnClickListener {
+            dialog.dismiss()
+        }
+
+        dialog.show()
+    }
+
+    /**
+     * Performs a complete factory reset of App²:
+     * - Deletes all workspace files and restores clean starter template
+     * - Clears all history snapshots from disk
+     * - Resets all App² preferences to factory defaults
+     * - Wipes WebView cache, WebSQL, and storage
+     */
+    private fun performFullAppReset() {
+        workspaceManager.factoryResetWorkspace()
+        historyManager.clearAllHistory()
+        settingsManager.resetSettingsToDefaults()
+
+        binding.webView.clearCache(true)
+        binding.webView.clearFormData()
+        binding.webView.clearHistory()
+        WebStorage.getInstance().deleteAllData()
+
+        logBuffer.clear()
+        appendLog("[System] App² factory reset completed. Starter template restored.")
+
+        reloadApp()
+
+        Toast.makeText(this, getString(R.string.settings_reset_success), Toast.LENGTH_LONG).show()
     }
 
     override fun onDestroy() {

@@ -75,4 +75,30 @@
     <string name="crop_image_title">Crop App Icon</string>
     <string name="crop_image_apply">Crop &amp; Set Icon</string>
     <string name="delete_file_confirm">Delete \'%1$s\'? This action cannot be undone.</string>
+
+    <!-- App Settings -->
+    <string name="action_settings">Settings</string>
+    <string name="settings_title">App² Settings</string>
+    <string name="settings_section_history">Version History Retention</string>
+    <string name="settings_section_history_desc">Maximum snapshot versions preserved (starter template is always retained).</string>
+    <string name="settings_section_workspace">Workspace &amp; Storage</string>
+    <string name="settings_clear_cache">Clear Cache &amp; Storage</string>
+    <string name="settings_clear_cache_desc">Purge WebView cache, cookies, local storage, and app logs without deleting project code files.</string>
+    <string name="settings_clear_cache_success">Runtime cache and storage cleared</string>
+    <string name="settings_section_editor">Editor Font Size</string>
+    <string name="settings_section_editor_desc">Adjust code editor text size.</string>
+    <string name="settings_font_small">Small (11sp)</string>
+    <string name="settings_font_normal">Normal (13sp)</string>
+    <string name="settings_font_large">Large (16sp)</string>
+    <string name="settings_section_about">About App²</string>
+    <string name="settings_app_version_label">App Version</string>
+    <string name="settings_webview_version_label">WebView Version</string>
+    <string name="settings_storage_label">Workspace Footprint</string>
+    <string name="settings_section_danger">Danger Zone</string>
+    <string name="settings_reset_app">Factory Reset App²</string>
+    <string name="settings_reset_app_desc">Wipe all workspace files, delete all version history snapshots, clear cache, and restore default settings.</string>
+    <string name="settings_reset_confirm_title">Factory Reset App²?</string>
+    <string name="settings_reset_confirm_msg">This will permanently delete all workspace files, custom assets, version history snapshots, and runtime storage, and restore default settings. This action cannot be undone.</string>
+    <string name="settings_reset_confirm_action">Reset Everything</string>
+    <string name="settings_reset_success">App² has been reset to factory defaults</string>
 </resources>

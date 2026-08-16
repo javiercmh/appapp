@@ -96,6 +96,25 @@ class WorkspaceManager(
         return success
     }
 
+    /**
+     * Performs a complete factory reset of the workspace directory, removing all files and re-initializing starter files.
+     */
+    fun factoryResetWorkspace(): Boolean {
+        return try {
+            val files = workspaceDir.listFiles() ?: emptyArray()
+            for (file in files) {
+                file.delete()
+            }
+            val success = applyTemplate(DefaultWebApp.STARTER_FILES)
+            writeFile("app.log", "[System] App² factory reset completed.\n")
+            log("[Workspace] Factory reset workspace successfully.")
+            success
+        } catch (e: Exception) {
+            log("[Workspace Error] Failed to factory reset workspace: ${e.message}")
+            false
+        }
+    }
+
     private fun sanitizeFileName(fileName: String): String {
         return fileName.trim().replace(Regex("[^a-zA-Z0-9._-]"), "_")
     }

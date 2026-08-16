@@ -1,6 +1,7 @@
 package com.example.runtimecompiler.workspace
 
 import android.content.Context
+import com.example.runtimecompiler.settings.AppSettingsManager
 import com.example.runtimecompiler.templates.DefaultWebApp
 import org.json.JSONArray
 import org.json.JSONObject
@@ -22,7 +23,7 @@ data class WorkspaceSnapshot(
 )
 
 /**
- * Manages version snapshots of the workspace (up to 5 FIFO user versions + permanent starter template).
+ * Manages version snapshots of the workspace (FIFO user versions + permanent starter template).
  * Allows users to inspect and revert to previous states of their app.
  */
 class WorkspaceHistoryManager(
@@ -31,6 +32,7 @@ class WorkspaceHistoryManager(
 ) {
     private val historyFile = File(context.filesDir, "workspace_history.json")
     private val timeFormat = SimpleDateFormat("HH:mm:ss (MMM d)", Locale.getDefault())
+    private val settingsManager = AppSettingsManager(context)
 
     companion object {
         const val STARTER_TEMPLATE_SNAPSHOT_ID = "starter_template_snapshot"
@@ -41,7 +43,7 @@ class WorkspaceHistoryManager(
     }
 
     /**
-     * Loads dynamic user snapshots from disk (up to 5 versions).
+     * Loads dynamic user snapshots from disk.
      */
     @Synchronized
     fun loadUserSnapshots(): List<WorkspaceSnapshot> {
@@ -91,7 +93,7 @@ class WorkspaceHistoryManager(
     }
 
     /**
-     * Returns all available snapshots: up to 5 user run snapshots + permanent Starter Template snapshot.
+     * Returns all available snapshots: user snapshots up to max retention limit + permanent Starter Template snapshot.
      */
     @Synchronized
     fun getSnapshots(): List<WorkspaceSnapshot> {
@@ -110,7 +112,7 @@ class WorkspaceHistoryManager(
     }
 
     /**
-     * Captures current workspace files and stores a new snapshot (max 5 user snapshots).
+     * Captures current workspace files and stores a new snapshot (respecting configured max retention limit).
      */
     @Synchronized
     fun saveSnapshot(workspaceManager: WorkspaceManager, label: String = "Run Snapshot"): WorkspaceSnapshot? {
@@ -148,37 +150,76 @@ class WorkspaceHistoryManager(
             // Insert at the beginning (newest first)
             existing.add(0, snapshot)
 
-            // Keep maximum 5 snapshots
-            while (existing.size > 5) {
+            // Keep up to max configured snapshots
+            val maxSnapshots = settingsManager.maxHistorySnapshots
+            while (existing.size > maxSnapshots) {
                 existing.removeAt(existing.lastIndex)
             }
 
             // Save to disk
-            val jsonArray = JSONArray()
-            for (s in existing) {
-                val obj = JSONObject().apply {
-                    put("id", s.id)
-                    put("timestamp", s.timestamp)
-                    put("formattedTime", s.formattedTime)
-                    put("label", s.label)
-                    val fObj = JSONObject()
-                    for ((name, content) in s.files) {
-                        fObj.put(name, content)
-                    }
-                    put("files", fObj)
-                }
-                jsonArray.put(obj)
-            }
+            writeSnapshotsToDisk(existing)
 
-            FileOutputStream(historyFile).use { out ->
-                out.write(jsonArray.toString().toByteArray(StandardCharsets.UTF_8))
-            }
-
-            log("[History] Saved version snapshot '$formattedTime' (${existing.size}/5 stored)")
+            log("[History] Saved version snapshot '$formattedTime' (${existing.size}/$maxSnapshots stored)")
             snapshot
         } catch (e: Exception) {
             log("[History Error] Failed to save snapshot: ${e.message}")
             null
+        }
+    }
+
+    /**
+     * Prunes stored snapshots when the user lowers the retention setting.
+     */
+    @Synchronized
+    fun pruneToMax(maxCount: Int) {
+        val existing = loadUserSnapshots().toMutableList()
+        if (existing.size > maxCount) {
+            while (existing.size > maxCount) {
+                existing.removeAt(existing.lastIndex)
+            }
+            writeSnapshotsToDisk(existing)
+            log("[History] Pruned snapshots to max limit $maxCount")
+        }
+    }
+
+    /**
+     * Wipes all user snapshots from disk.
+     */
+    @Synchronized
+    fun clearAllHistory(): Boolean {
+        return try {
+            if (historyFile.exists()) {
+                val deleted = historyFile.delete()
+                log("[History] Cleared all history snapshots: $deleted")
+                deleted
+            } else {
+                true
+            }
+        } catch (e: Exception) {
+            log("[History Error] Failed to clear history: ${e.message}")
+            false
+        }
+    }
+
+    private fun writeSnapshotsToDisk(snapshots: List<WorkspaceSnapshot>) {
+        val jsonArray = JSONArray()
+        for (s in snapshots) {
+            val obj = JSONObject().apply {
+                put("id", s.id)
+                put("timestamp", s.timestamp)
+                put("formattedTime", s.formattedTime)
+                put("label", s.label)
+                val fObj = JSONObject()
+                for ((name, content) in s.files) {
+                    fObj.put(name, content)
+                }
+                put("files", fObj)
+            }
+            jsonArray.put(obj)
+        }
+
+        FileOutputStream(historyFile).use { out ->
+            out.write(jsonArray.toString().toByteArray(StandardCharsets.UTF_8))
         }
     }
 
