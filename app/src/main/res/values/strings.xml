@@ -1,0 +1,13 @@
+<resources>
+    <string name="app_name">Runtime Web Compiler</string>
+    <string name="title_live_preview">Runtime App</string>
+    <string name="action_edit_code">Edit Code</string>
+    <string name="action_compile_run">Compile &amp; Run</string>
+    <string name="action_view_logs">Console Logs</string>
+    <string name="action_reset_code">Reset to Default</string>
+    <string name="memory_status_label">Native RAM Bridge</string>
+    <string name="editor_title">Runtime Code Editor</string>
+    <string name="logs_title">Runtime Console &amp; Memory Logs</string>
+    <string name="clear_logs">Clear Logs</string>
+    <string name="close">Close</string>
+</resources>
