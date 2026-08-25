@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Working Hours</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- ==================== TODAY PANE ==================== -->
+  <section id="pane-today" class="pane active">
+    <header class="topbar">
+      <h1>Working Hours</h1>
+      <span id="today-date-chip" class="chip">--.--.----</span>
+    </header>
+
+    <!-- 1. Today's Logging Card -->
+    <div class="card" id="card-today">
+      <div class="row-between">
+        <h2 id="today-card-title">Today's Hours</h2>
+        <span id="today-status-chip" class="badge">Not logged</span>
+      </div>
+
+      <!-- Start & End Times (24h steppers, 15 min increments) -->
+      <div class="time-grid">
+        <div class="time-col">
+          <label for="input-today-start" class="field-label">Start</label>
+          <div class="stepper" id="stepper-today-start" data-mode="clock" data-step="15">
+            <button type="button" class="stepper-btn" data-delta="-1" aria-label="Start 15 minutes earlier">−</button>
+            <input class="stepper-value" type="text" inputmode="numeric" maxlength="5" id="input-today-start" value="08:30">
+            <button type="button" class="stepper-btn" data-delta="1" aria-label="Start 15 minutes later">+</button>
+          </div>
+          <button type="button" id="btn-today-now-start" class="link-btn link-btn-right">Now</button>
+        </div>
+        <div class="time-col">
+          <label for="input-today-end" class="field-label">End</label>
+          <div class="stepper" id="stepper-today-end" data-mode="clock" data-step="15">
+            <button type="button" class="stepper-btn" data-delta="-1" aria-label="End 15 minutes earlier">−</button>
+            <input class="stepper-value" type="text" inputmode="numeric" maxlength="5" id="input-today-end" value="17:00">
+            <button type="button" class="stepper-btn" data-delta="1" aria-label="End 15 minutes later">+</button>
+          </div>
+          <button type="button" id="btn-today-now-end" class="link-btn link-btn-right">Now</button>
+        </div>
+      </div>
+
+      <!-- Total Break Time with 0, 30, 60, 90 presets -->
+      <div class="break-section">
+        <label for="input-today-break" class="field-label">Break</label>
+        <div class="stepper" id="stepper-today-break" data-mode="duration" data-step="15">
+          <button type="button" class="stepper-btn" data-delta="-1" aria-label="Break 15 minutes shorter">−</button>
+          <input class="stepper-value" type="text" inputmode="numeric" maxlength="5" id="input-today-break" value="00:30">
+          <button type="button" class="stepper-btn" data-delta="1" aria-label="Break 15 minutes longer">+</button>
+        </div>
+      </div>
+
+      <!-- Net Preview Box -->
+      <div class="net-preview-box">
+        <div class="row-between">
+          <span class="muted">Net work time</span>
+          <span class="net-line">
+            <span id="today-overnight" class="overnight-hint" hidden>+1 day</span>
+            <span id="today-net-time" class="net-value">08:00</span>
+          </span>
+        </div>
+        <div class="row-between">
+          <span class="muted">Overtime vs target</span>
+          <span id="today-overtime" class="overtime-value positive">+00:00</span>
+        </div>
+      </div>
+
+      <!-- Autosave status (tap to force an immediate write) -->
+      <button type="button" id="today-save-status" class="save-status">Not logged yet</button>
+    </div>
+
+    <!-- 2. Open the shared editor for any other day -->
+    <button type="button" id="btn-open-prev-day" class="btn btn-ghost btn-block">
+      <span>📅</span> Log another day
+    </button>
+  </section>
+
+  <!-- ==================== DASHBOARD PANE ==================== -->
+  <section id="pane-dashboard" class="pane">
+    <header class="topbar">
+      <h1>Dashboard</h1>
+      <span id="entry-count-chip" class="chip">0 days</span>
+    </header>
+
+    <!-- 1. Overhours Total Balance & Carryover Input -->
+    <div class="card overhours-card">
+      <div class="row-between">
+        <span class="overhours-label">Total Overhours Balance</span>
+        <span id="overhours-badge" class="badge positive">+00:00</span>
+      </div>
+      <div class="overhours-main">
+        <span id="overhours-total" class="overhours-value">+00:00</span>
+        <span class="overhours-unit">HH:MM</span>
+      </div>
+      <div class="overhours-breakdown">
+        <span id="overhours-initial-label" class="muted">Carryover: +00:00</span>
+        <span class="muted">·</span>
+        <span id="overhours-logged-label" class="muted">Logged: +00:00</span>
+      </div>
+
+      <div class="form-group carryover-group">
+        <label for="dashboard-carryover" class="field-label">Current Carryover Overhours Balance</label>
+        <input type="text" id="dashboard-carryover" class="field" placeholder="+00:00 or -02:15">
+        <p class="muted-small">Initial balance from your previous spreadsheet. Updates total calculation immediately.</p>
+      </div>
+    </div>
+
+    <!-- 2. Recent Shifts & Spreadsheet Transfer Feed -->
+    <div class="card">
+      <div class="row-between">
+        <h2>Logged Shifts</h2>
+        <span id="pending-chip" class="chip chip-pending" hidden>0 pending</span>
+      </div>
+      <div class="row-between feed-tools">
+        <span class="muted-small">Tap a row to edit · check off what's in Excel</span>
+        <button type="button" id="btn-mark-all" class="link-btn" hidden>Mark all transferred</button>
+      </div>
+
+      <div id="entries-feed" class="entries-feed">
+        <!-- Rendered dynamically by ui.js -->
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== SETTINGS PANE ==================== -->
+  <section id="pane-settings" class="pane">
+    <header class="topbar">
+      <h1>Settings</h1>
+    </header>
+
+    <!-- Target Work Schedule -->
+    <div class="card">
+      <h2>Work Target Schedule</h2>
+      <div class="form-group">
+        <label for="setting-target-time" class="field-label">Daily target work time</label>
+        <div class="stepper" id="stepper-setting-target" data-mode="duration" data-step="15">
+          <button type="button" class="stepper-btn" data-delta="-1" aria-label="Target 15 minutes shorter">−</button>
+          <input class="stepper-value" type="text" inputmode="numeric" maxlength="5" id="setting-target-time" value="08:00">
+          <button type="button" class="stepper-btn" data-delta="1" aria-label="Target 15 minutes longer">+</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Default Daily Times -->
+    <div class="card">
+      <h2>Default Daily Times</h2>
+      <div class="form-group">
+        <label for="setting-start-time" class="field-label">Default start</label>
+        <div class="stepper" id="stepper-setting-start" data-mode="clock" data-step="15">
+          <button type="button" class="stepper-btn" data-delta="-1" aria-label="Default start 15 minutes earlier">−</button>
+          <input class="stepper-value" type="text" inputmode="numeric" maxlength="5" id="setting-start-time" value="08:30">
+          <button type="button" class="stepper-btn" data-delta="1" aria-label="Default start 15 minutes later">+</button>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="setting-end-time" class="field-label">Default end</label>
+        <div class="stepper" id="stepper-setting-end" data-mode="clock" data-step="15">
+          <button type="button" class="stepper-btn" data-delta="-1" aria-label="Default end 15 minutes earlier">−</button>
+          <input class="stepper-value" type="text" inputmode="numeric" maxlength="5" id="setting-end-time" value="17:00">
+          <button type="button" class="stepper-btn" data-delta="1" aria-label="Default end 15 minutes later">+</button>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="setting-break-time" class="field-label">Default break</label>
+        <div class="stepper" id="stepper-setting-break" data-mode="duration" data-step="15">
+          <button type="button" class="stepper-btn" data-delta="-1" aria-label="Default break 15 minutes shorter">−</button>
+          <input class="stepper-value" type="text" inputmode="numeric" maxlength="5" id="setting-break-time" value="00:30">
+          <button type="button" class="stepper-btn" data-delta="1" aria-label="Default break 15 minutes longer">+</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- End-of-Day Reminder -->
+    <div class="card">
+      <h2>End-of-Day Reminder</h2>
+
+      <div class="perm-row" id="reminder-perm-row">
+        <span class="perm-dot" aria-hidden="true"></span>
+        <div class="perm-text">
+          <span class="perm-label" id="reminder-perm-label">Notifications allowed</span>
+          <span class="muted-small" id="reminder-perm-detail" hidden></span>
+        </div>
+        <button type="button" id="btn-reminder-perm" class="btn btn-ghost btn-mini" hidden>Allow</button>
+      </div>
+      <button type="button" id="btn-reminder-perm-settings" class="link-btn link-btn-right" hidden>Open Android settings</button>
+
+      <label class="switch-row" for="setting-reminder-enabled">
+        <span class="field-label">Notify me before my end time</span>
+        <input type="checkbox" id="setting-reminder-enabled" class="switch">
+      </label>
+
+      <div class="form-group" id="reminder-lead-group">
+        <label for="setting-reminder-lead" class="field-label">How long before</label>
+        <div class="stepper" id="stepper-reminder-lead" data-mode="duration" data-step="5">
+          <button type="button" class="stepper-btn" data-delta="-1" aria-label="Remind 5 minutes later">−</button>
+          <input class="stepper-value" type="text" inputmode="numeric" maxlength="5" id="setting-reminder-lead" value="00:15">
+          <button type="button" class="stepper-btn" data-delta="1" aria-label="Remind 5 minutes earlier">+</button>
+        </div>
+      </div>
+      <p id="reminder-hint" class="muted-small"></p>
+    </div>
+
+    <!-- Appearance: theme mode + accent -->
+    <div class="card">
+      <h2>Appearance</h2>
+      <div class="form-group">
+        <span class="field-label">Theme</span>
+        <div id="theme-segmented" class="segmented" role="radiogroup" aria-label="Theme">
+          <button type="button" class="segment" data-theme="auto" role="radio" aria-checked="true">Auto</button>
+          <button type="button" class="segment" data-theme="light" role="radio" aria-checked="false">Light</button>
+          <button type="button" class="segment" data-theme="dark" role="radio" aria-checked="false">Dark</button>
+        </div>
+        <p class="muted-small">Auto follows your system setting.</p>
+      </div>
+
+      <div class="form-group">
+        <span class="field-label">Accent color</span>
+        <div id="swatches" class="swatches"></div>
+      </div>
+    </div>
+
+    <!-- Danger Zone: Delete All Entries -->
+    <div class="card card-danger">
+      <h2>Danger Zone</h2>
+      <p class="muted">Permanently delete all logged shifts. This will reset the logged overtime to zero.</p>
+      <button type="button" id="btn-delete-all" class="btn btn-danger btn-block">🗑️ Delete All Entries</button>
+    </div>
+  </section>
+
+  <!-- ==================== SHIFT EDITOR SHEET ==================== -->
+  <dialog id="sheet-editor" class="sheet" aria-label="Edit shift">
+    <div class="sheet-inner">
+      <div class="sheet-handle" aria-hidden="true"></div>
+
+      <div class="row-between">
+        <h2 id="sheet-title">Edit day</h2>
+        <button type="button" id="btn-sheet-close" class="link-btn">✕ Close</button>
+      </div>
+
+      <div class="form-group">
+        <div class="row-between">
+          <label for="input-sheet-date" class="field-label">Date</label>
+          <span id="sheet-date-display" class="muted-small"></span>
+        </div>
+        <input type="date" id="input-sheet-date" class="field date-field">
+      </div>
+
+      <div class="time-grid">
+        <div class="time-col">
+          <label for="input-sheet-start" class="field-label">Start</label>
+          <div class="stepper" id="stepper-sheet-start" data-mode="clock" data-step="15">
+            <button type="button" class="stepper-btn" data-delta="-1" aria-label="Start 15 minutes earlier">−</button>
+            <input class="stepper-value" type="text" inputmode="numeric" maxlength="5" id="input-sheet-start" value="08:30">
+            <button type="button" class="stepper-btn" data-delta="1" aria-label="Start 15 minutes later">+</button>
+          </div>
+          <button type="button" id="btn-sheet-now-start" class="link-btn link-btn-right">Now</button>
+        </div>
+        <div class="time-col">
+          <label for="input-sheet-end" class="field-label">End</label>
+          <div class="stepper" id="stepper-sheet-end" data-mode="clock" data-step="15">
+            <button type="button" class="stepper-btn" data-delta="-1" aria-label="End 15 minutes earlier">−</button>
+            <input class="stepper-value" type="text" inputmode="numeric" maxlength="5" id="input-sheet-end" value="17:00">
+            <button type="button" class="stepper-btn" data-delta="1" aria-label="End 15 minutes later">+</button>
+          </div>
+          <button type="button" id="btn-sheet-now-end" class="link-btn link-btn-right">Now</button>
+        </div>
+      </div>
+
+      <div class="break-section">
+        <label for="input-sheet-break" class="field-label">Break</label>
+        <div class="stepper" id="stepper-sheet-break" data-mode="duration" data-step="15">
+          <button type="button" class="stepper-btn" data-delta="-1" aria-label="Break 15 minutes shorter">−</button>
+          <input class="stepper-value" type="text" inputmode="numeric" maxlength="5" id="input-sheet-break" value="00:30">
+          <button type="button" class="stepper-btn" data-delta="1" aria-label="Break 15 minutes longer">+</button>
+        </div>
+      </div>
+
+      <div class="net-preview-box">
+        <div class="row-between">
+          <span class="muted">Net work time</span>
+          <span class="net-line">
+            <span id="sheet-overnight" class="overnight-hint" hidden>+1 day</span>
+            <span id="sheet-net-time" class="net-value">08:00</span>
+          </span>
+        </div>
+        <div class="row-between">
+          <span class="muted">Overtime vs target</span>
+          <span id="sheet-overtime" class="overtime-value positive">+00:00</span>
+        </div>
+      </div>
+
+      <button type="button" id="sheet-save-status" class="save-status">Not logged yet</button>
+
+      <div class="row">
+        <button type="button" id="btn-sheet-delete" class="btn btn-danger">🗑️ Delete</button>
+        <button type="button" id="btn-sheet-done" class="btn btn-primary">Done</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- ==================== TOAST & NAVIGATION ==================== -->
+  <div id="toast" class="toast" hidden>
+    <span id="toast-text"></span>
+    <button type="button" id="toast-action" class="toast-action" hidden>Undo</button>
+  </div>
+
+  <nav class="tabbar">
+    <button type="button" class="tab active" data-pane="today"><span>⏱️</span>Today</button>
+    <button type="button" class="tab" data-pane="dashboard"><span>📊</span>Dashboard</button>
+    <button type="button" class="tab" data-pane="settings"><span>⚙️</span>Settings</button>
+  </nav>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
