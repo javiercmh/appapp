@@ -14,3 +14,8 @@ build/
 .externalNativeBuild
 .cxx
 local.properties
+
+# Example app local dev state (regenerated on run, machine-specific)
+examples/**/.dev_preferences.json
+examples/**/app.log
+examples/**/.claude/
