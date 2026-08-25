@@ -1,0 +1,11 @@
+{
+  "defaultStartTime": "09:00",
+  "defaultEndTime": "18:00",
+  "defaultBreakTime": "01:00",
+  "dailyTargetTime": "08:00",
+  "initialOvertime": "+00:00",
+  "themeAccent": "#3b82f6",
+  "theme": "auto",
+  "reminderEnabled": true,
+  "reminderLeadMinutes": 15
+}
