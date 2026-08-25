@@ -1,6 +1,5 @@
 [versions]
-agp = "8.13.2"
-kotlin = "2.0.21"
+agp = "9.3.2"
 coreKtx = "1.15.0"
 appcompat = "1.7.0"
 material = "1.12.0"
@@ -18,4 +17,3 @@ kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
