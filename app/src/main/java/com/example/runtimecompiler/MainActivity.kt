@@ -361,7 +361,6 @@ class MainActivity : AppCompatActivity() {
         // Enable JavaScript and modern web capabilities
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
-        settings.databaseEnabled = true
         settings.allowFileAccess = true
         settings.allowContentAccess = true
         settings.loadWithOverviewMode = true
@@ -1791,7 +1790,7 @@ class MainActivity : AppCompatActivity() {
      * - Deletes all workspace files and restores clean starter template
      * - Clears all history snapshots from disk
      * - Resets all App² preferences to factory defaults
-     * - Wipes WebView cache, WebSQL, and storage
+     * - Wipes WebView cache, form data, history, and web storage
      */
     private fun performFullAppReset() {
         workspaceManager.factoryResetWorkspace()
