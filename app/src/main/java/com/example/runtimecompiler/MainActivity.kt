@@ -3,8 +3,6 @@ package com.example.runtimecompiler
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Dialog
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -48,6 +46,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.content.pm.ShortcutInfoCompat
@@ -212,13 +211,22 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // Android refuses to show the runtime prompt again once it has been denied, so after a denial
+    // the only way forward is the system notification settings screen.
+    private var notificationPromptRefused = false
+
+    // Set while the App Settings dialog is open so its permission row can re-render.
+    private var onNotificationPermissionChanged: (() -> Unit)? = null
+
     private val requestNotificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
             if (isGranted) {
                 appendLog("[Permissions] Notification permission granted.")
             } else {
+                notificationPromptRefused = true
                 appendLog("[Permissions] Notification permission denied.")
             }
+            onNotificationPermissionChanged?.invoke()
             // The bridge's requestNotificationPermission() returns immediately because the native
             // prompt is async, so tell the web app the real outcome instead of making it poll.
             if (::binding.isInitialized) {
@@ -237,20 +245,21 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                NativeStorageBridge.CHANNEL_ID,
-                NativeStorageBridge.CHANNEL_NAME,
-                NotificationManager.IMPORTANCE_DEFAULT
-            ).apply {
-                description = "Notifications posted from App² runtime web applications"
-                enableVibration(true)
-            }
-            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            notificationManager.createNotificationChannel(channel)
-        }
+    // Shared with ScheduledNotificationReceiver, which may run in a cold process.
+    private fun createNotificationChannel() = NativeStorageBridge.ensureNotificationChannel(this)
+
+    override fun onResume() {
+        super.onResume()
+        // Catches a permission flipped in the system settings screen we sent the user to.
+        onNotificationPermissionChanged?.invoke()
     }
+
+    private fun notificationsAllowed(): Boolean =
+        NotificationManagerCompat.from(this).areNotificationsEnabled()
+
+    /** False on API 26-32 (no runtime prompt exists) and after the user has refused it once. */
+    private fun canPromptForNotifications(): Boolean =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !notificationPromptRefused
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // Enable Edge-to-Edge display for notches, display cutouts, and status/navigation bars
@@ -884,7 +893,7 @@ class MainActivity : AppCompatActivity() {
             val sortedFiles = node.files.sortedWith { a, b ->
                 val aName = a.name.substringAfterLast('/')
                 val bName = b.name.substringAfterLast('/')
-                val priority = listOf("index.html", "manifest.json", "AGENTS.md")
+                val priority = listOf("index.html", "manifest.json", "AGENTS.md", "PACKAGING.md", "dev_server.py")
                 val aIdx = priority.indexOf(aName)
                 val bIdx = priority.indexOf(bName)
                 if (aIdx != -1 && bIdx != -1) aIdx.compareTo(bIdx)
@@ -1720,13 +1729,42 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, getString(R.string.settings_clear_cache_success), Toast.LENGTH_SHORT).show()
         }
 
-        // 5. About App² & WebEngine Version Readout
+        // 5. Notification Permission
+        val tvNotifications = dialog.findViewById<TextView>(R.id.settings_tv_notification_status)
+        val btnNotifications = dialog.findViewById<MaterialButton>(R.id.settings_btn_notification_permission)
+
+        val refreshNotificationRow = {
+            val allowed = notificationsAllowed()
+            tvNotifications?.text = getString(
+                if (allowed) R.string.settings_notifications_allowed else R.string.settings_notifications_blocked
+            )
+            tvNotifications?.setTextColor(
+                ContextCompat.getColor(this, if (allowed) R.color.accent_green else R.color.accent_red)
+            )
+            btnNotifications?.text = getString(
+                if (!allowed && canPromptForNotifications()) R.string.settings_notifications_allow
+                else R.string.settings_notifications_open
+            )
+        }
+        refreshNotificationRow()
+        onNotificationPermissionChanged = refreshNotificationRow
+        dialog.setOnDismissListener { onNotificationPermissionChanged = null }
+
+        btnNotifications?.setOnClickListener {
+            if (!notificationsAllowed() && canPromptForNotifications()) {
+                promptNotificationPermission()
+            } else {
+                storageBridge.openNotificationSettings()
+            }
+        }
+
+        // 6. About App² & WebEngine Version Readout
         val tvAppVersion = dialog.findViewById<TextView>(R.id.settings_tv_app_version)
         val tvWebviewVersion = dialog.findViewById<TextView>(R.id.settings_tv_webview_version)
         tvAppVersion?.text = settingsManager.getAppVersion()
         tvWebviewVersion?.text = settingsManager.getWebViewEngineVersion()
 
-        // 6. Danger Zone: Factory Reset App²
+        // 7. Danger Zone: Factory Reset App²
         val btnFactoryReset = dialog.findViewById<MaterialButton>(R.id.settings_btn_factory_reset)
         btnFactoryReset?.setOnClickListener {
             MaterialAlertDialogBuilder(this)
@@ -1740,7 +1778,7 @@ class MainActivity : AppCompatActivity() {
                 .show()
         }
 
-        // 7. Close Button
+        // 8. Close Button
         dialog.findViewById<MaterialButton>(R.id.settings_btn_close)?.setOnClickListener {
             dialog.dismiss()
         }

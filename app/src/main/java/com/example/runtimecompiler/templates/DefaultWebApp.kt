@@ -20,7 +20,10 @@ object DefaultWebApp {
         "js/ui.js",
         "manifest.json",
         "AGENTS.md",
-        "data/entries.json"
+        "PACKAGING.md",
+        "dev_server.py",
+        "data/entries.json",
+        "data/settings.json"
     )
 
     private val fileCache = mutableMapOf<String, String>()

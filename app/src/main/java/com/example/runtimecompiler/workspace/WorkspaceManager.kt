@@ -125,7 +125,7 @@ class WorkspaceManager(
         if (!workspaceDir.exists()) return emptyList()
         val coreNames = setOf(
             "index.html", "css/style.css", "js/app.js", "js/bridge.js", "js/store.js", "js/ui.js",
-            "manifest.json", "AGENTS.md", "data/entries.json", "app.log"
+            "manifest.json", "AGENTS.md", "PACKAGING.md", "dev_server.py", "data/entries.json", "data/settings.json", "app.log"
         )
 
         return workspaceDir.walkTopDown()

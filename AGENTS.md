@@ -18,7 +18,9 @@ This document provides architectural context, coding standards, and operational 
 | `com.example.runtimecompiler.workspace.WorkspaceManager` | Manages the unified multi-file project workspace stored in internal storage (`filesDir/workspace/`). Handles file reading, writing, creation, deletion, template initialization, and MIME type resolution. |
 | `com.example.runtimecompiler.workspace.WorkspaceHistoryManager` | Manages up to 5 full version snapshots (FIFO) of the workspace in `filesDir/workspace_history.json` with timestamps, enabling one-tap rollback. |
 | `com.example.runtimecompiler.workspace.WorkspacePackageManager` | Handles selective ZIP export/packaging, Android Sharesheet integration, direct stream export, and secure ZIP extraction with Zip-Slip defense and auto-backup snapshots. |
-| `com.example.runtimecompiler.bridge.NativeStorageBridge` | Main `@JavascriptInterface` exposed to the web runtime as `window.AndroidStorage`, `window.AndroidMemory`, and `window.AndroidNotification`. Manages persistent key-value state, unified file I/O directly in `workspace/`, and native system notifications. |
+| `com.example.runtimecompiler.bridge.NativeStorageBridge` | Main `@JavascriptInterface` exposed to the web runtime as `window.AndroidStorage`, `window.AndroidMemory`, and `window.AndroidNotification`. Manages persistent key-value state, unified file I/O directly in `workspace/`, native system notifications, and `AlarmManager`-backed scheduled notifications. |
+| `com.example.runtimecompiler.bridge.ScheduledNotificationReceiver` | Posts a notification armed earlier via `scheduleNotification`. Runs even when the app process is cold, so it re-creates the notification channel itself. |
+| `com.example.runtimecompiler.bridge.AlarmBootReceiver` | Re-arms persisted scheduled notifications after `BOOT_COMPLETED` / `MY_PACKAGE_REPLACED`, which clear pending alarms. |
 | `com.example.runtimecompiler.templates.DefaultWebApp` | Loads the starter template files dynamically from standalone assets (`app/src/main/assets/starter_template/`). |
 
 ---
@@ -30,7 +32,9 @@ All project code and runtime app files live together in the unified internal sto
 filesDir/workspace/
 ├── index.html       # Primary HTML entrypoint & UI layout
 ├── manifest.json    # App metadata & identity configuration
-├── AGENTS.md        # Platform contract for AI agents editing the web app
+├── AGENTS.md        # App-specific feature and business logic description
+├── PACKAGING.md     # Platform contract & packaging documentation for AI agents
+├── dev_server.py    # Local development server for testing on a computer
 ├── css/
 │   └── style.css    # Stylesheet with safe-area variables
 ├── js/
@@ -39,18 +43,24 @@ filesDir/workspace/
 │   ├── store.js     # Persistence: data files, photos, preferences
 │   └── ui.js        # DOM rendering & interactions
 ├── data/
-│   └── entries.json # User data store
+│   ├── entries.json # User data store (e.g. shifts/notes)
+│   └── settings.json# User configuration & defaults
 ├── icon.png         # Custom app icon asset (if configured)
 ├── app.log          # Runtime console, error & bridge logs
 └── [custom files]   # Created at runtime (e.g. nested assets, photo_*.jpg)
 ```
 
-The starter template ships **its own `AGENTS.md`** into the workspace, documenting the runtime from
-the web app's point of view (bridge API, platform limits, house rules). It is a separate document
-from this one — **when the JavaScript bridge changes, update both.**
+The starter template ships its own `AGENTS.md` (describing the app itself) and `PACKAGING.md` (documenting the runtime from the web app's point of view: bridge API, platform limits, packaging rules). **When the JavaScript bridge changes, update them accordingly.**
+
+### File-Based Persistence Standard (JSON in `data/`)
+All application data, domain entities, and user settings **must be stored in plain files inside the `data/` folder** (such as `data/entries.json` and `data/settings.json`). Do not rely on opaque host `SharedPreferences` (`saveState`/`loadState`) for domain configuration. File-based storage guarantees that:
+- Data and settings are directly inspectable and editable inside the App Editor Hub (`</>`).
+- Data is bundled into ZIP archives when using the Import/Export feature or Android Sharesheet.
+- Data is versioned and safely rolled back during workspace snapshot restores.
+- Data works seamlessly with the standalone local `dev_server.py`.
 
 ### Asset Interception
-The `WebView` loads `https://app.local/index.html`. Requests to `https://app.local/*` (e.g. `<link rel="stylesheet" href="style.css">`, `<script src="app.js"></script>`, or JSON/image assets) are intercepted in `WebViewClient.shouldInterceptRequest` and served directly from `filesDir/workspace/` with auto-resolved MIME types.
+The `WebView` loads `https://app.local/index.html`. Requests to `https://app.local` (e.g. `<link rel="stylesheet" href="style.css">`, `<script src="app.js"></script>`, or JSON/image assets) are intercepted in `WebViewClient.shouldInterceptRequest` and served directly from `filesDir/workspace/` with auto-resolved MIME types.
 
 ---
 
@@ -111,7 +121,20 @@ When adding new bridge methods for the runtime web app:
 `clearAllState`), file I/O (`writeFile` / `readFile` / `fileExists` / `deleteFile` / `listFiles`),
 **binary file I/O (`writeFileBase64` / `readFileBase64`)**, telemetry (`getStorageStats`), and
 notifications (`showNotification` / `showNotificationWithId` / `cancelNotification` /
-`hasNotificationPermission` / `requestNotificationPermission`).
+`hasNotificationPermission` / `requestNotificationPermission` / `openNotificationSettings`), and **scheduled notifications
+(`scheduleNotification` / `cancelScheduledNotification` / `canScheduleExactNotifications`)**.
+
+`openNotificationSettings()` opens this app's notification screen (falling back to the app details
+page). It is the only route left for a user on API 26-32, where no runtime prompt exists, or one who
+has already refused the prompt — Android then silently declines to show it again. App²'s own Settings
+dialog exposes the same thing in its **Notifications** card.
+
+Scheduled notifications are backed by `AlarmManager`, so they fire with the app closed.
+`ScheduledNotificationReceiver` posts them (it re-creates the notification channel, since the alarm
+can wake a cold process) and `AlarmBootReceiver` re-arms the persisted list after a reboot or app
+update. `SCHEDULE_EXACT_ALARM` is only declared up to API 32; on API 33+ the runtime deliberately
+falls back to inexact `setAndAllowWhileIdle` alarms rather than requesting the Play-restricted
+`USE_EXACT_ALARM`, so a scheduled notification may drift by a few minutes while the device dozes.
 
 `WebChromeClient.onShowFileChooser` is implemented in `MainActivity`, so `<input type="file">` works
 inside the runtime web app. Pair it with `writeFileBase64` to persist a picked image as a real
@@ -155,6 +178,8 @@ binary file that the `app.local` interceptor can then serve via `<img src="...">
      JavaScript **must** pass both arguments.
    - `readFile` returns `""` for both "missing" and "empty" — pair with `fileExists`.
    - `showNotificationWithId` takes an `Int`; `Date.now()` overflows it. Prefer `showNotification`.
+   - `scheduleNotification` takes the trigger time as a **`String`** of epoch milliseconds — a JS
+     number arrives as a double and loses the value. Its `id` is an `Int`, same overflow caveat.
    - **Do not maintain legacy code unless explicitly stated otherwise.** Refactor cleanly and delete dead code rather than keeping migration shims.
 9. **Kotlin Block Comments Nest — `/*` and `*/` Inside a Comment Will Break the Build**:
    - **Kotlin block comments nest**, unlike Java, C, or JavaScript. The lexer tracks depth, so a
