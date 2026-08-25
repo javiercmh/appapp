@@ -85,6 +85,13 @@
     <string name="settings_clear_cache">Clear Cache &amp; Storage</string>
     <string name="settings_clear_cache_desc">Purge WebView cache, cookies, local storage, and app logs without deleting project code files.</string>
     <string name="settings_clear_cache_success">Runtime cache and storage cleared</string>
+
+    <string name="settings_section_notifications">Notifications</string>
+    <string name="settings_section_notifications_desc">Runtime web apps post notifications through the bridge, including reminders scheduled for a later time. Nothing is delivered while notifications are turned off for App².</string>
+    <string name="settings_notifications_allowed">Allowed</string>
+    <string name="settings_notifications_blocked">Not allowed</string>
+    <string name="settings_notifications_allow">Allow Notifications</string>
+    <string name="settings_notifications_open">Open Notification Settings</string>
     <string name="settings_section_editor">Editor Font Size</string>
     <string name="settings_section_editor_desc">Adjust code editor text size.</string>
     <string name="settings_font_small">Small (11sp)</string>

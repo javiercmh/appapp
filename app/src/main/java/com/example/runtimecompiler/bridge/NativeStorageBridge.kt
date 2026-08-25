@@ -1,9 +1,15 @@
 package com.example.runtimecompiler.bridge
 
+import android.app.AlarmManager
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import android.util.Base64
 import android.webkit.JavascriptInterface
 import androidx.core.app.NotificationCompat
@@ -311,6 +317,33 @@ class NativeStorageBridge(
         }
     }
 
+    /**
+     * Opens this app's notification settings screen. The only way back for a user who denied the
+     * runtime prompt twice (Android then refuses to show it again) or who is on API 26-32, where
+     * there is no runtime prompt at all but notifications can still be switched off.
+     */
+    @JavascriptInterface
+    fun openNotificationSettings(): Boolean {
+        val screens = listOf(
+            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName),
+            Intent(
+                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                Uri.fromParts("package", context.packageName, null)
+            )
+        )
+        screens.forEach { intent ->
+            try {
+                context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                return true
+            } catch (_: Exception) {
+                // Try the next screen.
+            }
+        }
+        log("[Permissions Error] Could not open notification settings.")
+        return false
+    }
+
     @JavascriptInterface
     fun showNotification(title: String, message: String): Boolean {
         val notificationId = (System.currentTimeMillis() % 100000).toInt()
@@ -359,6 +392,41 @@ class NativeStorageBridge(
         }
     }
 
+    /**
+     * Schedules a notification to be posted at [triggerAtMillis] (epoch milliseconds, passed as a
+     * string because JS numbers cross the bridge as doubles). Re-using an [id] replaces the
+     * previously scheduled alarm, which is what makes rescheduling idempotent for the caller.
+     * Fires even when the app is closed; survives reboot via the persisted alarm list.
+     */
+    @JavascriptInterface
+    fun scheduleNotification(id: Int, triggerAtMillis: String, title: String, message: String): Boolean {
+        val at = triggerAtMillis.toDoubleOrNull()?.toLong()
+        if (at == null || at <= System.currentTimeMillis()) {
+            log("[Notification Warning] Ignored schedule #$id: trigger time is missing or in the past.")
+            return false
+        }
+        val scheduled = scheduleAlarm(context, id, at, title, message)
+        log(
+            if (scheduled) "[Notification] Scheduled #$id for $at: '$title'"
+            else "[Notification Error] Could not schedule #$id"
+        )
+        return scheduled
+    }
+
+    @JavascriptInterface
+    fun cancelScheduledNotification(id: Int): Boolean {
+        cancelAlarm(context, id)
+        log("[Notification] Cancelled scheduled notification #$id")
+        return true
+    }
+
+    /**
+     * False when the system will only grant inexact alarms, so a web app can warn that a
+     * time-critical reminder may drift by a few minutes.
+     */
+    @JavascriptInterface
+    fun canScheduleExactNotifications(): Boolean = canScheduleExact(context)
+
     @JavascriptInterface
     fun cancelNotification(id: Int): Boolean {
         return try {
@@ -374,6 +442,123 @@ class NativeStorageBridge(
     companion object {
         const val CHANNEL_ID = "appapp_notifications"
         const val CHANNEL_NAME = "App² Notifications"
+        private const val ALARM_PREFS = "runtime_scheduled_alarms"
+
+        /**
+         * Creates the notification channel. Safe to call repeatedly, and callable from a
+         * broadcast receiver running in a process where MainActivity never started.
+         */
+        fun ensureNotificationChannel(context: Context) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                CHANNEL_NAME,
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "Notifications posted from App² runtime web applications"
+                enableVibration(true)
+            }
+            val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.createNotificationChannel(channel)
+        }
+
+        fun canScheduleExact(context: Context): Boolean {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            return alarmManager.canScheduleExactAlarms()
+        }
+
+        /** Arms the alarm and records it so it can be restored after a reboot. */
+        fun scheduleAlarm(
+            context: Context,
+            id: Int,
+            triggerAtMillis: Long,
+            title: String,
+            message: String
+        ): Boolean {
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            val pendingIntent = alarmPendingIntent(
+                context, id, title, message,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            ) ?: return false
+
+            return try {
+                // Inexact alarms still fire while the device is dozing, just within a window.
+                if (canScheduleExact(context)) {
+                    alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
+                } else {
+                    alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
+                }
+                persistAlarm(context, id, triggerAtMillis, title, message)
+                true
+            } catch (e: SecurityException) {
+                try {
+                    alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
+                    persistAlarm(context, id, triggerAtMillis, title, message)
+                    true
+                } catch (e2: Exception) {
+                    false
+                }
+            } catch (e: Exception) {
+                false
+            }
+        }
+
+        fun cancelAlarm(context: Context, id: Int) {
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            alarmPendingIntent(context, id, "", "", PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE)
+                ?.let { alarmManager.cancel(it) }
+            forgetPersistedAlarm(context, id)
+        }
+
+        /** Re-arms every still-future alarm; called after boot and after app replacement. */
+        fun reschedulePersistedAlarms(context: Context) {
+            val prefs = context.getSharedPreferences(ALARM_PREFS, Context.MODE_PRIVATE)
+            val stored = JSONObject(prefs.getString(ALARM_PREFS, "{}") ?: "{}")
+            val now = System.currentTimeMillis()
+            stored.keys().asSequence().toList().forEach { key ->
+                val entry = stored.optJSONObject(key) ?: return@forEach
+                val at = entry.optLong("at")
+                if (at > now) {
+                    scheduleAlarm(context, key.toIntOrNull() ?: return@forEach, at, entry.optString("title"), entry.optString("message"))
+                } else {
+                    stored.remove(key)
+                }
+            }
+            prefs.edit().putString(ALARM_PREFS, stored.toString()).apply()
+        }
+
+        fun forgetPersistedAlarm(context: Context, id: Int) {
+            val prefs = context.getSharedPreferences(ALARM_PREFS, Context.MODE_PRIVATE)
+            val stored = JSONObject(prefs.getString(ALARM_PREFS, "{}") ?: "{}")
+            stored.remove(id.toString())
+            prefs.edit().putString(ALARM_PREFS, stored.toString()).apply()
+        }
+
+        private fun persistAlarm(context: Context, id: Int, at: Long, title: String, message: String) {
+            val prefs = context.getSharedPreferences(ALARM_PREFS, Context.MODE_PRIVATE)
+            val stored = JSONObject(prefs.getString(ALARM_PREFS, "{}") ?: "{}")
+            stored.put(
+                id.toString(),
+                JSONObject().put("at", at).put("title", title).put("message", message)
+            )
+            prefs.edit().putString(ALARM_PREFS, stored.toString()).apply()
+        }
+
+        private fun alarmPendingIntent(
+            context: Context,
+            id: Int,
+            title: String,
+            message: String,
+            flags: Int
+        ): PendingIntent? {
+            val intent = Intent(context, ScheduledNotificationReceiver::class.java).apply {
+                putExtra(ScheduledNotificationReceiver.EXTRA_ID, id)
+                putExtra(ScheduledNotificationReceiver.EXTRA_TITLE, title)
+                putExtra(ScheduledNotificationReceiver.EXTRA_MESSAGE, message)
+            }
+            return PendingIntent.getBroadcast(context, id, intent, flags)
+        }
 
         /**
          * Caps for the binary bridge. A @JavascriptInterface call blocks the calling JS thread and

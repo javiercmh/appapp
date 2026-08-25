@@ -96,8 +96,18 @@ from elsewhere.**
 | :--- | :--- |
 | `hasNotificationPermission()` | `Boolean` |
 | `requestNotificationPermission()` | `Boolean` — see gotcha below |
+| `openNotificationSettings()` | `Boolean` — opens the OS notification screen for this app |
 | `showNotification(title, message)` | `Boolean` |
 | `cancelNotification(id)` | `Boolean` |
+| `scheduleNotification(id, triggerAtMillis, title, message)` | `Boolean` — fires even if the app is closed |
+| `cancelScheduledNotification(id)` | `Boolean` |
+| `canScheduleExactNotifications()` | `Boolean` |
+
+`triggerAtMillis` is epoch milliseconds **as a string** (`String(Date.now() + 60000)`) — JS numbers
+cross the bridge as doubles and would lose the value. Re-using an `id` replaces that alarm, so
+rescheduling is idempotent. Pending alarms survive reboot. When
+`canScheduleExactNotifications()` is `false` the OS batches the alarm, so it may fire a few
+minutes late.
 
 ---
 
