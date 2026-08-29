@@ -96,6 +96,10 @@ The `WebView` loads `https://app.local/index.html`. Requests to `https://app.loc
 4. **Android UI Framework**:
    - Material Design 3 components.
    - **ViewBinding** enabled (`buildFeatures { viewBinding = true }`).
+5. **Version Control**:
+   - Commit only when asked, and commit to the **current** branch — `main` included.
+   - Do **not** create a branch for the work unless the request explicitly asks for one.
+   - Keep commits focused: split unrelated fixes into separate commits rather than one omnibus change.
 
 ---
 
