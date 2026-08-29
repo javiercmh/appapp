@@ -118,10 +118,20 @@ export function flushSave() {
   if (fn) fn();
 }
 
-function setSaveStatus(el, text, saved = false) {
-  if (!el) return;
-  el.textContent = text;
-  el.classList.toggle('saved', saved);
+// Today's save state lives in the header chip — a checkmark, no timestamp.
+const TODAY_STATUS = {
+  none: { text: 'Not logged', className: 'badge', label: 'Not logged' },
+  pending: { text: '\u2022', className: 'badge', label: 'Saving' },
+  saved: { text: '\u2713', className: 'badge positive', label: 'Saved' }
+};
+
+function setTodayStatus(state) {
+  const chip = $('today-status-chip');
+  if (!chip) return;
+  const { text, className, label } = TODAY_STATUS[state] || TODAY_STATUS.none;
+  chip.textContent = text;
+  chip.className = className;
+  chip.setAttribute('aria-label', label);
 }
 
 // --- Today's Shift Editor ---
@@ -134,37 +144,33 @@ export function initTodayEditor() {
   if (dateChip) dateChip.textContent = formatGermanDate(todayDate, true);
 
   const existing = store.findEntryByDate(todayDate);
-  const statusChip = $('today-status-chip');
 
   fields.todayStart?.set(existing?.startTime || store.settings.defaultStartTime || '08:30');
   fields.todayEnd?.set(existing?.endTime || store.settings.defaultEndTime || '17:00');
   fields.todayBreak?.set(existing?.breakTime || store.settings.defaultBreakTime || '00:30');
 
-  if (statusChip) {
-    statusChip.textContent = existing ? 'Logged' : 'Not logged';
-    statusChip.className = existing ? 'badge positive' : 'badge';
-  }
-
   todayDirty = !!existing;
-  setSaveStatus($('today-save-status'), existing ? 'Saved' : 'Not logged yet — change any value to log', !!existing);
+  setTodayStatus(existing ? 'saved' : 'none');
 
   updateTodayPreview();
 }
 
 export function updateTodayPreview() {
   renderPreview({
+    date: getTodayIso(),
     start: fields.todayStart?.get() || '00:00',
     end: fields.todayEnd?.get() || '00:00',
     brk: fields.todayBreak?.get() || '00:00',
     netEl: $('today-net-time'),
     overtimeEl: $('today-overtime'),
-    overnightEl: $('today-overnight')
+    overnightEl: $('today-overnight'),
+    hintEl: $('today-nonworking-hint')
   });
 }
 
-function renderPreview({ start, end, brk, netEl, overtimeEl, overnightEl }) {
+function renderPreview({ date, start, end, brk, netEl, overtimeEl, overnightEl, hintEl }) {
   const netMins = store.calcNetMinutes(start, end, brk);
-  const targetMins = store.timeToMinutes(store.settings.dailyTargetTime || '08:00');
+  const targetMins = store.dayTargetMinutes(date, store.settings.dailyTargetTime);
   const diffMins = netMins - targetMins;
 
   if (netEl) netEl.textContent = store.minutesToTime(netMins);
@@ -173,6 +179,7 @@ function renderPreview({ start, end, brk, netEl, overtimeEl, overnightEl }) {
     overtimeEl.className = `overtime-value ${diffMins >= 0 ? 'positive' : 'negative'}`;
   }
   if (overnightEl) overnightEl.hidden = !store.isOvernight(start, end);
+  if (hintEl) hintEl.hidden = store.isWorkingDay(date);
 }
 
 function saveTodayNow() {
@@ -184,12 +191,7 @@ function saveTodayNow() {
     breakTime: fields.todayBreak?.get()
   });
 
-  const statusChip = $('today-status-chip');
-  if (statusChip) {
-    statusChip.textContent = 'Logged';
-    statusChip.className = 'badge positive';
-  }
-  setSaveStatus($('today-save-status'), `Saved ${formatCurrentTime()}`, true);
+  setTodayStatus('saved');
   syncReminder();
 }
 
@@ -198,13 +200,14 @@ function saveTodayNow() {
 function onTodayEdit() {
   todayDirty = true;
   updateTodayPreview();
-  setSaveStatus($('today-save-status'), 'Saving…', false);
+  setTodayStatus('pending');
   scheduleSave(saveTodayNow);
 }
 
 // --- Shift Editor Sheet (any day) ---
 
 let sheetDate = null;
+let sheetDirty = false;
 
 function sheetEntry() {
   return sheetDate ? store.findEntryByDate(sheetDate) : null;
@@ -245,19 +248,30 @@ function loadSheetDate(dateStr) {
   const deleteBtn = $('btn-sheet-delete');
   if (deleteBtn) deleteBtn.hidden = !existing;
 
-  setSaveStatus($('sheet-save-status'), existing ? 'Saved' : 'Not logged yet — change any value to log', !!existing);
+  setSheetDirty(false);
   updateSheetPreview();
 }
 
 export function updateSheetPreview() {
   renderPreview({
+    date: sheetDate,
     start: fields.sheetStart?.get() || '00:00',
     end: fields.sheetEnd?.get() || '00:00',
     brk: fields.sheetBreak?.get() || '00:00',
     netEl: $('sheet-net-time'),
     overtimeEl: $('sheet-overtime'),
-    overnightEl: $('sheet-overnight')
+    overnightEl: $('sheet-overnight'),
+    hintEl: $('sheet-nonworking-hint')
   });
+}
+
+// The sheet has no status text: the Save button is the only state indicator.
+function setSheetDirty(dirty) {
+  sheetDirty = dirty;
+  const saveBtn = $('btn-sheet-save');
+  if (!saveBtn) return;
+  saveBtn.classList.toggle('btn-primary', dirty);
+  saveBtn.classList.toggle('btn-ghost', !dirty);
 }
 
 function saveSheetNow() {
@@ -274,28 +288,31 @@ function saveSheetNow() {
   const title = $('sheet-title');
   if (title) title.textContent = 'Edit day';
 
-  setSaveStatus($('sheet-save-status'), `Saved ${formatCurrentTime()}`, true);
+  setSheetDirty(false);
   syncReminder();
   renderDashboard();
   if (sheetDate === getTodayIso()) refreshTodayFromStore();
 }
 
+// Any other day is saved by hand — editing only marks the sheet dirty.
 function onSheetEdit() {
   updateSheetPreview();
-  setSaveStatus($('sheet-save-status'), 'Saving…', false);
-  scheduleSave(saveSheetNow);
+  setSheetDirty(true);
 }
 
-function closeSheet() {
-  flushSave();
+function closeSheet({ force = false } = {}) {
+  if (sheetDirty && !force && !window.confirm('Discard unsaved changes?')) return false;
+
   const sheet = $('sheet-editor');
   if (sheet) {
     if (typeof sheet.close === 'function' && sheet.open) sheet.close();
     else sheet.removeAttribute('open');
   }
   sheetDate = null;
+  setSheetDirty(false);
   renderDashboard();
   refreshTodayFromStore();
+  return true;
 }
 
 // Re-sync the Today card without wiping an in-progress edit elsewhere.
@@ -322,15 +339,6 @@ export function setupTrackerEvents() {
     onTodayEdit();
   });
 
-  // Tapping the status line forces an immediate write.
-  $('today-save-status')?.addEventListener('click', () => {
-    flushSave();
-    if (!todayDirty) {
-      saveTodayNow();
-      todayDirty = true;
-    }
-  });
-
   // --- Sheet editor ---
   fields.sheetStart = attachTimeField($('stepper-sheet-start'), { mode: 'clock', onCommit: onSheetEdit });
   fields.sheetEnd = attachTimeField($('stepper-sheet-end'), { mode: 'clock', onCommit: onSheetEdit });
@@ -347,7 +355,10 @@ export function setupTrackerEvents() {
 
   const sheetDateInput = $('input-sheet-date');
   sheetDateInput?.addEventListener('change', () => {
-    flushSave();
+    if (sheetDirty && !window.confirm('Discard unsaved changes?')) {
+      sheetDateInput.value = sheetDate;
+      return;
+    }
     const today = getTodayIso();
     if (sheetDateInput.value > today) {
       sheetDateInput.value = today;
@@ -356,14 +367,13 @@ export function setupTrackerEvents() {
     loadSheetDate(sheetDateInput.value || getYesterdayIso());
   });
 
-  $('sheet-save-status')?.addEventListener('click', () => {
-    flushSave();
+  $('btn-sheet-save')?.addEventListener('click', () => {
     saveSheetNow();
+    closeSheet({ force: true });
   });
 
   $('btn-open-prev-day')?.addEventListener('click', () => openSheet(getYesterdayIso()));
-  $('btn-sheet-close')?.addEventListener('click', closeSheet);
-  $('btn-sheet-done')?.addEventListener('click', closeSheet);
+  $('btn-sheet-close')?.addEventListener('click', () => closeSheet());
 
   // Backdrop tap and the Android back button both close via `cancel`/`close`.
   const sheet = $('sheet-editor');
@@ -375,12 +385,13 @@ export function setupTrackerEvents() {
     if (e.target === sheet) closeSheet();
   });
 
+
   $('btn-sheet-delete')?.addEventListener('click', () => {
     const entry = sheetEntry();
     if (!entry) return;
     const removed = store.removeEntry(entry.id);
     syncReminder();
-    closeSheet();
+    closeSheet({ force: true });
     if (removed) {
       toast('Entry deleted', 'Undo', () => {
         store.restoreEntry(removed.entry, removed.index);
@@ -661,6 +672,7 @@ export function initSettings() {
   fields.settingEnd?.set(store.settings.defaultEndTime || '17:00');
   fields.settingBreak?.set(store.settings.defaultBreakTime || '00:30');
 
+  renderWorkingDays();
   renderThemeSegments();
   applyAccent(store.settings.themeAccent || '#3b82f6');
 }
@@ -673,6 +685,7 @@ export function setupSettingsEvents() {
       updateTodayPreview();
       updateSheetPreview();
       renderOverhours();
+      renderShiftFeed();
       toast('Target updated');
     }
   });
@@ -739,6 +752,22 @@ export function setupSettingsEvents() {
   addEventListener('focus', recheckPermission);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') recheckPermission();
+  });
+
+  document.querySelectorAll('#working-days .segment').forEach((btn) => {
+    btn.onclick = () => {
+      const day = parseInt(btn.dataset.day, 10);
+      const current = store.normalizeWorkingDays(store.settings.workingDays);
+      const next = current.includes(day) ? current.filter((d) => d !== day) : [...current, day];
+      store.updateSetting('workingDays', store.normalizeWorkingDays(next));
+      renderWorkingDays();
+      // Every badge can flip sign, so the feed has to be rebuilt, not just the total.
+      updateTodayPreview();
+      updateSheetPreview();
+      renderOverhours();
+      renderShiftFeed();
+      toast('Working days updated');
+    };
   });
 
   document.querySelectorAll('#theme-segmented .segment').forEach((seg) => {
@@ -827,6 +856,15 @@ function renderThemeSegments() {
     const isActive = seg.dataset.theme === current;
     seg.classList.toggle('active', isActive);
     seg.setAttribute('aria-checked', String(isActive));
+  });
+}
+
+export function renderWorkingDays() {
+  const days = store.normalizeWorkingDays(store.settings.workingDays);
+  document.querySelectorAll('#working-days .segment').forEach((btn) => {
+    const isWorking = days.includes(parseInt(btn.dataset.day, 10));
+    btn.classList.toggle('active', isWorking);
+    btn.setAttribute('aria-pressed', String(isWorking));
   });
 }
 

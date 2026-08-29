@@ -120,7 +120,14 @@ code {
 .pane.active { display: flex; animation: fade 0.2s ease-out; }
 @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 
-.topbar { display: flex; align-items: center; justify-content: space-between; padding: 4px 2px 0; gap: 10px; }
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: max(16px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 12px max(12px, env(safe-area-inset-left));
+  gap: 10px;
+}
+
 .topbar h1 { font-size: 1.45rem; font-weight: 800; letter-spacing: -0.02em; }
 
 /* --- Cards --- */
@@ -296,7 +303,7 @@ code {
 }
 /* Two steppers side by side get less room — keep HH:MM off the buttons. */
 .time-grid .stepper { grid-template-columns: 44px minmax(0, 1fr) 44px; }
-.time-grid .stepper-value { font-size: 1.05rem; letter-spacing: 0; }
+.time-grid .stepper-value { font-size: 0.9rem; letter-spacing: 0; }
 .time-col {
   display: flex;
   flex-direction: column;
@@ -344,22 +351,6 @@ code {
 }
 
 /* --- Autosave status line (replaces the Save button) --- */
-.save-status {
-  width: 100%;
-  min-height: 40px;
-  background: none;
-  border: 1px dashed var(--border);
-  border-radius: 10px;
-  color: var(--muted);
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 8px;
-  transition: color 0.18s, border-color 0.18s;
-}
-.save-status.saved { color: var(--success); border-color: color-mix(in srgb, var(--success) 35%, transparent); }
-.save-status:active { border-style: solid; }
-
 /* --- Buttons --- */
 .row { display: flex; gap: 8px; }
 .row-between { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
@@ -666,6 +657,22 @@ code {
   color: var(--text);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
 }
+
+/* --- Day picker (working days) --- */
+.daypicker {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  background: var(--tint);
+  border-radius: 12px;
+  padding: 4px;
+}
+.segment.day {
+  font-size: 0.78rem;
+  padding: 0;
+}
+
+.nonworking-hint { margin-top: 6px; }
 
 /* --- Swatches --- */
 .swatches { display: flex; flex-wrap: wrap; gap: 10px; }

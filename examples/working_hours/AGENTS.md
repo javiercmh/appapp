@@ -10,12 +10,14 @@ This document describes the **Working Hours** application — its features, user
 
 **Working Hours** (stylized as **Hours**) is an offline-first, mobile-optimized working hours, break, and overhours tracking application designed for fast daily timekeeping:
 - **Today Tracker**: Dedicated interface to log today's working hours with 24h ±15 min time steppers for start, end, and break — no date picker clutter and no preset chips.
-- **Autosave**: There is no Save button. Every committed change is written to disk immediately (debounced 250 ms, flushed on blur, tab switch, sheet close, and app backgrounding). A tappable status line reports `Saved HH:MM`. An entry is only created after a real user interaction, never on load.
+- **Autosave (today only)**: The Today card has no Save button — every committed change is written to disk immediately (debounced 250 ms, flushed on blur, tab switch, and app backgrounding), and the header chip reports the state as `✓` (saved), `•` (write pending), or `Not logged`. No timestamps, no status line. An entry is only created after a real user interaction, never on load.
+- **Manual Save for Any Other Day**: The Shift Editor Sheet never autosaves, not even when it shows today. Edits live in the sheet until **Save**, which writes and closes; the button is ghost-styled while nothing has changed and turns primary once it does. Closing with unsaved edits (`✕ Close`, backdrop, Esc, Android back) asks `Discard unsaved changes?` first. Merely opening the sheet writes nothing.
 - **Shift Editor Sheet**: A single bottom sheet (`<dialog id="sheet-editor">`) edits any day — opened from `Log another day` or by tapping a Dashboard row. It carries the date picker (`max = today`), the steppers, the net preview, and per-entry delete with Undo.
 - **Dashboard & Spreadsheet Transfer**: Central dashboard displaying total overhours balance, an editable carryover overhours field, and a shift feed where **pending** (not yet in Excel) rows are the visually salient ones and transferred rows recede. Includes a pending counter and `Mark all transferred` with Undo.
 - **End-of-Day Reminder**: A notification a configurable number of minutes before today's end time (default 15, in 5 min steps). Only scheduled when today is actually logged. The card leads with a permission row (status dot, `Allow`, and `Open Android settings` when the host supports it) that re-checks itself whenever the app regains focus. Backed by the host's `AlarmManager` bridge so it fires with the app closed; falls back to an in-page timer on the dev server.
 - **Theme**: Auto / Light / Dark in Settings (`Auto` follows the system via `prefers-color-scheme`), plus the accent color swatches.
-- **Untracked Days Policy**: Overtime calculations strictly evaluate only explicitly logged shifts plus initial carryover balance. Missing or untracked days are completely ignored (never penalized as -8h).
+- **Untracked Days Policy**: Overtime calculations strictly evaluate only explicitly logged shifts plus initial carryover balance. Missing or untracked days are completely ignored (never penalized as -8h) — including non-working days, which only ever count when a shift is actually logged on them.
+- **Working Days**: Settings defines which weekdays are working days (default Mon–Fri). Days that are off have a daily target of `00:00`, so every logged minute on them counts as overtime. The day is decided by the entry's own `date`, so an overnight shift follows the rule of the day it started on.
 - **Streamlined Settings**: Configurable daily target and default times (all as steppers), appearance, and a confirmation-protected "Delete All Entries" button.
 - **File-Based Persistence**: All entries and configuration settings are saved as plain JSON files in `data/entries.json` and `data/settings.json` so they survive resets, are inspectable in `</>`, and are bundled in ZIP exports.
 
@@ -77,6 +79,7 @@ The output visualization strictly tracks and displays these exact core fields in
   "defaultEndTime": "17:00",
   "defaultBreakTime": "00:30",
   "dailyTargetTime": "08:00",
+  "workingDays": [1, 2, 3, 4, 5],
   "initialOvertime": "+00:00",
   "themeAccent": "#3b82f6",
   "theme": "auto",
@@ -87,6 +90,7 @@ The output visualization strictly tracks and displays these exact core fields in
 
 - **`initialOvertime`**: Carryover balance from prior tracking/Excel, formatted with sign and `HH:MM` (e.g. `"+14:30"` or `"-02:15"`). Editable directly in the Dashboard tab.
 - **`dailyTargetTime`**: Target daily working duration in `HH:MM` (default: `"08:00"`).
+- **`workingDays`**: Weekday indices counted as working days, matching `Date.getDay()` (`0` = Sunday … `6` = Saturday; default `[1, 2, 3, 4, 5]` = Mon–Fri). Any day not listed has a target of `00:00`. An empty array is valid and makes every logged hour overtime.
 - **`reminderLeadMinutes`**: Whole minutes before the end time to notify (number, not `HH:MM`). The Settings stepper edits it as `HH:MM` and converts on commit.
 - **`theme`**: `"auto"` (follow system), `"light"`, or `"dark"`. Applied as `data-theme` on `<html>`; `"auto"` removes the attribute so the CSS `prefers-color-scheme` block decides.
 
@@ -97,7 +101,7 @@ The output visualization strictly tracks and displays these exact core fields in
 1. **Keep Core Fields in `HH:MM`**: Always maintain `startTime`, `endTime`, `breakTime`, and `dailyTargetTime` in standard `HH:MM` strings.
 2. **Never Use `toISOString()` for Dates**: It converts to UTC, so after midnight in UTC+X the app would log the previous day. Use `store.localIso()`.
 3. **Use `attachTimeField()` for Any Time Input**: Do not reintroduce `<input type="time">` — its 12h/24h rendering is decided by the device locale and it offers no 15 min stepping.
-4. **Autosave, Don't Ask**: New editors must call the `scheduleSave()` / `flushSave()` pair in `ui.js` rather than adding a Save button, and must not persist anything until the user actually interacts.
+4. **Autosave Today, Ask for Other Days**: Editors for *today* must call the `scheduleSave()` / `flushSave()` pair in `ui.js` rather than adding a Save button, and must not persist anything until the user actually interacts. Editors for any *other* day are manual: track a dirty flag, write only from an explicit Save, and confirm before discarding.
 5. **Reminders Are Rescheduled, Never Accumulated**: `ui.syncReminder()` cancels and re-arms the single `REMINDER_ID` alarm. Call it after anything that could move today's end time; never schedule a second alarm.
 6. **Keep Status Messages Short**: Toasts are confirmations (`Saved`, `Target updated`), not sentences — never echo the full date back to the user.
 7. **Isolate Logic in `store.js`**: DOM manipulation belongs in `ui.js`; math and JSON file reads/writes belong in `store.js`.
