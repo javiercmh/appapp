@@ -51,6 +51,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
+import androidx.core.graphics.Insets
 import androidx.core.graphics.drawable.IconCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -101,6 +102,9 @@ class MainActivity : AppCompatActivity() {
     private var pendingExportFiles: Set<String>? = null
     private var onImportCompletedCallback: (() -> Unit)? = null
     private var onIconUpdatedCallback: (() -> Unit)? = null
+
+    /** Last system-bar + cutout insets, republished to the WebView as CSS custom properties. */
+    private var lastInsets: Insets = Insets.NONE
 
     /**
      * Held between `onShowFileChooser` and the picker result. WebView requires this callback to be
@@ -261,6 +265,30 @@ class MainActivity : AppCompatActivity() {
     private fun canPromptForNotifications(): Boolean =
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !notificationPromptRefused
 
+    /**
+     * Android WebView derives `env(safe-area-inset-*)` from the display cutout only — never from the
+     * status or navigation bars — so the real insets are published to the page as CSS custom
+     * properties. Subapps combine the two sources with `max()`; see AGENTS.md.
+     */
+    private fun pushInsetsToWebView() {
+        if (!::binding.isInitialized) return
+        val density = resources.displayMetrics.density
+        // Locale.ROOT: a comma decimal separator would produce invalid CSS.
+        fun cssPx(value: Int) = String.format(Locale.ROOT, "%.2fpx", value / density)
+        // The app bar already consumes the top inset whenever it is visible.
+        val top = if (binding.appBarLayout.visibility == View.GONE) lastInsets.top else 0
+        val js = """
+            (function(s){
+              s.setProperty('--app-inset-top','${cssPx(top)}');
+              s.setProperty('--app-inset-right','${cssPx(lastInsets.right)}');
+              s.setProperty('--app-inset-bottom','${cssPx(lastInsets.bottom)}');
+              s.setProperty('--app-inset-left','${cssPx(lastInsets.left)}');
+            })(document.documentElement.style);
+            window.dispatchEvent(new CustomEvent('app2:insets'));
+        """.trimIndent()
+        binding.webView.evaluateJavascript(js, null)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // Enable Edge-to-Edge display for notches, display cutouts, and status/navigation bars
         enableEdgeToEdge()
@@ -288,20 +316,11 @@ class MainActivity : AppCompatActivity() {
                     left = insets.left,
                     right = insets.right
                 )
-                binding.webView.updatePadding(
-                    top = 0,
-                    bottom = insets.bottom,
-                    left = insets.left,
-                    right = insets.right
-                )
-            } else {
-                binding.webView.updatePadding(
-                    top = insets.top,
-                    bottom = insets.bottom,
-                    left = insets.left,
-                    right = insets.right
-                )
             }
+            // The WebView itself stays edge-to-edge with zero native padding; the subapp owns its
+            // own padding and receives the raw insets as CSS custom properties instead.
+            lastInsets = insets
+            pushInsetsToWebView()
             windowInsets
         }
 
@@ -478,6 +497,8 @@ class MainActivity : AppCompatActivity() {
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
                 binding.progressBar.visibility = View.GONE
+                // A fresh document starts without the custom properties, so republish them.
+                pushInsetsToWebView()
                 appendLog("[WebView] Page render complete.")
             }
 

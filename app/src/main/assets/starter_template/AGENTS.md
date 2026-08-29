@@ -134,7 +134,7 @@ minutes late.
 ## 5. What the platform can and cannot do
 
 **Available.** The app runs on a real secure origin, so `localStorage`, IndexedDB, `fetch`, Canvas,
-WebGL, Web Audio, CSS animations and `env(safe-area-inset-*)` all work. The host has network
+WebGL, Web Audio, CSS animations and `env(safe-area-inset-*)` all work (see §7 for the safe-area caveat). The host has network
 permission, so remote URLs load — but **prefer offline-first**: this is a phone app that should work
 with no signal. Do not add CDN dependencies for things you can write inline.
 
@@ -177,7 +177,17 @@ Design for that:
 - Mobile-first. Assume a phone held in one hand.
 - Put primary navigation and actions within thumb reach, near the bottom.
 - Touch targets ≥48px. No hover-only affordances — there is no cursor.
-- Respect `env(safe-area-inset-*)` for notches and gesture bars.
+- Respect the safe areas. The App² `WebView` is edge-to-edge with **zero** native padding, so
+  everything below the notch and above the gesture bar is yours to pad.
+  - `env(safe-area-inset-*)` covers display cutouts only — Android `WebView` never reports the
+    status or navigation bars through it, so it is `0px` on a gesture-nav phone with no notch.
+  - App² publishes the real system-bar insets as `--app-inset-top/right/bottom/left` on
+    `document.documentElement`, and fires `app2:insets` when they change.
+  - Take whichever is larger. `css/style.css` already defines the tokens — use them:
+    ```css
+    --sa-bottom: max(env(safe-area-inset-bottom, 0px), var(--app-inset-bottom));
+    ```
+    A fixed bottom bar needs `padding-bottom: var(--sa-bottom)` or it sits under the gesture pill.
 - Give feedback on tap (`:active` states); a phone has no hover to signal interactivity.
 
 ---
