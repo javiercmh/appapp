@@ -25,6 +25,7 @@ All project code and runtime app assets reside within the root workspace directo
 ├── data/
 │   ├── entries.json # Shift entries JSON data store
 │   └── settings.json# Settings & default times JSON data store
+├── icon.png         # Home screen / launcher icon (referenced by manifest.json `icons`)
 └── dev_server.py    # Local computer dev server
 ```
 
@@ -55,10 +56,27 @@ The `manifest.json` file is required by the host and defines the app identity, s
     "PACKAGING.md",
     "dev_server.py",
     "data/entries.json",
-    "data/settings.json"
+    "data/settings.json",
+    "icon.png"
+  ],
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
   ]
 }
 ```
+
+Notes:
+
+- `name` is the full app name; `short_name` is the launcher label. They are distinct, and the host's
+  Configure App dialog no longer collapses one into the other.
+- `icons[0].src` supplies the pinned-shortcut icon. Setting one from the Configure App dialog also
+  appends the file to `files`.
+- The host enumerates the workspace directory directly, so `files` does not gate what ships — keep it
+  accurate anyway; it is the manifest of record for anyone reading the project.
 
 ---
 

@@ -18,6 +18,14 @@
     "PACKAGING.md",
     "dev_server.py",
     "data/entries.json",
-    "data/settings.json"
+    "data/settings.json",
+    "icon.png"
+  ],
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
   ]
 }
