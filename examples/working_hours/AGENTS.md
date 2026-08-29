@@ -32,7 +32,7 @@ $$\text{UI (ui.js)} \longrightarrow \text{Store (store.js)} \longrightarrow \tex
 | File | Module Role | Responsibility |
 | :--- | :--- | :--- |
 | `index.html` | UI Shell | Markup structure for Today (`#pane-today`), Dashboard (`#pane-dashboard`), and Settings (`#pane-settings`). |
-| `css/style.css` | Styling | Light/dark design tokens, mobile-first layout, steppers, editor sheet, shift rows, and safe-area insets. |
+| `css/style.css` | Styling | Light/dark design tokens, mobile-first layout, steppers, editor sheet, shift rows, and the `--sa-*` safe-area tokens (see [`PACKAGING.md`](./PACKAGING.md) §3.2). |
 | `js/app.js` | Bootstrap | Application entry point, tab switching, and keyboard suppression. |
 | `js/ui.js` | Presentation | DOM rendering, German date formatting, live net previews, autosave scheduling, the editor sheet, transfer checkboxes, theme application, and toast notifications. Never calls the bridge directly. |
 | `js/bridge.js` | Host Bridge | Also wraps the scheduled-notification API (`scheduleNotification` / `cancelScheduledNotification`), falling back to a `setTimeout` when no native scheduler exists. |

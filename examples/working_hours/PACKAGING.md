@@ -70,7 +70,30 @@ The `manifest.json` file is required by the host and defines the app identity, s
 - The host automatically resolves MIME types for standard web extensions:
   `.html`, `.htm`, `.css`, `.js`, `.mjs`, `.json`, `.md`, `.txt`, `.svg`, `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.woff`, `.woff2`, `.ttf`.
 
-### 3.2. JavaScript Bridge Surface (`window.AndroidStorage`)
+### 3.2. Safe Areas & Window Insets
+
+The `WebView` is edge-to-edge with **zero** native padding — the subapp owns all of its own padding.
+Two sources describe the unusable edges, and a subapp must combine them:
+
+| Source | Covers | Notes |
+|---|---|---|
+| `env(safe-area-inset-*)` | Display cutout only | Requires `viewport-fit=cover` on the viewport meta tag. Android `WebView` never reports the status or navigation bars here, so it is `0px` on a gesture-nav phone with no notch. |
+| `--app-inset-top/right/bottom/left` | Status bar, navigation bar, cutout | Set by the host on `document.documentElement` in CSS px. `--app-inset-top` is `0` while the App² toolbar is visible (it already consumes that inset) and the full status bar inset in standalone mode. |
+
+The host republishes the variables whenever the insets change and after every page load, and fires an
+`app2:insets` event on `window` for layout that cannot be expressed in CSS.
+
+`css/style.css` derives one token per edge and uses it everywhere:
+
+```css
+:root {
+  --app-inset-bottom: 0px; /* default, so desktop and dev_server.py render identically */
+  --sa-bottom: max(env(safe-area-inset-bottom, 0px), var(--app-inset-bottom));
+}
+.tabbar { padding-bottom: var(--sa-bottom); }
+```
+
+### 3.3. JavaScript Bridge Surface (`window.AndroidStorage`)
 App² exposes a unified `@JavascriptInterface` bridge object aliased as `window.AndroidStorage`, `window.AndroidMemory`, and `window.AndroidNotification`.
 
 | Method | Returns | Notes |
@@ -86,7 +109,7 @@ App² exposes a unified `@JavascriptInterface` bridge object aliased as `window.
 | `cancelScheduledNotification(id)` | `Boolean` | Re-using an `id` in `scheduleNotification` also replaces that alarm, so rescheduling is idempotent. |
 | `canScheduleExactNotifications()` | `Boolean` | `false` means the OS batches the alarm and it may fire a few minutes late. |
 
-### 3.3. Scheduled Notification Reliability
+### 3.4. Scheduled Notification Reliability
 
 `scheduleNotification` is backed by `AlarmManager`, and the host persists pending alarms so they are
 re-armed after a reboot or app update. Two limits are worth designing around:
