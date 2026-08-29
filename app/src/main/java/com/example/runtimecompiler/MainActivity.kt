@@ -584,6 +584,27 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
+     * Adds a packaged file to the manifest's `files` list if that list exists and lacks it. The host
+     * itself walks the whole workspace directory, so `files` is a documented convention (PACKAGING.md)
+     * that the host should keep intact rather than rely on.
+     */
+    private fun addToManifestFiles(json: JSONObject, fileName: String) {
+        val files = json.optJSONArray("files") ?: return
+        for (i in 0 until files.length()) {
+            if (files.optString(i) == fileName) return
+        }
+        files.put(fileName)
+    }
+
+    /**
+     * `org.json` escapes every "/" as "\/" and emits no trailing newline, which churns hand-written
+     * manifests on each save. Unescaping is safe because a literal backslash is emitted as "\\",
+     * so "\\\/" becomes "\\/" and still decodes to a backslash followed by a slash.
+     */
+    private fun serializeManifest(json: JSONObject): String =
+        json.toString(2).replace("\\/", "/") + "\n"
+
+    /**
      * Writes app identity configuration back to manifest.json.
      */
     private fun saveAppConfig(config: AppConfigData) {
@@ -594,8 +615,10 @@ class MainActivity : AppCompatActivity() {
             } else JSONObject()
 
             json.put("name", config.name)
-            json.put("short_name", config.name)
             json.put("description", config.description)
+            // `short_name` is the launcher label and is deliberately distinct from `name`; only seed
+            // it, never overwrite an existing one, or every save flattens the two into one string.
+            if (!json.has("short_name")) json.put("short_name", config.name)
             if (!json.has("version")) json.put("version", "1.0.0")
             if (!json.has("main")) json.put("main", "index.html")
 
@@ -608,11 +631,12 @@ class MainActivity : AppCompatActivity() {
                 }
                 iconArray.put(iconObj)
                 json.put("icons", iconArray)
+                addToManifestFiles(json, config.iconFileName)
             } else {
                 json.remove("icons")
             }
 
-            workspaceManager.writeFile("manifest.json", json.toString(2))
+            workspaceManager.writeFile("manifest.json", serializeManifest(json))
             appendLog("[Config] Updated manifest.json for '${config.name}'")
         } catch (e: Exception) {
             appendLog("[Config Error] Failed to write manifest.json: ${e.message}")
