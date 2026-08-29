@@ -67,10 +67,9 @@
           <span class="muted">Overtime vs target</span>
           <span id="today-overtime" class="overtime-value positive">+00:00</span>
         </div>
+        <p id="today-nonworking-hint" class="muted-small nonworking-hint" hidden>Non-working day — all hours count as overtime.</p>
       </div>
 
-      <!-- Autosave status (tap to force an immediate write) -->
-      <button type="button" id="today-save-status" class="save-status">Not logged yet</button>
     </div>
 
     <!-- 2. Open the shared editor for any other day -->
@@ -142,6 +141,20 @@
           <input class="stepper-value" type="text" inputmode="numeric" maxlength="5" id="setting-target-time" value="08:00">
           <button type="button" class="stepper-btn" data-delta="1" aria-label="Target 15 minutes longer">+</button>
         </div>
+      </div>
+
+      <div class="form-group">
+        <span class="field-label">Working days</span>
+        <div id="working-days" class="daypicker" role="group" aria-label="Working days">
+          <button type="button" class="segment day" data-day="1">Mo</button>
+          <button type="button" class="segment day" data-day="2">Tu</button>
+          <button type="button" class="segment day" data-day="3">We</button>
+          <button type="button" class="segment day" data-day="4">Th</button>
+          <button type="button" class="segment day" data-day="5">Fr</button>
+          <button type="button" class="segment day" data-day="6">Sa</button>
+          <button type="button" class="segment day" data-day="0">Su</button>
+        </div>
+        <p class="muted-small">Days that are off count every logged hour as overtime.</p>
       </div>
     </div>
 
@@ -293,13 +306,12 @@
           <span class="muted">Overtime vs target</span>
           <span id="sheet-overtime" class="overtime-value positive">+00:00</span>
         </div>
+        <p id="sheet-nonworking-hint" class="muted-small nonworking-hint" hidden>Non-working day — all hours count as overtime.</p>
       </div>
-
-      <button type="button" id="sheet-save-status" class="save-status">Not logged yet</button>
 
       <div class="row">
         <button type="button" id="btn-sheet-delete" class="btn btn-danger">🗑️ Delete</button>
-        <button type="button" id="btn-sheet-done" class="btn btn-primary">Done</button>
+        <button type="button" id="btn-sheet-save" class="btn btn-ghost">Save</button>
       </div>
     </div>
   </dialog>

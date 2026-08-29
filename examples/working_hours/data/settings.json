@@ -3,6 +3,13 @@
   "defaultEndTime": "18:00",
   "defaultBreakTime": "01:00",
   "dailyTargetTime": "08:00",
+  "workingDays": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
   "initialOvertime": "+00:00",
   "themeAccent": "#3b82f6",
   "theme": "auto",

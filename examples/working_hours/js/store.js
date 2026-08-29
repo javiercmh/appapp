@@ -11,6 +11,7 @@ export const DEFAULT_SETTINGS = {
   defaultEndTime: '17:00',
   defaultBreakTime: '00:30',
   dailyTargetTime: '08:00',
+  workingDays: [1, 2, 3, 4, 5],
   initialOvertime: '+00:00',
   themeAccent: '#3b82f6',
   theme: 'auto',
@@ -114,10 +115,49 @@ export function calcNetDuration(startTime, endTime, breakTime) {
 }
 
 /**
- * Calculates daily overtime minutes relative to dailyTargetTime.
+ * Coerces a stored workingDays value into unique day indices (0 = Sunday .. 6 = Saturday).
+ * An empty array is a valid choice (every day off); anything unusable falls back to Mon-Fri.
+ */
+export function normalizeWorkingDays(value) {
+  if (!Array.isArray(value)) return [...DEFAULT_SETTINGS.workingDays];
+  const days = value
+    .map((d) => parseInt(d, 10))
+    .filter((d) => Number.isInteger(d) && d >= 0 && d <= 6);
+  return [...new Set(days)].sort((a, b) => a - b);
+}
+
+/**
+ * True when the given "YYYY-MM-DD" date falls on a configured working day.
+ * An unparseable date is treated as a working day so the target still applies.
+ */
+export function isWorkingDay(dateStr) {
+  const parts = String(dateStr || '').split('-');
+  if (parts.length !== 3) return true;
+
+  const d = new Date(
+    parseInt(parts[0], 10),
+    parseInt(parts[1], 10) - 1,
+    parseInt(parts[2], 10)
+  );
+  if (isNaN(d.getTime())) return true;
+
+  return normalizeWorkingDays(settings.workingDays).includes(d.getDay());
+}
+
+/**
+ * Target minutes for one day: the daily target on working days, 0 otherwise —
+ * so every logged minute of a non-working day counts as overtime.
+ */
+export function dayTargetMinutes(dateStr, dailyTargetTime = null) {
+  if (!isWorkingDay(dateStr)) return 0;
+  return timeToMinutes(dailyTargetTime || settings.dailyTargetTime || '08:00');
+}
+
+/**
+ * Calculates daily overtime minutes relative to that day's target.
  */
 export function calcDayOvertimeMinutes(entry, dailyTargetTime = null) {
-  const target = timeToMinutes(dailyTargetTime || settings.dailyTargetTime || '08:00');
+  const target = dayTargetMinutes(entry.date, dailyTargetTime);
   const net = calcNetMinutes(entry.startTime, entry.endTime, entry.breakTime);
   return net - target;
 }
@@ -225,9 +265,9 @@ export function addOrUpdateEntry({ id = null, date, startTime, endTime, breakTim
   const entryData = {
     id: existing?.id || id || `wh_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
     date: d,
-    startTime: startTime || settings.defaultStartTime || '08:30',
-    endTime: endTime || settings.defaultEndTime || '17:00',
-    breakTime: breakTime || settings.defaultBreakTime || '00:30',
+    startTime: startTime || settings.defaultStartTime || '09:00',
+    endTime: endTime || settings.defaultEndTime || '18:00',
+    breakTime: breakTime || settings.defaultBreakTime || '01:00',
     transferred: isTransferred,
     createdAt: existing?.createdAt || Date.now()
   };
@@ -286,6 +326,7 @@ export function loadSettings() {
   try {
     const parsed = JSON.parse(raw);
     settings = { ...DEFAULT_SETTINGS, ...parsed };
+    settings.workingDays = normalizeWorkingDays(settings.workingDays);
   } catch (err) {
     console.error(`[store] ${SETTINGS_FILE} parse error, using defaults:`, err);
     settings = { ...DEFAULT_SETTINGS };
