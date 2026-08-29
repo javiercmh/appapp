@@ -70,8 +70,12 @@ The `WebView` loads `https://app.local/index.html`. Requests to `https://app.loc
    - `enableEdgeToEdge()` is called in `MainActivity.onCreate()`.
    - Use `ViewCompat.setOnApplyWindowInsetsListener` to dynamically pad status bar / notch / display cutout insets (`systemBars() | displayCutout()`) on top bars, and navigation bar / soft keyboard (`WindowInsetsCompat.Type.ime()`) on bottom containers.
    - Do **not** hardcode top status bar margins or fixed heights.
-2. **Web Safe Areas**:
-   - Web stylesheets should use `env(safe-area-inset-top)` and `env(safe-area-inset-bottom)` to adapt when rendered full-bleed.
+   - The runtime `WebView` is rendered edge-to-edge with zero native view padding, so the inner web application owns all of its own padding and layout.
+2. **Web Safe Areas** — two sources, combined:
+   - Android `WebView` derives `env(safe-area-inset-*)` from the **display cutout only**. It never reports the status or navigation bars, so `env(safe-area-inset-bottom)` is `0px` on a gesture-nav phone.
+   - `MainActivity.pushInsetsToWebView()` therefore publishes the real `systemBars() | displayCutout()` insets onto `document.documentElement` as `--app-inset-top`, `--app-inset-right`, `--app-inset-bottom` and `--app-inset-left` (CSS px), and fires an `app2:insets` event. The top value is `0` while the App² toolbar is visible, because the toolbar already consumes it, and the full status bar inset in standalone mode.
+   - Web stylesheets must combine both: `max(env(safe-area-inset-bottom, 0px), var(--app-inset-bottom, 0px))`. See the `--sa-*` tokens in the starter template's `css/style.css`.
+   - Set `viewport-fit=cover` in the `<meta name="viewport">` tag, or `env()` stays zero.
 3. **Editor Responsiveness & Flow**:
    - Dialog toolbars must remain horizontally scrollable (`HorizontalScrollView`) to accommodate narrow screens.
    - When closing the single-file editor with unsaved changes, prompt the user for confirmation.
