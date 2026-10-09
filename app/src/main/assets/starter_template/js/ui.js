@@ -11,13 +11,12 @@ const ACCENTS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#a855f7', '#ec4899
 const PROMPTS = [
   'Add a search field at the top of the Demo tab that filters notes as I type.',
   'Group the saved notes by day with a date heading above each group.',
-  'Add a Kotlin AlarmManager bridge to App² so notifications still fire when the app is closed.'
+  'Add a reminder that uses scheduleNotification and explains how to enable precise alarms.'
 ];
 
 let pendingPhoto = null;   // filename of a photo saved but not yet attached to a note
 let toastTimer = null;
 let onToastExpire = null;
-let notifCountdownTimer = null;
 
 // --- Toast (replaces alert/confirm — see AGENTS.md §4) ---
 
@@ -211,35 +210,36 @@ export function initNotificationPlayground() {
   const statusText = $('notif-status-text');
   const cancelBtn = $('btn-notif-cancel');
 
-  function clearScheduled() {
-    if (notifCountdownTimer) {
-      clearInterval(notifCountdownTimer);
-      notifCountdownTimer = null;
-    }
-    if (statusBox) statusBox.hidden = true;
+  const TEST_REMINDER_ID = 721004;
+  const alarmPill = $('alarm-pill');
+  const alarmHint = $('alarm-hint');
+  const alarmButton = $('btn-alarm-permission');
+
+  function refreshAlarmPermission() {
+    const nativeScheduler = bridge.canScheduleWhileClosed;
+    const precise = bridge.canScheduleExactly();
+    if (alarmPill) alarmPill.textContent = !nativeScheduler ? 'Unavailable in browser' : precise ? 'Allowed' : 'Access needed';
+    if (alarmButton) alarmButton.hidden = !nativeScheduler || precise;
+    if (alarmHint) alarmHint.textContent = !nativeScheduler
+      ? 'Background reminders require the App² Android host.'
+      : precise ? 'Scheduled reminders use precise Android alarms.' : 'Enable Alarms & reminders to schedule this test.';
+    return nativeScheduler && precise;
   }
 
-  function scheduleTestNotification(seconds, label) {
+  function scheduleTestNotification() {
     if (!bridge.hasNotificationPermission()) {
       toast('Turn on notifications above first');
       return;
     }
-    clearScheduled();
-    let remaining = seconds;
-    if (statusText) statusText.textContent = `⏰ Scheduled in ${remaining}s...`;
+    if (!refreshAlarmPermission()) {
+      toast('Enable precise reminders first');
+      return;
+    }
+    const at = Date.now() + 60_000;
+    const scheduled = bridge.scheduleNotification(TEST_REMINDER_ID, at, 'App² Demo', 'Your one-minute reminder arrived.');
+    if (statusText) statusText.textContent = scheduled ? '⏰ Precise reminder scheduled for 1 minute from now.' : 'Reminder could not be scheduled. Check alarm and notification access.';
     if (statusBox) statusBox.hidden = false;
-    toast(`Notification scheduled (${label})`);
-
-    notifCountdownTimer = setInterval(() => {
-      remaining--;
-      if (remaining > 0) {
-        if (statusText) statusText.textContent = `⏰ Scheduled in ${remaining}s...`;
-      } else {
-        clearScheduled();
-        bridge.notify('App² Demo', `⏰ Here is your ${label} scheduled notification!`);
-        toast('Notification delivered');
-      }
-    }, 1000);
+    toast(scheduled ? 'Precise reminder scheduled' : 'Reminder was not scheduled');
   }
 
   const sampleBtn = $('btn-notif-sample');
@@ -254,16 +254,22 @@ export function initNotificationPlayground() {
     };
   }
 
-  const btn10s = $('btn-notif-10s');
-  if (btn10s) btn10s.onclick = () => scheduleTestNotification(10, '10-second');
-
   const btn1m = $('btn-notif-1m');
-  if (btn1m) btn1m.onclick = () => scheduleTestNotification(60, '1-minute');
+  if (btn1m) btn1m.onclick = scheduleTestNotification;
+
+  alarmButton?.addEventListener('click', () => bridge.requestExactNotificationPermission());
+  addEventListener('app2:alarmperm', refreshAlarmPermission);
+  addEventListener('focus', refreshAlarmPermission);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') refreshAlarmPermission();
+  });
+  refreshAlarmPermission();
 
   if (cancelBtn) {
     cancelBtn.onclick = () => {
-      clearScheduled();
-      toast('Scheduled notification cancelled');
+      const cancelled = bridge.cancelScheduledNotification(TEST_REMINDER_ID);
+      if (statusBox) statusBox.hidden = true;
+      toast(cancelled ? 'Scheduled reminder cancelled' : 'Could not cancel reminder');
     };
   }
 }

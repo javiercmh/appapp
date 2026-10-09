@@ -143,6 +143,13 @@ export function schedulesExactly() {
   return false;
 }
 
+export function requestExactNotificationPermission() {
+  if (N && typeof N.requestExactNotificationPermission === 'function') {
+    return N.requestExactNotificationPermission();
+  }
+  return false;
+}
+
 export function scheduleNotification(id, atMillis, title, message) {
   const at = Math.round(atMillis);
   cancelScheduledNotification(id);

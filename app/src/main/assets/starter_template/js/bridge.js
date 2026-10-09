@@ -101,6 +101,26 @@ export function requestNotificationPermission() {
   return false;
 }
 
+export const canScheduleWhileClosed = !!(N && typeof N.scheduleNotification === 'function');
+
+export function canScheduleExactly() {
+  return !!(N && typeof N.canScheduleExactNotifications === 'function' && N.canScheduleExactNotifications());
+}
+
+export function requestExactNotificationPermission() {
+  return !!(N && typeof N.requestExactNotificationPermission === 'function' && N.requestExactNotificationPermission());
+}
+
+export function scheduleNotification(id, atMillis, title, message) {
+  if (!canScheduleWhileClosed) return false;
+  return N.scheduleNotification(id, String(Math.round(atMillis)), title, message);
+}
+
+export function cancelScheduledNotification(id) {
+  if (!canScheduleWhileClosed) return false;
+  return N.cancelScheduledNotification(id);
+}
+
 export function notify(title, message) {
   if (N) return N.showNotification(title, message);
   if ('Notification' in window && Notification.permission === 'granted') {

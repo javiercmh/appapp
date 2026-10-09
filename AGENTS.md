@@ -130,19 +130,22 @@ When adding new bridge methods for the runtime web app:
 **binary file I/O (`writeFileBase64` / `readFileBase64`)**, telemetry (`getStorageStats`), and
 notifications (`showNotification` / `showNotificationWithId` / `cancelNotification` /
 `hasNotificationPermission` / `requestNotificationPermission` / `openNotificationSettings`), and **scheduled notifications
-(`scheduleNotification` / `cancelScheduledNotification` / `canScheduleExactNotifications`)**.
+(`scheduleNotification` / `cancelScheduledNotification` / `canScheduleExactNotifications` /
+`requestExactNotificationPermission`)**.
 
 `openNotificationSettings()` opens this app's notification screen (falling back to the app details
 page). It is the only route left for a user on API 26-32, where no runtime prompt exists, or one who
 has already refused the prompt — Android then silently declines to show it again. App²'s own Settings
 dialog exposes the same thing in its **Notifications** card.
 
-Scheduled notifications are backed by `AlarmManager`, so they fire with the app closed.
+Scheduled notifications use exact `AlarmManager` alarms, so they fire with the app closed.
 `ScheduledNotificationReceiver` posts them (it re-creates the notification channel, since the alarm
 can wake a cold process) and `AlarmBootReceiver` re-arms the persisted list after a reboot or app
-update. `SCHEDULE_EXACT_ALARM` is only declared up to API 32; on API 33+ the runtime deliberately
-falls back to inexact `setAndAllowWhileIdle` alarms rather than requesting the Play-restricted
-`USE_EXACT_ALARM`, so a scheduled notification may drift by a few minutes while the device dozes.
+update. `SCHEDULE_EXACT_ALARM` is user-granted special access on API 31+; the app opens Android's
+Alarms & reminders screen only after a user action. A schedule request fails when access is missing
+and never silently downgrades to an inexact alarm. API 26-30 can schedule exact alarms without this
+special access. Android may still throttle exact alarms while the device is idle, and force-stopping
+the app prevents delivery until it is opened again.
 
 `WebChromeClient.onShowFileChooser` is implemented in `MainActivity`, so `<input type="file">` works
 inside the runtime web app. Pair it with `writeFileBase64` to persist a picked image as a real
