@@ -415,20 +415,40 @@ export function syncReminder() {
   const entry = store.findEntryByDate(getTodayIso());
   const lead = parseInt(store.settings.reminderLeadMinutes, 10) || 0;
   let scheduledAt = null;
+  let scheduleFailed = false;
 
-  if (store.settings.reminderEnabled && entry && bridge.hasNotificationPermission()) {
+  if (store.settings.reminderEnabled && entry && bridge.hasNotificationPermission() && bridge.schedulesExactly()) {
     const at = store.reminderTimestamp(entry, lead);
     if (at && at > Date.now()) {
       const body = lead > 0
         ? `${lead} min left — your day ends at ${entry.endTime}.`
         : `Your day ends now (${entry.endTime}).`;
       if (bridge.scheduleNotification(REMINDER_ID, at, 'Working Hours', body)) scheduledAt = at;
+      else scheduleFailed = true;
     }
   }
 
   renderNotificationPermission();
-  updateReminderHint(scheduledAt);
+  renderExactAlarmPermission();
+  updateReminderHint(scheduledAt, scheduleFailed);
   return scheduledAt;
+}
+
+function renderExactAlarmPermission() {
+  const row = $('reminder-alarm-row');
+  if (!row) return;
+  const supported = bridge.canScheduleWhileClosed;
+  const granted = bridge.schedulesExactly();
+  row.classList.toggle('granted', granted);
+  const label = $('reminder-alarm-label');
+  if (label) label.textContent = !supported ? 'Precise alarms unavailable here' : granted ? 'Precise alarms allowed' : 'Precise alarm access needed';
+  const detail = $('reminder-alarm-detail');
+  if (detail) {
+    detail.hidden = !supported || granted;
+    detail.textContent = 'Android needs Alarms & reminders access before this reminder can be scheduled.';
+  }
+  const button = $('btn-reminder-alarm-perm');
+  if (button) button.hidden = !supported || granted;
 }
 
 function renderNotificationPermission() {
@@ -456,7 +476,7 @@ function renderNotificationPermission() {
   if (settingsBtn) settingsBtn.hidden = granted || !bridge.canOpenNotificationSettings;
 }
 
-function updateReminderHint(scheduledAt) {
+function updateReminderHint(scheduledAt, scheduleFailed = false) {
   const hint = $('reminder-hint');
   const group = $('reminder-lead-group');
   if (group) group.hidden = !store.settings.reminderEnabled;
@@ -470,10 +490,18 @@ function updateReminderHint(scheduledAt) {
     hint.textContent = 'Reminder paused until notifications are allowed.';
     return;
   }
+  if (bridge.canScheduleWhileClosed && !bridge.schedulesExactly()) {
+    hint.textContent = 'Reminder paused until precise alarm access is allowed.';
+    return;
+  }
 
   const entry = store.findEntryByDate(getTodayIso());
   if (!entry) {
     hint.textContent = 'Today isn\'t logged yet — the reminder is set as soon as you log it.';
+    return;
+  }
+  if (scheduleFailed) {
+    hint.textContent = 'Reminder could not be scheduled. Check notification and precise alarm access.';
     return;
   }
   if (!scheduledAt) {
@@ -484,7 +512,7 @@ function updateReminderHint(scheduledAt) {
   const at = new Date(scheduledAt);
   const clock = `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
   hint.textContent = bridge.canScheduleWhileClosed
-    ? `Today: you'll be notified at ${clock}.${bridge.schedulesExactly() ? '' : ' Exact alarms are off, so it may be a few minutes late.'}`
+    ? `Today: precise reminder scheduled for ${clock}.`
     : `Today: notification at ${clock} — only while the app stays open (no native scheduler here).`;
 }
 
@@ -734,6 +762,10 @@ export function setupSettingsEvents() {
     bridge.openNotificationSettings();
   });
 
+  $('btn-reminder-alarm-perm')?.addEventListener('click', () => bridge.requestExactNotificationPermission());
+
+  addEventListener('app2:alarmperm', () => syncReminder());
+
   addEventListener('app2:notifperm', (e) => {
     if (!e.detail?.granted) {
       notifPromptRefused = true;
@@ -801,57 +833,6 @@ export function applyTheme(mode) {
 
 function renderThemeSegments() {
   const current = store.settings.theme || 'auto';
-  // --- End-of-day reminder ---
-  fields.reminderLead = attachTimeField($('stepper-reminder-lead'), {
-    mode: 'duration',
-    step: 5,
-    max: 4 * 60,
-    onCommit: (value) => {
-      store.updateSetting('reminderLeadMinutes', store.timeToMinutes(value));
-      syncReminder();
-    }
-  });
-
-  const reminderToggle = $('setting-reminder-enabled');
-  reminderToggle?.addEventListener('change', () => {
-    store.updateSetting('reminderEnabled', reminderToggle.checked);
-    if (reminderToggle.checked && !bridge.hasNotificationPermission()) {
-      // Android answers asynchronously via the app2:notifperm event.
-      bridge.requestNotificationPermission();
-    }
-    syncReminder();
-    toast(reminderToggle.checked ? 'Reminder on' : 'Reminder off');
-  });
-
-  $('btn-reminder-perm')?.addEventListener('click', () => {
-    bridge.requestNotificationPermission();
-    syncReminder();
-  });
-
-  $('btn-reminder-perm-settings')?.addEventListener('click', () => {
-    bridge.openNotificationSettings();
-  });
-
-  addEventListener('app2:notifperm', (e) => {
-    if (!e.detail?.granted) {
-      notifPromptRefused = true;
-      if (store.settings.reminderEnabled) toast('Notifications not allowed');
-    } else {
-      notifPromptRefused = false;
-    }
-    syncReminder();
-  });
-
-  // Coming back from the system settings screen must not leave a stale "blocked" row.
-  const recheckPermission = () => {
-    if (bridge.hasNotificationPermission()) notifPromptRefused = false;
-    syncReminder();
-  };
-  addEventListener('focus', recheckPermission);
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') recheckPermission();
-  });
-
   document.querySelectorAll('#theme-segmented .segment').forEach((seg) => {
     const isActive = seg.dataset.theme === current;
     seg.classList.toggle('active', isActive);

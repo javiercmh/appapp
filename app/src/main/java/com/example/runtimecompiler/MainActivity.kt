@@ -221,6 +221,7 @@ class MainActivity : AppCompatActivity() {
 
     // Set while the App Settings dialog is open so its permission row can re-render.
     private var onNotificationPermissionChanged: (() -> Unit)? = null
+    private var onExactAlarmPermissionChanged: (() -> Unit)? = null
 
     private val requestNotificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
@@ -256,6 +257,14 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         // Catches a permission flipped in the system settings screen we sent the user to.
         onNotificationPermissionChanged?.invoke()
+        onExactAlarmPermissionChanged?.invoke()
+        if (::binding.isInitialized) {
+            val granted = NativeStorageBridge.canScheduleExact(this)
+            binding.webView.evaluateJavascript(
+                "window.dispatchEvent(new CustomEvent('app2:alarmperm',{detail:{granted:$granted}}))",
+                null
+            )
+        }
     }
 
     private fun notificationsAllowed(): Boolean =
@@ -358,6 +367,7 @@ class MainActivity : AppCompatActivity() {
         setupWebView()
         setupListeners()
         reloadApp()
+        NativeStorageBridge.reschedulePersistedAlarms(this)
 
         // Handle Back button for WebView history
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
@@ -1776,6 +1786,8 @@ class MainActivity : AppCompatActivity() {
         // 5. Notification Permission
         val tvNotifications = dialog.findViewById<TextView>(R.id.settings_tv_notification_status)
         val btnNotifications = dialog.findViewById<MaterialButton>(R.id.settings_btn_notification_permission)
+        val tvExactAlarms = dialog.findViewById<TextView>(R.id.settings_tv_exact_alarm_status)
+        val btnExactAlarms = dialog.findViewById<MaterialButton>(R.id.settings_btn_exact_alarm_permission)
 
         val refreshNotificationRow = {
             val allowed = notificationsAllowed()
@@ -1792,13 +1804,37 @@ class MainActivity : AppCompatActivity() {
         }
         refreshNotificationRow()
         onNotificationPermissionChanged = refreshNotificationRow
-        dialog.setOnDismissListener { onNotificationPermissionChanged = null }
 
         btnNotifications?.setOnClickListener {
             if (!notificationsAllowed() && canPromptForNotifications()) {
                 promptNotificationPermission()
             } else {
                 storageBridge.openNotificationSettings()
+            }
+        }
+
+        val refreshExactAlarmRow = {
+            val allowed = NativeStorageBridge.canScheduleExact(this)
+            tvExactAlarms?.text = getString(
+                if (allowed) R.string.settings_exact_alarms_allowed else R.string.settings_exact_alarms_blocked
+            )
+            tvExactAlarms?.setTextColor(
+                ContextCompat.getColor(this, if (allowed) R.color.accent_green else R.color.accent_red)
+            )
+            btnExactAlarms?.text = getString(
+                if (allowed) R.string.settings_exact_alarms_allowed_button else R.string.settings_exact_alarms_allow
+            )
+            btnExactAlarms?.isEnabled = !allowed
+        }
+        refreshExactAlarmRow()
+        onExactAlarmPermissionChanged = refreshExactAlarmRow
+        dialog.setOnDismissListener {
+            onNotificationPermissionChanged = null
+            onExactAlarmPermissionChanged = null
+        }
+        btnExactAlarms?.setOnClickListener {
+            if (!NativeStorageBridge.canScheduleExact(this) && !storageBridge.requestExactNotificationPermission()) {
+                Toast.makeText(this, R.string.settings_exact_alarms_open_failed, Toast.LENGTH_SHORT).show()
             }
         }
 

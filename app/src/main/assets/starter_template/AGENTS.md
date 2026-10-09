@@ -102,12 +102,15 @@ from elsewhere.**
 | `scheduleNotification(id, triggerAtMillis, title, message)` | `Boolean` — fires even if the app is closed |
 | `cancelScheduledNotification(id)` | `Boolean` |
 | `canScheduleExactNotifications()` | `Boolean` |
+| `requestExactNotificationPermission()` | `Boolean` — opens Android Alarms & reminders settings after a user action |
 
 `triggerAtMillis` is epoch milliseconds **as a string** (`String(Date.now() + 60000)`) — JS numbers
 cross the bridge as doubles and would lose the value. Re-using an `id` replaces that alarm, so
-rescheduling is idempotent. Pending alarms survive reboot. When
-`canScheduleExactNotifications()` is `false` the OS batches the alarm, so it may fire a few
-minutes late.
+rescheduling is idempotent. Pending alarms survive reboot. `scheduleNotification` returns `false`
+until exact alarm access is granted on Android 12+. The app does not schedule an approximate
+duplicate. Re-check `canScheduleExactNotifications()` on resume or listen for `app2:alarmperm`
+(`event.detail.granted`) after the user returns from Settings. The starter's one-minute example uses
+the same host scheduler; background scheduling is unavailable in a plain browser preview.
 
 ---
 
