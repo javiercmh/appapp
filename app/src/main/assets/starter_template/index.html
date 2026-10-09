@@ -54,10 +54,16 @@
       <button id="btn-notif" class="btn btn-primary btn-block" hidden>Turn on notifications</button>
       <p id="notif-hint" class="hint"></p>
 
+      <div class="row-between">
+        <span class="muted">Precise alarms</span>
+        <span id="alarm-pill" class="chip">Checking…</span>
+      </div>
+      <button id="btn-alarm-permission" class="btn btn-ghost btn-block" hidden>Enable precise reminders</button>
+      <p id="alarm-hint" class="hint"></p>
+
       <div id="notif-controls" class="notif-controls">
         <button id="btn-notif-sample" class="btn btn-primary btn-block">🔔 Send sample notification</button>
         <div class="row">
-          <button id="btn-notif-10s" class="btn btn-ghost">⏰ Test in 10s</button>
           <button id="btn-notif-1m" class="btn btn-ghost">⏰ Test in 1 min</button>
         </div>
         <div id="notif-status-box" class="notif-status-box" hidden>
@@ -66,8 +72,7 @@
         </div>
       </div>
 
-      <p class="muted">Notifications fire through the native Android bridge. To trigger background
-        alarms when the app is completely closed, an agent can add a Kotlin AlarmManager bridge.</p>
+      <p class="muted">The one-minute test uses an Android alarm and can arrive while this app is closed. It needs notification permission and, on newer Android versions, “Alarms &amp; reminders” access.</p>
     </div>
   </section>
 

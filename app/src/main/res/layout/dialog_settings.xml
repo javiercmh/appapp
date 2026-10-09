@@ -380,6 +380,35 @@
                         app:iconPadding="6dp"
                         app:iconSize="14dp"
                         app:iconTint="@color/accent_blue" />
+
+                    <TextView
+                        android:id="@+id/settings_tv_exact_alarm_status"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:fontFamily="monospace"
+                        android:text="@string/settings_exact_alarms_allowed"
+                        android:textColor="@color/accent_green"
+                        android:textSize="12sp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/settings_btn_exact_alarm_permission"
+                        style="@style/Widget.Material3.Button.TonalButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="38dp"
+                        android:layout_marginTop="4dp"
+                        android:insetTop="0dp"
+                        android:insetBottom="0dp"
+                        android:minHeight="0dp"
+                        android:text="@string/settings_exact_alarms_allow"
+                        android:textColor="@color/on_surface"
+                        android:textSize="12sp"
+                        app:backgroundTint="@color/surface_elevated"
+                        app:icon="@drawable/ic_notifications"
+                        app:iconGravity="textStart"
+                        app:iconPadding="6dp"
+                        app:iconSize="14dp"
+                        app:iconTint="@color/accent_blue" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 

@@ -123,20 +123,25 @@ App² exposes a unified `@JavascriptInterface` bridge object aliased as `window.
 | `hasNotificationPermission()` / `requestNotificationPermission()` | `Boolean` | The request is async: listen for `app2:notifperm` on `window` for the real answer. |
 | `showNotification(title, message)` / `cancelNotification(id)` | `Boolean` | Posts immediately. |
 | `openNotificationSettings()` | `Boolean` | Opens the OS notification screen for App². The only way back for a user on API 26-32 (no runtime prompt exists) or who already refused the prompt. Absent on the dev server — feature-detect it. |
+| `requestExactNotificationPermission()` | `Boolean` | Opens Android's Alarms & reminders screen after a user action. Returns whether Android accepted the settings launch, not whether access was granted. |
 | `scheduleNotification(id, triggerAtMillis, title, message)` | `Boolean` | **Fires with the app closed.** `triggerAtMillis` is epoch ms **as a string**; a JS number crosses the bridge as a double and loses the value. |
 | `cancelScheduledNotification(id)` | `Boolean` | Re-using an `id` in `scheduleNotification` also replaces that alarm, so rescheduling is idempotent. |
-| `canScheduleExactNotifications()` | `Boolean` | `false` means the OS batches the alarm and it may fire a few minutes late. |
+| `canScheduleExactNotifications()` | `Boolean` | Check before scheduling and after returning from Settings. |
 
 ### 3.4. Scheduled Notification Reliability
 
-`scheduleNotification` is backed by `AlarmManager`, and the host persists pending alarms so they are
-re-armed after a reboot or app update. Two limits are worth designing around:
+`scheduleNotification` is backed by exact `AlarmManager` alarms, and the host persists pending alarms
+so they are re-armed after exact access is granted, reboot, app update, and app startup. Listen for
+`app2:alarmperm` (`event.detail.granted`) or re-check access when the page resumes. A schedule request
+returns `false` and creates no alarm while exact access is missing:
 
-1. **Inexact by default on API 33+.** The runtime does not request the Play-restricted
-   `USE_EXACT_ALARM` permission, so on newer Android it uses `setAndAllowWhileIdle`. The alarm still
-   fires during Doze, but within a batching window rather than to the minute.
+1. **Exact access is user controlled on API 31+.** Call `requestExactNotificationPermission()` only
+   after an explicit user action. Do not create an approximate duplicate when access is missing.
+   API 26-30 supports exact scheduling without special access.
 2. **Notification permission is checked at fire time.** An alarm armed while notifications were
    allowed silently posts nothing if the user revokes permission later.
 
 Outside the Android host (e.g. under `dev_server.py`), `js/bridge.js` falls back to a `setTimeout`
 that only survives while the page is open. Treat "fires while closed" as an Android-only guarantee.
+Exact alarms remain subject to Android idle-mode limits, and force-stopping the app prevents delivery
+until it is opened again.
