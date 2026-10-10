@@ -236,17 +236,21 @@ class SubappLibraryActivity : AppCompatActivity() {
             }
             row.appMenu.contentDescription = getString(R.string.library_menu, name)
             row.appMenu.setOnClickListener { anchor ->
-                val content = layoutInflater.inflate(R.layout.popup_library_delete, null)
-                val popup = PopupWindow(content, resources.getDimensionPixelSize(R.dimen.library_delete_popup_width), resources.getDimensionPixelSize(R.dimen.library_delete_popup_height), true).apply {
-                    elevation = resources.getDimension(R.dimen.library_delete_popup_elevation)
+                val content = layoutInflater.inflate(R.layout.popup_library_actions, null)
+                val popup = PopupWindow(content, resources.getDimensionPixelSize(R.dimen.library_actions_popup_width), resources.getDimensionPixelSize(R.dimen.library_actions_popup_height), true).apply {
+                    elevation = resources.getDimension(R.dimen.library_actions_popup_elevation)
                     setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
                     isOutsideTouchable = true
                 }
-                content.setOnClickListener {
+                content.findViewById<View>(R.id.delete_app).setOnClickListener {
                     popup.dismiss()
                     confirmDelete(record, name)
                 }
-                popup.showAsDropDown(anchor, -resources.getDimensionPixelSize(R.dimen.library_delete_popup_width) + anchor.width, 0)
+                content.findViewById<View>(R.id.rename_app).setOnClickListener {
+                    popup.dismiss()
+                    showRename(record, name)
+                }
+                popup.showAsDropDown(anchor, -resources.getDimensionPixelSize(R.dimen.library_actions_popup_width) + anchor.width, 0)
             }
             binding.appList.addView(row.root)
         }
@@ -262,6 +266,50 @@ class SubappLibraryActivity : AppCompatActivity() {
 
     private fun edit(record: SubappRecord) {
         startActivity(Intent(this, MainActivity::class.java).putExtra(MainActivity.EXTRA_SUBAPP_ID, record.id))
+    }
+
+    private fun showRename(record: SubappRecord, name: String) {
+        val content = com.wynh.appapp.databinding.DialogLibraryRenameBinding.inflate(layoutInflater)
+        val dialog = Dialog(this)
+        dialog.setContentView(content.root)
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        content.renameName.setText(name)
+        content.renameName.selectAll()
+        content.renameClose.setOnClickListener { dialog.dismiss() }
+        content.renameCancel.setOnClickListener { dialog.dismiss() }
+        val save = {
+            val newName = content.renameName.text.toString().trim()
+            if (newName.isBlank()) {
+                content.renameNameLayout.error = getString(R.string.library_name_required)
+            } else {
+                val saved = runCatching {
+                    val manager = WorkspaceManager(this, workspaceDir = record.workspaceDir)
+                    val manifest = JSONObject(manager.readFile("manifest.json"))
+                    manifest.put("name", newName)
+                    manager.writeFile("manifest.json", manifest.toString(2))
+                }.getOrDefault(false)
+                if (saved) {
+                    dialog.dismiss()
+                    refreshRows()
+                } else {
+                    content.renameNameLayout.error = getString(R.string.library_rename_failed)
+                }
+            }
+        }
+        content.renameSave.setOnClickListener { save() }
+        content.renameName.setOnEditorActionListener { _, action, _ ->
+            if (action == android.view.inputmethod.EditorInfo.IME_ACTION_DONE) {
+                save()
+                true
+            } else false
+        }
+        dialog.show()
+        dialog.window?.setLayout(
+            minOf((resources.displayMetrics.widthPixels * 0.94).toInt(), (resources.displayMetrics.density * 480).toInt()),
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+        dialog.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        content.renameName.requestFocus()
     }
 
     private fun confirmDelete(record: SubappRecord, name: String) {
