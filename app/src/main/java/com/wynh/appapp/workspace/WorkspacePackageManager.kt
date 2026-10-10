@@ -111,6 +111,7 @@ object WorkspacePackageManager {
         historyManager: WorkspaceHistoryManager,
         savePreImportSnapshot: Boolean = true
     ): Result<List<String>> {
+        var staging: File? = null
         return try {
             // 1. Capture pre-import snapshot
             if (savePreImportSnapshot) historyManager.saveSnapshot(workspaceManager, "Pre-Import Backup")
@@ -121,15 +122,17 @@ object WorkspacePackageManager {
             }
 
             val importedFileNames = mutableListOf<String>()
-            val canonicalWorkspacePath = workspaceDir.canonicalPath
 
             // 2. Extract ZIP contents to a temporary staging folder first to verify validity
             val tempExtractDir = File(workspaceDir.parentFile, "workspace_temp_${System.currentTimeMillis()}")
+            staging = tempExtractDir
             if (tempExtractDir.exists()) {
                 tempExtractDir.deleteRecursively()
             }
             tempExtractDir.mkdirs()
 
+            val seen = mutableSetOf<String>()
+            var totalBytes = 0L
             ZipInputStream(BufferedInputStream(inputStream)).use { zis ->
                 var entry: ZipEntry? = zis.nextEntry
                 while (entry != null) {
@@ -139,16 +142,26 @@ object WorkspacePackageManager {
                         val destinationFile = File(tempExtractDir, entryName)
 
                         // Zip-Slip Path Traversal Protection
-                        if (!destinationFile.canonicalPath.startsWith(tempExtractDir.canonicalPath)) {
+                        if (!destinationFile.canonicalPath.startsWith(tempExtractDir.canonicalPath + File.separator)) {
                             throw SecurityException("ZIP entry contains unsafe path traversal: $entryName")
                         }
 
+                        require(seen.add(destinationFile.canonicalPath)) { "Duplicate ZIP entry: $entryName" }
+                        require(seen.size <= 1024) { "Too many ZIP entries" }
                         if (entry.isDirectory) {
                             destinationFile.mkdirs()
                         } else {
                             destinationFile.parentFile?.mkdirs()
                             FileOutputStream(destinationFile).use { fos ->
-                                zis.copyTo(fos, bufferSize = 8192)
+                                val buffer = ByteArray(8192)
+                                var entryBytes = 0L
+                                while (true) {
+                                    val count = zis.read(buffer)
+                                    if (count < 0) break
+                                    entryBytes += count; totalBytes += count
+                                    require(entryBytes <= 8 * 1024 * 1024 && totalBytes <= 32 * 1024 * 1024) { "ZIP exceeds size limit" }
+                                    fos.write(buffer, 0, count)
+                                }
                             }
                             importedFileNames.add(destinationFile.name)
                         }
@@ -162,6 +175,8 @@ object WorkspacePackageManager {
                 tempExtractDir.deleteRecursively()
                 return Result.failure(Exception("The selected ZIP file contains no readable project files."))
             }
+
+            require(File(tempExtractDir, "index.html").isFile) { "ZIP must contain index.html at its root" }
 
             // 3. Clean replace: remove existing files in workspace and copy new files over
             val currentFiles = workspaceDir.listFiles() ?: emptyArray()
@@ -182,6 +197,8 @@ object WorkspacePackageManager {
             Result.success(importedFileNames)
         } catch (e: Exception) {
             Result.failure(e)
+        } finally {
+            staging?.deleteRecursively()
         }
     }
 }
