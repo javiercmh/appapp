@@ -223,7 +223,7 @@
             android:textColor="@color/on_surface_muted" />
 
         <com.google.android.material.button.MaterialButton
-            android:id="@+id/config_btn_save_and_install"
+            android:id="@+id/config_btn_save"
             style="@style/Widget.Material3.Button.TonalButton"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
@@ -237,12 +237,12 @@
             android:minWidth="0dp"
             android:paddingHorizontal="10dp"
             android:textAlignment="center"
-            android:text="@string/save_and_install"
+            android:text="@string/save_file"
             android:textColor="@color/on_surface"
             android:textSize="12sp"
             android:textStyle="bold"
             app:backgroundTint="@color/surface_elevated"
-            app:icon="@drawable/ic_install_mobile"
+            app:icon="@drawable/ic_save"
             app:iconGravity="textStart"
             app:iconPadding="6dp"
             app:iconSize="16dp"

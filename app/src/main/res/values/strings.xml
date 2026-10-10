@@ -36,13 +36,11 @@
     <string name="export_success">Exported %1$d files to ZIP</string>
     <string name="action_deploy">Deploy to Home Screen</string>
     <string name="action_install">Install</string>
-    <string name="shortcut_requested">Shortcut created for \'%1$s\'</string>
-    <string name="shortcut_not_supported">Your home screen launcher does not support shortcut pinning.</string>
+    <string name="shortcut_request_failed">Could not open the home screen shortcut prompt on this device.</string>
     <string name="close">Close</string>
 
     <!-- App Configuration & Workspace Hub -->
     <string name="app_config_title">Configure App</string>
-    <string name="app_config_btn">Configure App</string>
     <string name="app_name_label">App Name</string>
     <string name="app_name_hint">My App</string>
     <string name="app_description_label">Description</string>
@@ -104,9 +102,11 @@
     <string name="settings_reset_success">App² has been reset to factory defaults</string>
     <string name="template_upgrade_available">A new starter template is available. Your files were left untouched — load it from &lt;/&gt; → History → Official Starter Template.</string>
     <string name="library_title">Your apps</string>
-    <string name="library_subtitle">A home for the apps you make. Long press the handle to reorder.</string>
-    <string name="library_drag_to_reorder">Long press and drag to reorder apps</string>
+    <string name="library_subtitle">A home for the apps you make. Long press an app to reorder.</string>
+    <string name="library_move_up">Move app up</string>
+    <string name="library_move_down">Move app down</string>
     <string name="library_reorder_failed">Could not save app order</string>
+    <string name="library_configure_save_failed">Could not save app configuration. Your changes are still available to retry.</string>
     <string name="library_new">New app</string>
     <string name="library_import">Import</string>
     <string name="library_import_zip">ZIP file</string>
@@ -123,7 +123,7 @@
     <string name="library_imported_app">Imported %1$s</string>
     <string name="library_open">Open</string>
     <string name="library_tap_to_open">Tap card to open</string>
-    <string name="save_and_install">Save &amp; Install</string>
+    <string name="library_configure">Configure app</string>
     <string name="library_install">Add to home screen</string>
     <string name="library_delete">Delete app</string>
     <string name="library_install_app">Install %1$s</string>
@@ -141,10 +141,7 @@
     <string name="settings_history_title">Preserved history per app</string>
     <string name="settings_history_desc">Maximum saved versions for each app. The initial version is always preserved. A lower limit takes effect when the next version is saved.</string>
     <string name="settings_history_saved">History limit updated for all apps</string>
-    <string name="library_rename">Rename</string>
-    <string name="library_rename_title">Rename app</string>
     <string name="library_name_label">App name</string>
     <string name="library_name_required">Enter an app name</string>
-    <string name="library_rename_failed">Could not rename app. Please try again.</string>
     <string name="action_update_app">Update app</string>
 </resources>

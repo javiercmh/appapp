@@ -2,17 +2,16 @@ package com.wynh.appapp
 
 import android.Manifest
 import android.app.Dialog
-import android.content.ClipData
 import android.os.Build
 import android.view.ViewGroup
-import android.view.DragEvent
+import android.view.MotionEvent
+import android.graphics.BitmapFactory
 import android.widget.TextView
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.google.android.material.button.MaterialButton
 import com.wynh.appapp.settings.AppSettingsManager
 import android.content.Intent
-import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
@@ -33,6 +32,11 @@ import com.wynh.appapp.bridge.NativeStorageBridge
 import com.wynh.appapp.workspace.SubappRecord
 import com.wynh.appapp.workspace.SubappRepository
 import com.wynh.appapp.workspace.WorkspaceManager
+import com.wynh.appapp.workspace.AppIdentityManager
+import com.wynh.appapp.editor.ImageCropManager
+import android.graphics.Bitmap
+import android.widget.EditText
+import android.widget.ImageView
 import org.json.JSONObject
 
 class SubappLibraryActivity : AppCompatActivity() {
@@ -52,6 +56,29 @@ class SubappLibraryActivity : AppCompatActivity() {
     }
     private var rowsReady = false
     private val displayedRecords = mutableListOf<SubappRecord>()
+    private var configuringRecord: SubappRecord? = null
+    private var pendingConfigIcon: ByteArray? = null
+    private var resetConfigIcon = false
+    private var configNameDraft = ""
+    private var configDescriptionDraft = ""
+    private var hasConfigDraft = false
+    private var configNameInput: EditText? = null
+    private var configDescriptionInput: EditText? = null
+    private var configIconPreview: ImageView? = null
+    private var reorderView: View? = null
+    private var reorderStartRawY = 0f
+    private var reorderStartTop = 0f
+    private var reorderOriginal = emptyList<SubappRecord>()
+    private var reorderTouchRawY = 0f
+    private var reorderTargetIndex = -1
+    private val pickConfigIcon = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        val record = configuringRecord
+        if (uri != null && record != null) ImageCropManager.openCropper(this, uri) { bitmap ->
+            pendingConfigIcon = bitmapToPng(bitmap)
+            resetConfigIcon = false
+            refreshConfigIconPreview(record)
+        }
+    }
     private val importLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) importApp(uri)
     }
@@ -61,6 +88,26 @@ class SubappLibraryActivity : AppCompatActivity() {
         repository = SubappRepository(this)
         repository.ensureMigrated()
         showLibrary()
+        if (savedInstanceState != null) {
+            val id = savedInstanceState.getString("config_record_id")
+            configuringRecord = id?.let(repository::resolve)
+            pendingConfigIcon = savedInstanceState.getByteArray("config_icon")
+            resetConfigIcon = savedInstanceState.getBoolean("config_reset_icon")
+            configNameDraft = savedInstanceState.getString("config_name").orEmpty()
+            configDescriptionDraft = savedInstanceState.getString("config_description").orEmpty()
+            hasConfigDraft = savedInstanceState.getBoolean("config_has_draft")
+            configuringRecord?.let(::showConfigure)
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        configuringRecord?.let { outState.putString("config_record_id", it.id) }
+        outState.putByteArray("config_icon", pendingConfigIcon)
+        outState.putBoolean("config_reset_icon", resetConfigIcon)
+        outState.putString("config_name", configNameInput?.text?.toString() ?: configNameDraft)
+        outState.putString("config_description", configDescriptionInput?.text?.toString() ?: configDescriptionDraft)
+        outState.putBoolean("config_has_draft", configuringRecord != null)
+        super.onSaveInstanceState(outState)
     }
 
     override fun onResume() {
@@ -229,23 +276,43 @@ class SubappLibraryActivity : AppCompatActivity() {
             else row.appIcon.setImageResource(R.mipmap.ic_launcher_round)
             row.appName.text = name
             row.appDescription.text = manifest.optString("description").ifBlank { getString(R.string.library_app_fallback) }
-            row.appDragHandle.contentDescription = getString(R.string.library_drag_to_reorder)
-            row.appDragHandle.setOnLongClickListener { handle ->
-                val clip = ClipData.newPlainText("subapp-id", record.id)
-                val started = handle.startDragAndDrop(clip, View.DragShadowBuilder(row.appCard), row.appCard, 0)
-                if (started) row.appCard.alpha = 0.65f
-                started
-            }
-            row.appCard.setOnDragListener(::handleReorderDrag)
             row.editApp.contentDescription = getString(R.string.library_edit_app, name)
             row.appCard.contentDescription = getString(R.string.library_open_app, name)
             row.appCard.setOnClickListener { open(record) }
+            val beginReorder = Runnable { startReorder(row.root) }
+            row.appCard.setOnTouchListener { view, event ->
+                if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                    lastTouchRawY = event.rawY
+                    view.postDelayed(beginReorder, android.view.ViewConfiguration.getLongPressTimeout().toLong())
+                    return@setOnTouchListener false
+                }
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_MOVE -> {
+                        if (reorderView !== row.root) {
+                            val slop = android.view.ViewConfiguration.get(this).scaledTouchSlop
+                            if (kotlin.math.abs(event.rawY - lastTouchRawY) > slop) view.removeCallbacks(beginReorder)
+                            return@setOnTouchListener false
+                        }
+                        reorderTouchRawY = event.rawY
+                        moveReorderingCard()
+                        true
+                    }
+                    MotionEvent.ACTION_UP -> {
+                        view.removeCallbacks(beginReorder)
+                        if (reorderView === row.root) { finishReorder(commit = true); true } else false
+                    }
+                    MotionEvent.ACTION_CANCEL -> {
+                        view.removeCallbacks(beginReorder)
+                        if (reorderView === row.root) { finishReorder(commit = false); true } else false
+                    }
+                    else -> true
+                }
+            }
             row.editApp.setOnClickListener { edit(record) }
             row.installApp.contentDescription = getString(R.string.library_install_app, name)
             row.installApp.setOnClickListener {
-                startActivity(Intent(this, MainActivity::class.java)
-                    .putExtra(MainActivity.EXTRA_SUBAPP_ID, record.id)
-                    .putExtra(MainActivity.EXTRA_OPEN_APP_CONFIG, true))
+                val requested = AppIdentityManager(this, record).requestInstall()
+                if (!requested) Toast.makeText(this, R.string.shortcut_request_failed, Toast.LENGTH_LONG).show()
             }
             row.appMenu.contentDescription = getString(R.string.library_menu, name)
             row.appMenu.setOnClickListener { anchor ->
@@ -263,71 +330,114 @@ class SubappLibraryActivity : AppCompatActivity() {
                     popup.dismiss()
                     confirmDelete(record, name)
                 }
-                content.findViewById<View>(R.id.rename_app).setOnClickListener {
+                content.findViewById<View>(R.id.configure_app).setOnClickListener {
                     popup.dismiss()
-                    showRename(record, name)
+                    showConfigure(record)
                 }
                 popup.showAsDropDown(anchor, -resources.getDimensionPixelSize(R.dimen.library_actions_popup_width) + anchor.width, 0)
             }
             binding.appList.addView(row.root)
         }
-        binding.appList.setOnDragListener(::handleReorderDrag)
+        for (i in 0 until binding.appList.childCount) addReorderAccessibility(binding.appList.getChildAt(i))
     }
 
-    private fun handleReorderDrag(target: View, event: DragEvent): Boolean {
-        val source = event.localState as? View ?: return false
-        when (event.action) {
-            DragEvent.ACTION_DRAG_STARTED -> return source.parent === binding.appList
-            DragEvent.ACTION_DRAG_ENTERED -> {
-                if (target is com.google.android.material.card.MaterialCardView && target !== source) {
-                    target.strokeWidth = (2 * resources.displayMetrics.density).toInt()
-                    target.strokeColor = ContextCompat.getColor(this, R.color.primary)
+    private fun startReorder(card: View): Boolean {
+        if (displayedRecords.size < 2) return false
+        reorderView = card
+        reorderOriginal = displayedRecords.toList()
+        reorderStartRawY = lastTouchRawY
+        reorderStartTop = card.top.toFloat()
+        reorderTouchRawY = reorderStartRawY
+        reorderTargetIndex = binding.appList.indexOfChild(card)
+        card.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+        card.parent?.requestDisallowInterceptTouchEvent(true)
+        card.elevation = resources.displayMetrics.density * 12
+        card.alpha = 0.94f
+        return true
+    }
+
+    private var lastTouchRawY = 0f
+
+    private fun moveReorderingCard() {
+        val card = reorderView ?: return
+        val desiredTop = reorderStartTop + reorderTouchRawY - reorderStartRawY
+        card.translationY = desiredTop - card.top
+        val center = desiredTop + card.height / 2f
+        val current = binding.appList.indexOfChild(card)
+        val target = (0 until binding.appList.childCount).firstOrNull { index ->
+            index != current && center < binding.appList.getChildAt(index).top + binding.appList.getChildAt(index).height / 2f
+        } ?: (binding.appList.childCount - 1)
+        if (target >= 0) {
+            reorderTargetIndex = target
+            val gap = card.height + (card.layoutParams as? ViewGroup.MarginLayoutParams)?.bottomMargin.orZero()
+            for (index in 0 until binding.appList.childCount) {
+                if (index == current) continue
+                val shift = when {
+                    target > current && index in (current + 1)..target -> -gap.toFloat()
+                    target < current && index in target until current -> gap.toFloat()
+                    else -> 0f
                 }
-                return true
-            }
-            DragEvent.ACTION_DRAG_EXITED -> {
-                if (target is com.google.android.material.card.MaterialCardView) target.strokeWidth = 0
-                return true
-            }
-            DragEvent.ACTION_DROP -> {
-                val from = binding.appList.indexOfChild(source)
-                if (from < 0) return true
-                val insertionIndex = if (target === binding.appList) {
-                    (0 until binding.appList.childCount).firstOrNull { index ->
-                        val child = binding.appList.getChildAt(index)
-                        event.y < child.top + child.height / 2f
-                    } ?: binding.appList.childCount
-                } else {
-                    val targetIndex = binding.appList.indexOfChild(target)
-                    if (targetIndex < 0) return true
-                    targetIndex + if (event.y >= target.height / 2f) 1 else 0
-                }
-                val to = (insertionIndex - if (from < insertionIndex) 1 else 0)
-                    .coerceIn(0, displayedRecords.lastIndex)
-                if (from != to) {
-                    val movedRecord = displayedRecords.removeAt(from)
-                    displayedRecords.add(to, movedRecord)
-                    binding.appList.removeViewAt(from)
-                    binding.appList.addView(source, to)
-                    runCatching { repository.reorder(displayedRecords.map { it.id }) }
-                        .onFailure {
-                            displayedRecords.removeAt(to)
-                            displayedRecords.add(from, movedRecord)
-                            binding.appList.removeView(source)
-                            binding.appList.addView(source, from)
-                            Toast.makeText(this, R.string.library_reorder_failed, Toast.LENGTH_SHORT).show()
-                        }
-                }
-                return true
-            }
-            DragEvent.ACTION_DRAG_ENDED -> {
-                source.alpha = 1f
-                for (index in 0 until binding.appList.childCount) {
-                    (binding.appList.getChildAt(index) as? com.google.android.material.card.MaterialCardView)?.strokeWidth = 0
-                }
-                return true
+                binding.appList.getChildAt(index).animate().translationY(shift).setDuration(120).start()
             }
         }
+        val scroll = binding.root.findViewById<androidx.core.widget.NestedScrollView>(R.id.library_scroll)
+        if (scroll != null) {
+            val edge = resources.displayMetrics.density * 72
+            val location = IntArray(2)
+            scroll.getLocationOnScreen(location)
+            when {
+                reorderTouchRawY < location[1] + edge -> scroll.scrollBy(0, -24)
+                reorderTouchRawY > location[1] + scroll.height - edge -> scroll.scrollBy(0, 24)
+            }
+        }
+    }
+
+    private fun finishReorder(commit: Boolean) {
+        val card = reorderView ?: return
+        val from = binding.appList.indexOfChild(card)
+        val target = reorderTargetIndex.coerceIn(0, displayedRecords.lastIndex)
+        for (index in 0 until binding.appList.childCount) {
+            binding.appList.getChildAt(index).animate().cancel()
+            binding.appList.getChildAt(index).translationY = 0f
+        }
+        card.translationY = 0f
+        card.elevation = 0f
+        card.alpha = 1f
+        card.parent?.requestDisallowInterceptTouchEvent(false)
+        reorderView = null
+        if (!commit || from < 0 || target == from) return
+        android.transition.TransitionManager.beginDelayedTransition(binding.appList)
+        binding.appList.removeView(card)
+        binding.appList.addView(card, target)
+        val moved = displayedRecords.removeAt(from)
+        displayedRecords.add(target, moved)
+        runCatching { repository.reorder(displayedRecords.map { it.id }) }.onFailure {
+            displayedRecords.clear()
+            displayedRecords.addAll(reorderOriginal)
+            refreshRows()
+            Toast.makeText(this, R.string.library_reorder_failed, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun Int?.orZero(): Int = this ?: 0
+
+    private fun addReorderAccessibility(card: View) {
+        androidx.core.view.ViewCompat.addAccessibilityAction(card, getString(R.string.library_move_up)) { view, _ -> moveByAccessibility(view, -1) }
+        androidx.core.view.ViewCompat.addAccessibilityAction(card, getString(R.string.library_move_down)) { view, _ -> moveByAccessibility(view, 1) }
+    }
+
+    private fun moveByAccessibility(card: View, delta: Int): Boolean {
+        val from = binding.appList.indexOfChild(card)
+        val to = (from + delta).coerceIn(0, displayedRecords.lastIndex)
+        if (from == to) return false
+        val item = displayedRecords.removeAt(from)
+        displayedRecords.add(to, item)
+        runCatching { repository.reorder(displayedRecords.map { it.id }) }.onFailure {
+            displayedRecords.removeAt(to); displayedRecords.add(from, item)
+            Toast.makeText(this, R.string.library_reorder_failed, Toast.LENGTH_SHORT).show()
+            return false
+        }
+        refreshRows()
         return true
     }
 
@@ -343,53 +453,100 @@ class SubappLibraryActivity : AppCompatActivity() {
         startActivity(Intent(this, MainActivity::class.java).putExtra(MainActivity.EXTRA_SUBAPP_ID, record.id))
     }
 
-    private fun showRename(record: SubappRecord, name: String) {
-        val content = com.wynh.appapp.databinding.DialogLibraryRenameBinding.inflate(layoutInflater)
+    private fun showConfigure(record: SubappRecord) {
+        val restoringDraft = hasConfigDraft
+        configuringRecord = record
+        val content = layoutInflater.inflate(R.layout.dialog_app_config, null)
         val dialog = Dialog(this)
-        dialog.setContentView(content.root)
+        dialog.setContentView(content)
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-        content.renameName.setText(name)
-        content.renameName.selectAll()
-        content.renameClose.setOnClickListener { dialog.dismiss() }
-        content.renameCancel.setOnClickListener { dialog.dismiss() }
-        val save = {
-            val newName = content.renameName.text.toString().trim()
+        val identity = AppIdentityManager(this, record)
+        val existing = identity.load()
+        val name = content.findViewById<EditText>(R.id.config_input_app_name)
+        val description = content.findViewById<EditText>(R.id.config_input_app_desc)
+        val iconPreview = content.findViewById<ImageView>(R.id.config_app_icon_preview)
+        configNameInput = name
+        configDescriptionInput = description
+        configIconPreview = iconPreview
+        name.setText(if (restoringDraft) configNameDraft else existing.name)
+        description.setText(if (restoringDraft) configDescriptionDraft else existing.description)
+        hasConfigDraft = true
+        refreshConfigIconPreview(record)
+        content.findViewById<MaterialButton>(R.id.config_btn_pick_icon).setOnClickListener { pickConfigIcon.launch("image/*") }
+        content.findViewById<MaterialButton>(R.id.config_btn_reset_icon).setOnClickListener {
+            pendingConfigIcon = null
+            resetConfigIcon = true
+            refreshConfigIconPreview(record)
+        }
+        content.findViewById<MaterialButton>(R.id.config_btn_cancel).setOnClickListener {
+            clearConfigDraft()
+            dialog.dismiss()
+        }
+        content.findViewById<MaterialButton>(R.id.config_btn_save).setOnClickListener {
+            val newName = name.text.toString().trim()
             if (newName.isBlank()) {
-                content.renameNameLayout.error = getString(R.string.library_name_required)
+                name.error = getString(R.string.library_name_required)
+                return@setOnClickListener
+            }
+            name.error = null
+            val iconChange = when {
+                resetConfigIcon -> AppIdentityManager.IconChange.Reset
+                pendingConfigIcon != null -> AppIdentityManager.IconChange.Replace(pendingConfigIcon!!)
+                else -> AppIdentityManager.IconChange.Keep
+            }
+            if (identity.save(newName, description.text.toString().trim(), iconChange)) {
+                identity.refreshPinnedShortcut()
+                clearConfigDraft()
+                dialog.dismiss()
+                refreshRows()
+                Toast.makeText(this, R.string.config_saved_toast, Toast.LENGTH_SHORT).show()
             } else {
-                val saved = runCatching {
-                    val manager = WorkspaceManager(this, workspaceDir = record.workspaceDir)
-                    val manifest = JSONObject(manager.readFile("manifest.json"))
-                    manifest.put("name", newName)
-                    manager.writeFile("manifest.json", manifest.toString(2))
-                }.getOrDefault(false)
-                if (saved) {
-                    dialog.dismiss()
-                    refreshRows()
-                } else {
-                    content.renameNameLayout.error = getString(R.string.library_rename_failed)
-                }
+                Toast.makeText(this, R.string.library_configure_save_failed, Toast.LENGTH_LONG).show()
             }
         }
-        content.renameSave.setOnClickListener { save() }
-        content.renameName.setOnEditorActionListener { _, action, _ ->
-            if (action == android.view.inputmethod.EditorInfo.IME_ACTION_DONE) {
-                save()
-                true
-            } else false
-        }
+        dialog.setOnCancelListener { clearConfigDraft() }
+        dialog.setOnDismissListener { if (configuringRecord != null) clearConfigDraft() }
         dialog.show()
         dialog.window?.setLayout(
-            minOf((resources.displayMetrics.widthPixels * 0.94).toInt(), (resources.displayMetrics.density * 480).toInt()),
+            minOf((resources.displayMetrics.widthPixels * 0.94).toInt(), (resources.displayMetrics.density * 520).toInt()),
             ViewGroup.LayoutParams.WRAP_CONTENT
         )
         dialog.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
-        content.renameName.requestFocus()
+    }
+
+    private fun refreshConfigIconPreview(record: SubappRecord) {
+        val preview = configIconPreview ?: return
+        val bitmap = when {
+            resetConfigIcon -> null
+            pendingConfigIcon != null -> BitmapFactory.decodeByteArray(pendingConfigIcon, 0, pendingConfigIcon!!.size)
+            else -> AppIdentityManager(this, record).load().iconPath?.let { path ->
+                val file = WorkspaceManager(this, workspaceDir = record.workspaceDir).getFile(path)
+                file.takeIf { it.isFile }?.let { BitmapFactory.decodeFile(it.absolutePath) }
+            }
+        }
+        if (bitmap == null) preview.setImageResource(R.mipmap.ic_launcher_round) else preview.setImageBitmap(bitmap)
+    }
+
+    private fun clearConfigDraft() {
+        configuringRecord = null
+        pendingConfigIcon = null
+        resetConfigIcon = false
+        configNameDraft = ""
+        configDescriptionDraft = ""
+        hasConfigDraft = false
+        configNameInput = null
+        configDescriptionInput = null
+        configIconPreview = null
+    }
+
+    private fun bitmapToPng(bitmap: Bitmap): ByteArray = java.io.ByteArrayOutputStream().use { out ->
+        bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+        out.toByteArray()
     }
 
     private fun confirmDelete(record: SubappRecord, name: String) {
         AlertDialog.Builder(this).setTitle("Delete $name?")
-            .setMessage("Its files, data, history, and home-screen shortcut will be removed.")
+            .setMessage("Its files, data, and history will be removed. App² will disable its shortcut.")
             .setNegativeButton("Cancel", null).setPositiveButton("Delete") { _, _ ->
                 ShortcutManagerCompat.disableShortcuts(this, listOf("appapp_subapp_${record.id}"), "App no longer available")
                 SubappSessionRegistry.close(record.id)

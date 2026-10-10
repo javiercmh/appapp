@@ -9,6 +9,34 @@ import java.io.File
 
 @RunWith(AndroidJUnit4::class)
 class UpdaterDeviceTest {
+    @Test fun historyTracksUpdatesEditsAndRestoreAcrossRecreation() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val root = File(context.cacheDir, "history-regression-test")
+        root.deleteRecursively()
+        val workspace = File(root, "workspace").apply { mkdirs() }
+        File(workspace, "index.html").writeText("original")
+        val manager = com.wynh.appapp.workspace.WorkspaceManager(context, workspaceDir = workspace)
+        val history = com.wynh.appapp.workspace.WorkspaceHistoryManager(context, appDirectory = root)
+        try {
+            history.ensureInitialVersion(manager)
+            val before = history.saveSnapshot(manager, "Before GitHub update")!!
+            manager.writeFile("index.html", "publisher update")
+            val updated = history.saveSnapshot(manager, "GitHub update 2")!!
+            manager.writeFile("app.log", "new runtime output")
+            assertEquals(updated.id, history.saveSnapshot(manager, "Run")!!.id)
+            manager.writeFile("index.html", "manual edit")
+            history.saveSnapshot(manager, "Edited index.html")!!
+            val recreated = com.wynh.appapp.workspace.WorkspaceHistoryManager(context, appDirectory = root)
+            assertEquals(4, recreated.getSnapshots().size)
+            assertTrue(recreated.restoreSnapshot(before.id, manager))
+            assertEquals("original", manager.readFile("index.html"))
+            assertEquals("new runtime output", manager.readFile("app.log"))
+            assertTrue(recreated.restoreSnapshot(updated.id, manager))
+            assertEquals("publisher update", manager.readFile("index.html"))
+            assertTrue(recreated.getSnapshots().any { it.files["index.html"] == "manual edit" })
+        } finally { root.deleteRecursively() }
+    }
+
     @Test fun invalidZipImportsDoNotReplaceWorkspace() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val root = File(context.cacheDir, "zip-device-test")
