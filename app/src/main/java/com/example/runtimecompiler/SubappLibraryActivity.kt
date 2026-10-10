@@ -88,7 +88,7 @@ class SubappLibraryActivity : AppCompatActivity() {
         }
         binding.newApp.setOnClickListener { edit(repository.createStarter()) }
         binding.importApp.setOnClickListener {
-            importLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "*/*"))
+            showImportOptions()
         }
         rowsReady = true
         refreshRows()
@@ -285,5 +285,54 @@ class SubappLibraryActivity : AppCompatActivity() {
             ).show()
         }
             .onFailure { repository.delete(record.id); Toast.makeText(this, "Import failed: ${it.message}", Toast.LENGTH_LONG).show() }
+    }
+
+    private fun showImportOptions() {
+        val content = com.example.runtimecompiler.databinding.DialogLibraryImportBinding.inflate(layoutInflater)
+        val dialog = Dialog(this)
+        dialog.setContentView(content.root)
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        content.importClose.setOnClickListener { dialog.dismiss() }
+        content.importZip.setOnClickListener {
+            dialog.dismiss()
+            importLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "*/*"))
+        }
+        content.importGithub.setOnClickListener {
+            val url = content.githubUrl.text.toString().trim()
+            if (url.isBlank()) {
+                content.githubUrlLayout.error = getString(R.string.library_github_required)
+            } else {
+                dialog.dismiss()
+                importFromGitHub(url)
+            }
+        }
+        dialog.show()
+        dialog.window?.setLayout(
+            minOf((resources.displayMetrics.widthPixels * 0.94).toInt(), (resources.displayMetrics.density * 480).toInt()),
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+        dialog.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+    }
+
+    private fun importFromGitHub(url: String) {
+        binding.importApp.isEnabled = false
+        Toast.makeText(this, R.string.library_github_downloading, Toast.LENGTH_SHORT).show()
+        Thread {
+            val result = com.example.runtimecompiler.workspace.GitHubFolderImporter.download(this, url)
+            runOnUiThread {
+                binding.importApp.isEnabled = true
+                result.onSuccess { folder ->
+                    val record = runCatching { repository.createImportedFrom(folder) }
+                    folder.deleteRecursively()
+                    record.onSuccess {
+                        refreshRows()
+                        val manager = WorkspaceManager(this, workspaceDir = it.workspaceDir)
+                        val name = runCatching { JSONObject(manager.readFile("manifest.json")).optString("name") }
+                            .getOrNull().orEmpty().ifBlank { getString(R.string.library_untitled) }
+                        Toast.makeText(this, getString(R.string.library_imported_app, name), Toast.LENGTH_SHORT).show()
+                    }.onFailure { Toast.makeText(this, "Import failed: ${it.message}", Toast.LENGTH_LONG).show() }
+                }.onFailure { Toast.makeText(this, "GitHub import failed: ${it.message}", Toast.LENGTH_LONG).show() }
+            }
+        }.start()
     }
 }
