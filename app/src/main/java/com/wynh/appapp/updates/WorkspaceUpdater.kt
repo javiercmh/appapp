@@ -17,6 +17,14 @@ class WorkspaceUpdater(private val directory: File) {
 
     fun installed(): InstalledUpdate? = if (state.isFile) gson.fromJson(state.readText(), InstalledUpdate::class.java) else null
 
+    /** Compares publisher content, independently of local edits and unrelated repository commits. */
+    fun publisherUnchanged(pkg: UpdatePackage, files: File): Boolean {
+        val old = installed() ?: return false
+        return old.appId == pkg.appId && old.source == pkg.source &&
+            old.version == pkg.version && old.seeds == pkg.seeds &&
+            old.hashes == pkg.managed.associateWith { digest(File(files, it)) }
+    }
+
     fun preview(pkg: UpdatePackage, files: File): UpdatePreview {
         val old = installed()
         require(old == null || (old.appId == pkg.appId && old.source == pkg.source)) { "Publisher identity or GitHub source does not match this installation" }
@@ -52,30 +60,6 @@ class WorkspaceUpdater(private val directory: File) {
         pkg.seeds.forEach { if (!File(next, it).exists()) copyManaged(files, next, it) }
         verifyPreserved(pkg.managed + preview.removed.toSet())
         commitWorkspace(InstalledUpdate(pkg.appId, pkg.version, pkg.source, commit, hashes, pkg.seeds))
-    }
-
-    /** Restores code only; records created after the update remain in the live workspace. */
-    fun rollback() = synchronized(WorkspaceLocks.forWorkspace(workspace)) {
-        recover()
-        val previousFile = File(backup, "state.json")
-        require(previousFile.isFile) { "Code rollback is available after a tracked update; first adoption has a full recovery backup only" }
-        val previous = gson.fromJson(previousFile.readText(), InstalledUpdate::class.java)
-        val current = installed() ?: error("No installed update")
-        require(previous.appId == current.appId && previous.source == current.source)
-        require(previous.hashes.keys.intersect(current.seeds).isEmpty()) { "File ownership changed; rollback would replace current user files" }
-        val restore = File(directory, "update-rollback-source")
-        restore.deleteRecursively()
-        File(backup, "workspace").copyRecursively(restore)
-        previous.hashes.keys.forEach { path -> require(File(restore, safePath(path)).isFile) { "Backup code is missing" } }
-        val prior = previous.copy(hashes = previous.hashes.toMap())
-        try {
-            prepareBackup()
-            workspace.copyRecursively(next)
-            (current.hashes.keys - previous.hashes.keys).forEach { check(!File(next, safePath(it)).exists() || File(next, it).delete()) }
-            previous.hashes.keys.forEach { copyManaged(restore, next, it) }
-            verifyPreserved(current.hashes.keys + previous.hashes.keys)
-            commitWorkspace(prior)
-        } finally { restore.deleteRecursively() }
     }
 
     private fun copyManaged(source: File, target: File, path: String) {

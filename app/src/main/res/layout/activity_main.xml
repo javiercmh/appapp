@@ -70,7 +70,7 @@
                     android:layout_marginStart="4dp"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:contentDescription="@string/action_package_share"
-                    android:src="@drawable/ic_import_export"
+                    android:src="@drawable/ic_share"
                     app:tint="@color/accent_blue" />
 
                 <!-- Edit Code Studio Button (Plain </> Icon) -->
