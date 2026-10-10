@@ -114,4 +114,21 @@
     <string name="settings_reset_confirm_action">Reset Everything</string>
     <string name="settings_reset_success">App² has been reset to factory defaults</string>
     <string name="template_upgrade_available">A new starter template is available. Your files were left untouched — load it from &lt;/&gt; → History → Official Starter Template.</string>
+    <string name="library_title">Your apps</string>
+    <string name="library_subtitle">A home for the apps you make.</string>
+    <string name="library_new">New app</string>
+    <string name="library_import">Import ZIP</string>
+    <string name="library_open">Open</string>
+    <string name="library_install">Add to home screen</string>
+    <string name="library_delete">Delete app</string>
+    <string name="library_menu">More options for %1$s</string>
+    <string name="library_open_app">Open %1$s</string>
+    <string name="library_edit_app">Edit %1$s</string>
+    <string name="library_untitled">Untitled app</string>
+    <string name="library_app_fallback">Personal app</string>
+    <string name="library_empty">Your first app starts here. Create a starter app or import a ZIP to get going.</string>
+    <plurals name="library_count">
+        <item quantity="one">%d app</item>
+        <item quantity="other">%d apps</item>
+    </plurals>
 </resources>
