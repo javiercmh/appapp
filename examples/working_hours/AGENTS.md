@@ -107,3 +107,23 @@ The output visualization strictly tracks and displays these exact core fields in
 7. **Isolate Logic in `store.js`**: DOM manipulation belongs in `ui.js`; math and JSON file reads/writes belong in `store.js`.
 8. **No External Dependencies**: Keep everything vanilla HTML5, modern CSS, and ES Modules (`type="module"`).
 9. **Update `manifest.json`**: Always add newly created files to the `"files"` array in `manifest.json`.
+
+### Device Testing & Source Synchronization
+
+The tracked source for Working Hours is `examples/working_hours/`. An installed App² app runs a separate private copy from `filesDir/workspace/`; editing this example does not update that copy, and restarting App² alone does not sync it. This separation caused a recent UI fix to appear ineffective because the device still had the old `js/app.js`.
+
+For an Android device check:
+
+1. Confirm the intended device with `adb devices -l`. If more than one device is listed, pass `-s <serial>` to every ADB command. Confirm App² is installed and debuggable (`com.example.runtimecompiler`; `adb shell run-as com.example.runtimecompiler pwd` should succeed).
+2. Copy each changed app-owned file from `examples/working_hours/` to the same relative path below the returned app data directory's `files/workspace/`. For example, to sync `js/app.js` on a Linux development host:
+
+   ```sh
+   base64 -w 0 examples/working_hours/js/app.js \
+     | adb shell 'run-as com.example.runtimecompiler sh -c "base64 -d > /data/user/0/com.example.runtimecompiler/files/workspace/js/app.js"'
+   ```
+
+   Replace the source and target relative paths for other changed code/assets. Do not copy `data/`, `app.log`, or user-created files; those belong to the installed workspace and must survive code testing. The target path above is for Android user 0; use the app data path printed by `run-as ... pwd` if it differs.
+3. Verify the copy before testing by comparing `sha256sum examples/working_hours/<path>` with `adb exec-out run-as com.example.runtimecompiler cat files/workspace/<path> | sha256sum`. Matching hashes are the precondition for claiming the device ran the current source.
+4. Run `adb shell am force-stop com.example.runtimecompiler`, then launch App² again. This clears the live WebView and reloads the workspace files. Exercise the relevant behavior and record the device/model and checks actually completed; do not treat a local browser check or an old installed workspace as Android validation.
+
+Use `python3 examples/working_hours/dev_server.py` for quick browser checks against the tracked source. Browser checks do not cover the Android WebView, bridge, keyboard, or native permission flows; use the device procedure for those.
