@@ -31,16 +31,6 @@
                 android:orientation="horizontal"
                 android:paddingEnd="12dp">
 
-                <!-- Settings Button (to the left of refresh button) -->
-                <ImageButton
-                    android:id="@+id/btn_settings"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:contentDescription="@string/action_settings"
-                    android:src="@drawable/ic_settings"
-                    app:tint="@color/on_surface_muted" />
-
                 <!-- Refresh / Clear Cache Button -->
                 <ImageButton
                     android:id="@+id/btn_reset"
@@ -63,23 +53,6 @@
                     android:src="@drawable/ic_code"
                     app:tint="@color/accent_blue" />
 
-                <!-- Install / Add to Home Screen Button (Pill Button) -->
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_deploy"
-                    style="@style/Widget.Material3.Button.TonalButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="38dp"
-                    android:layout_marginStart="8dp"
-                    android:paddingHorizontal="14dp"
-                    android:text="@string/action_install"
-                    android:textColor="@color/on_surface"
-                    android:textSize="13sp"
-                    android:textStyle="bold"
-                    app:backgroundTint="@color/surface_variant"
-                    app:icon="@drawable/ic_install_mobile"
-                    app:iconPadding="6dp"
-                    app:iconSize="16dp"
-                    app:iconTint="@color/accent_blue" />
             </LinearLayout>
         </com.google.android.material.appbar.MaterialToolbar>
     </com.google.android.material.appbar.AppBarLayout>

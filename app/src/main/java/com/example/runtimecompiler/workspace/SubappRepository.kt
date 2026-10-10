@@ -51,6 +51,8 @@ class SubappRepository(private val context: Context) {
         val workspace = WorkspaceManager(context, workspaceDir = File(dir, "workspace"))
         check(workspace.resetWorkspace()) { "Could not initialize starter app" }
         register(id)
+        WorkspaceHistoryManager(context, appDirectory = dir)
+            .captureInitialVersion(workspace, "Starter Template")
         return SubappRecord(id, dir)
     }
 
@@ -70,6 +72,9 @@ class SubappRepository(private val context: Context) {
             }
         }
         register(id)
+        val importedWorkspace = WorkspaceManager(context, workspaceDir = destination)
+        WorkspaceHistoryManager(context, appDirectory = dir)
+            .captureInitialVersion(importedWorkspace, "Imported App")
         return SubappRecord(id, dir)
     }
 

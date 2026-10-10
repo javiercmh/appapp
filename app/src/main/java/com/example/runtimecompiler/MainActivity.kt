@@ -158,8 +158,6 @@ class MainActivity : AppCompatActivity() {
                     FileOutputStream(iconFile).use { out ->
                         croppedBitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
                     }
-                    val currentConfig = loadAppConfig()
-                    saveAppConfig(currentConfig.copy(iconFileName = "icon.png"))
                     appendLog("[Workspace] Updated app icon: icon.png")
                     Toast.makeText(this, "Custom icon updated", Toast.LENGTH_SHORT).show()
                     onIconUpdatedCallback?.invoke()
@@ -353,12 +351,8 @@ class MainActivity : AppCompatActivity() {
 
         // Initialize Workspace History Manager
         historyManager = WorkspaceHistoryManager(this, { msg -> runOnUiThread { appendLog(msg) } }, subapp.directory)
+        historyManager.ensureInitialVersion(workspaceManager)
         binding.toolbar.title = loadAppConfig().name
-
-        // Save initial snapshot if none exists
-        if (historyManager.getSnapshots().isEmpty()) {
-            historyManager.saveSnapshot(workspaceManager, "Starter Template")
-        }
 
         // Initialize Native Storage & State Bridge
         storageBridge = NativeStorageBridge(
@@ -377,6 +371,16 @@ class MainActivity : AppCompatActivity() {
         setupListeners()
         reloadApp()
         NativeStorageBridge.reschedulePersistedAlarms(this, subapp.id)
+        if (intent.getBooleanExtra(EXTRA_OPEN_SETTINGS, false)) {
+            binding.root.postDelayed({ if (!isFinishing && !isDestroyed) showSettingsDialog() }, 500)
+            intent.removeExtra(EXTRA_OPEN_SETTINGS)
+        }
+        if (intent.getBooleanExtra(EXTRA_OPEN_APP_CONFIG, false)) {
+            binding.root.postDelayed({
+                if (!isFinishing && !isDestroyed) showAppConfigDialog { deployToHomeScreen() }
+            }, 500)
+            intent.removeExtra(EXTRA_OPEN_APP_CONFIG)
+        }
 
         // Handle Back button for WebView history
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
@@ -534,19 +538,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupListeners() {
-        // App Settings Dialog
-        binding.btnSettings.setOnClickListener {
-            showSettingsDialog()
-        }
-
         // App Editor Hub Dialog
         binding.btnEditCode.setOnClickListener {
             showAppEditorDialog()
-        }
-
-        // Deploy / Add to Home Screen Pinned Shortcut
-        binding.btnDeploy.setOnClickListener {
-            deployToHomeScreen()
         }
 
         // Top Bar Refresh Button: Refresh site & clear cache
@@ -1024,15 +1018,8 @@ class MainActivity : AppCompatActivity() {
             dialog.dismiss()
         }
 
-        // Configure App Form
-        val openConfigAction = View.OnClickListener {
-            showAppConfigDialog {
-                refreshAppCard()
-                refreshFileList()
-            }
-        }
-        btnConfigureApp.setOnClickListener(openConfigAction)
-        appConfigCard.setOnClickListener(openConfigAction)
+        // The editor opens directly on project files; identity changes are available from Install.
+        appConfigCard.visibility = View.GONE
 
         // Version History
         btnHistory.setOnClickListener {
@@ -1396,15 +1383,17 @@ class MainActivity : AppCompatActivity() {
         val inputName = dialog.findViewById<EditText>(R.id.config_input_app_name)
         val inputDesc = dialog.findViewById<EditText>(R.id.config_input_app_desc)
         val btnCancel = dialog.findViewById<MaterialButton>(R.id.config_btn_cancel)
-        val btnSave = dialog.findViewById<MaterialButton>(R.id.config_btn_save)
+        val btnSaveAndInstall = dialog.findViewById<MaterialButton>(R.id.config_btn_save_and_install)
 
         val currentConfig = loadAppConfig()
+        val iconFile = workspaceManager.getFile("icon.png")
+        val originalIcon = iconFile.takeIf { it.isFile }?.readBytes()
+        var removeIconOnSave = false
         inputName.setText(currentConfig.name)
         inputDesc.setText(currentConfig.description)
 
         fun updateIconPreview() {
-            val iconFile = workspaceManager.getFile("icon.png")
-            if (iconFile.exists() && iconFile.isFile) {
+            if (!removeIconOnSave && iconFile.exists() && iconFile.isFile) {
                 try {
                     val bmp = BitmapFactory.decodeFile(iconFile.absolutePath)
                     if (bmp != null) {
@@ -1424,39 +1413,58 @@ class MainActivity : AppCompatActivity() {
 
         btnPickIcon.setOnClickListener {
             onIconUpdatedCallback = {
+                removeIconOnSave = false
                 updateIconPreview()
             }
             pickIconLauncher.launch("image/*")
         }
 
         btnResetIcon.setOnClickListener {
-            workspaceManager.deleteFile("icon.png")
-            saveAppConfig(loadAppConfig().copy(iconFileName = null))
+            removeIconOnSave = true
             updateIconPreview()
             Toast.makeText(this, "Reset to default App² logo", Toast.LENGTH_SHORT).show()
         }
 
-        btnCancel.setOnClickListener {
-            dialog.dismiss()
+        fun discardPendingIconChanges() {
+            if (originalIcon == null) workspaceManager.deleteFile("icon.png")
+            else runCatching { FileOutputStream(iconFile).use { it.write(originalIcon) } }
+            saveAppConfig(currentConfig)
         }
 
-        btnSave.setOnClickListener {
-            val newName = inputName.text.toString().trim().ifBlank { "My App" }
-            val newDesc = inputDesc.text.toString().trim().ifBlank { "On-device app built with App²" }
-            val iconExists = workspaceManager.getFile("icon.png").exists()
-
-            val updatedConfig = AppConfigData(
-                name = newName,
-                description = newDesc,
-                iconFileName = if (iconExists) "icon.png" else null
-            )
-            saveAppConfig(updatedConfig)
-            Toast.makeText(this, R.string.config_saved_toast, Toast.LENGTH_SHORT).show()
+        btnCancel.setOnClickListener {
+            discardPendingIconChanges()
             dialog.dismiss()
-            onConfigSaved()
+        }
+        dialog.setOnCancelListener { discardPendingIconChanges() }
+
+        btnSaveAndInstall?.setOnClickListener {
+            saveAppConfiguration(inputName, inputDesc, dialog, onConfigSaved, removeIcon = removeIconOnSave)
         }
 
         dialog.show()
+    }
+
+    private fun saveAppConfiguration(
+        inputName: EditText,
+        inputDesc: EditText,
+        dialog: Dialog,
+        onConfigSaved: () -> Unit,
+        removeIcon: Boolean
+    ) {
+        val newName = inputName.text.toString().trim().ifBlank { "My App" }
+        val newDesc = inputDesc.text.toString().trim().ifBlank { "On-device app built with App²" }
+        if (removeIcon) workspaceManager.deleteFile("icon.png")
+        val iconExists = workspaceManager.getFile("icon.png").exists()
+
+        val updatedConfig = AppConfigData(
+            name = newName,
+            description = newDesc,
+            iconFileName = if (iconExists) "icon.png" else null
+        )
+        saveAppConfig(updatedConfig)
+        Toast.makeText(this, R.string.config_saved_toast, Toast.LENGTH_SHORT).show()
+        dialog.dismiss()
+        onConfigSaved()
     }
 
     /**
@@ -1489,23 +1497,21 @@ class MainActivity : AppCompatActivity() {
                 val detailsView = itemView.findViewById<TextView>(R.id.history_item_details)
                 val btnRestore = itemView.findViewById<MaterialButton>(R.id.history_btn_restore)
 
-                val isStarter = snap.id == WorkspaceHistoryManager.STARTER_TEMPLATE_SNAPSHOT_ID
-                timeView.text = if (isStarter) "⭐ ${snap.formattedTime}" else snap.formattedTime
+                val isInitial = snap.id == WorkspaceHistoryManager.INITIAL_SNAPSHOT_ID
+                timeView.text = if (isInitial) "⭐ ${snap.formattedTime}" else snap.formattedTime
                 detailsView.text = "${snap.fileCount} files • ${snap.label}"
 
                 btnRestore.setOnClickListener {
-                    val title = if (isStarter) "Reset to Starter Template?" else "Revert to Snapshot?"
-                    val message = if (isStarter) {
-                        "Reset workspace to the official latest Starter Template? Your code files will be replaced. Images, including your app icon and any photos, are kept."
-                    } else {
-                        "Revert workspace to state from ${snap.formattedTime}? Your code files will be replaced. Images are kept."
-                    }
+                    val title = if (isInitial) "Restore Initial Version?" else "Revert to Snapshot?"
+                    val message = if (isInitial) {
+                        "Restore this subapp to its initial version (${snap.label})? Your code files will be replaced. Images, including your app icon and any photos, are kept."
+                    } else "Revert workspace to state from ${snap.formattedTime}? Your code files will be replaced. Images are kept."
                     MaterialAlertDialogBuilder(this)
                         .setTitle(title)
                         .setMessage(message)
-                        .setPositiveButton(if (isStarter) "Reset" else "Revert") { _, _ ->
+                        .setPositiveButton(if (isInitial) "Restore" else "Revert") { _, _ ->
                             if (historyManager.restoreSnapshot(snap.id, workspaceManager)) {
-                                val toastMsg = if (isStarter) "Reset to Official Starter Template" else "Reverted to ${snap.formattedTime}"
+                                val toastMsg = if (isInitial) "Restored initial version" else "Reverted to ${snap.formattedTime}"
                                 Toast.makeText(this, toastMsg, Toast.LENGTH_SHORT).show()
                                 dialog.dismiss()
                                 onRestored()
@@ -1717,46 +1723,7 @@ class MainActivity : AppCompatActivity() {
         )
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
 
-        // 1. Version Retention Limit Buttons
-        val btnHist2 = dialog.findViewById<MaterialButton>(R.id.settings_btn_history_2)
-        val btnHist4 = dialog.findViewById<MaterialButton>(R.id.settings_btn_history_4)
-        val btnHist6 = dialog.findViewById<MaterialButton>(R.id.settings_btn_history_6)
-        val btnHist8 = dialog.findViewById<MaterialButton>(R.id.settings_btn_history_8)
-        val btnHist10 = dialog.findViewById<MaterialButton>(R.id.settings_btn_history_10)
-
-        val historyButtons = mapOf(
-            2 to btnHist2,
-            4 to btnHist4,
-            6 to btnHist6,
-            8 to btnHist8,
-            10 to btnHist10
-        )
-
-        fun updateHistoryButtonsUI(selected: Int) {
-            historyButtons.forEach { (count, btn) ->
-                if (btn == null) return@forEach
-                if (count == selected) {
-                    btn.setBackgroundColor(ContextCompat.getColor(this, R.color.primary))
-                    btn.setTextColor(ContextCompat.getColor(this, R.color.on_primary))
-                } else {
-                    btn.setBackgroundColor(ContextCompat.getColor(this, R.color.surface_elevated))
-                    btn.setTextColor(ContextCompat.getColor(this, R.color.on_surface_muted))
-                }
-            }
-        }
-
-        updateHistoryButtonsUI(settingsManager.maxHistorySnapshots)
-
-        historyButtons.forEach { (count, btn) ->
-            btn?.setOnClickListener {
-                settingsManager.maxHistorySnapshots = count
-                historyManager.pruneToMax(count)
-                updateHistoryButtonsUI(count)
-                Toast.makeText(this, "Version history retention set to $count", Toast.LENGTH_SHORT).show()
-            }
-        }
-
-        // 2. Editor Font Size Buttons (Vertical Column)
+        // Editor Font Size Buttons (Vertical Column)
         val btnFontSmall = dialog.findViewById<MaterialButton>(R.id.settings_btn_font_small)
         val btnFontNormal = dialog.findViewById<MaterialButton>(R.id.settings_btn_font_normal)
         val btnFontLarge = dialog.findViewById<MaterialButton>(R.id.settings_btn_font_large)
@@ -1923,5 +1890,9 @@ class MainActivity : AppCompatActivity() {
         binding.webView.destroy()
     }
 
-    companion object { const val EXTRA_SUBAPP_ID = "EXTRA_SUBAPP_ID" }
+    companion object {
+        const val EXTRA_SUBAPP_ID = "EXTRA_SUBAPP_ID"
+        const val EXTRA_OPEN_SETTINGS = "EXTRA_OPEN_SETTINGS"
+        const val EXTRA_OPEN_APP_CONFIG = "EXTRA_OPEN_APP_CONFIG"
+    }
 }
