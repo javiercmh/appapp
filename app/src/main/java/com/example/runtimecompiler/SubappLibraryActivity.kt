@@ -6,7 +6,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import androidx.activity.enableEdgeToEdge
-import androidx.appcompat.widget.PopupMenu
+import android.widget.PopupWindow
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -90,22 +90,25 @@ class SubappLibraryActivity : AppCompatActivity() {
             row.appDescription.text = manifest.optString("description").ifBlank { getString(R.string.library_app_fallback) }
             row.openApp.contentDescription = getString(R.string.library_open_app, name)
             row.editApp.contentDescription = getString(R.string.library_edit_app, name)
+            row.appCard.contentDescription = getString(R.string.library_open_app, name)
+            row.appCard.setOnClickListener { open(record) }
             row.openApp.setOnClickListener { open(record) }
             row.editApp.setOnClickListener { edit(record) }
+            row.installApp.contentDescription = getString(R.string.library_install_app, name)
+            row.installApp.setOnClickListener { install(record, name, iconFile) }
             row.appMenu.contentDescription = getString(R.string.library_menu, name)
             row.appMenu.setOnClickListener { anchor ->
-                PopupMenu(this, anchor).apply {
-                    menu.add(0, 1, 0, R.string.library_install)
-                    menu.add(0, 2, 1, R.string.library_delete)
-                    setOnMenuItemClickListener { item ->
-                        when (item.itemId) {
-                            1 -> install(record, name, iconFile)
-                            2 -> confirmDelete(record, name)
-                        }
-                        true
-                    }
-                    show()
+                val content = layoutInflater.inflate(R.layout.popup_library_delete, null)
+                val popup = PopupWindow(content, resources.getDimensionPixelSize(R.dimen.library_delete_popup_width), resources.getDimensionPixelSize(R.dimen.library_delete_popup_height), true).apply {
+                    elevation = resources.getDimension(R.dimen.library_delete_popup_elevation)
+                    setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+                    isOutsideTouchable = true
                 }
+                content.setOnClickListener {
+                    popup.dismiss()
+                    confirmDelete(record, name)
+                }
+                popup.showAsDropDown(anchor, -resources.getDimensionPixelSize(R.dimen.library_delete_popup_width) + anchor.width, 0)
             }
             binding.appList.addView(row.root)
         }
