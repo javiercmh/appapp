@@ -89,13 +89,14 @@ object WorkspacePackageManager {
         context: Context,
         zipUri: Uri,
         workspaceManager: WorkspaceManager,
-        historyManager: WorkspaceHistoryManager
+        historyManager: WorkspaceHistoryManager,
+        savePreImportSnapshot: Boolean = true
     ): Result<List<String>> {
         return try {
             val inputStream = context.contentResolver.openInputStream(zipUri)
                 ?: return Result.failure(Exception("Cannot open selected file stream."))
 
-            importFromInputStream(inputStream, workspaceManager, historyManager)
+            importFromInputStream(inputStream, workspaceManager, historyManager, savePreImportSnapshot)
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -107,11 +108,12 @@ object WorkspacePackageManager {
     fun importFromInputStream(
         inputStream: InputStream,
         workspaceManager: WorkspaceManager,
-        historyManager: WorkspaceHistoryManager
+        historyManager: WorkspaceHistoryManager,
+        savePreImportSnapshot: Boolean = true
     ): Result<List<String>> {
         return try {
             // 1. Capture pre-import snapshot
-            historyManager.saveSnapshot(workspaceManager, "Pre-Import Backup")
+            if (savePreImportSnapshot) historyManager.saveSnapshot(workspaceManager, "Pre-Import Backup")
 
             val workspaceDir = workspaceManager.workspaceDir
             if (!workspaceDir.exists()) {

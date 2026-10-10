@@ -16,9 +16,7 @@ import com.example.runtimecompiler.databinding.ItemSubappBinding
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
-import androidx.core.graphics.drawable.IconCompat
 import androidx.appcompat.app.AlertDialog
 import com.example.runtimecompiler.bridge.NativeStorageBridge
 import com.example.runtimecompiler.workspace.SubappRecord
@@ -60,6 +58,16 @@ class SubappLibraryActivity : AppCompatActivity() {
             insets
         }
         ViewCompat.requestApplyInsets(binding.root)
+        binding.libraryToolbar.setOnMenuItemClickListener { item ->
+            if (item.itemId == R.id.action_settings) {
+                repository.list().firstOrNull()?.let { record ->
+                    startActivity(Intent(this, MainActivity::class.java)
+                        .putExtra(MainActivity.EXTRA_SUBAPP_ID, record.id)
+                        .putExtra(MainActivity.EXTRA_OPEN_SETTINGS, true))
+                }
+                true
+            } else false
+        }
         binding.newApp.setOnClickListener { edit(repository.createStarter()) }
         binding.importApp.setOnClickListener {
             importLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "*/*"))
@@ -88,14 +96,16 @@ class SubappLibraryActivity : AppCompatActivity() {
             else row.appIcon.setImageResource(R.mipmap.ic_launcher_round)
             row.appName.text = name
             row.appDescription.text = manifest.optString("description").ifBlank { getString(R.string.library_app_fallback) }
-            row.openApp.contentDescription = getString(R.string.library_open_app, name)
             row.editApp.contentDescription = getString(R.string.library_edit_app, name)
             row.appCard.contentDescription = getString(R.string.library_open_app, name)
             row.appCard.setOnClickListener { open(record) }
-            row.openApp.setOnClickListener { open(record) }
             row.editApp.setOnClickListener { edit(record) }
             row.installApp.contentDescription = getString(R.string.library_install_app, name)
-            row.installApp.setOnClickListener { install(record, name, iconFile) }
+            row.installApp.setOnClickListener {
+                startActivity(Intent(this, MainActivity::class.java)
+                    .putExtra(MainActivity.EXTRA_SUBAPP_ID, record.id)
+                    .putExtra(MainActivity.EXTRA_OPEN_APP_CONFIG, true))
+            }
             row.appMenu.contentDescription = getString(R.string.library_menu, name)
             row.appMenu.setOnClickListener { anchor ->
                 val content = layoutInflater.inflate(R.layout.popup_library_delete, null)
@@ -126,22 +136,6 @@ class SubappLibraryActivity : AppCompatActivity() {
         startActivity(Intent(this, MainActivity::class.java).putExtra(MainActivity.EXTRA_SUBAPP_ID, record.id))
     }
 
-    private fun install(record: SubappRecord, name: String, iconFile: java.io.File) {
-        if (!ShortcutManagerCompat.isRequestPinShortcutSupported(this)) {
-            Toast.makeText(this, R.string.shortcut_not_supported, Toast.LENGTH_LONG).show(); return
-        }
-        val icon = if (iconFile.isFile) runCatching { IconCompat.createWithBitmap(BitmapFactory.decodeFile(iconFile.absolutePath)) }.getOrNull() else null
-        val info = ShortcutInfoCompat.Builder(this, "appapp_subapp_${record.id}")
-            .setShortLabel(name.take(25)).setLongLabel(name)
-            .setIcon(icon ?: IconCompat.createWithResource(this, R.mipmap.ic_launcher_round))
-            .setIntent(Intent(this, SubappRuntimeActivity::class.java).apply {
-                action = Intent.ACTION_VIEW; data = Uri.parse("appapp://subapp/${record.id}")
-                addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT or Intent.FLAG_ACTIVITY_RETAIN_IN_RECENTS)
-            }).build()
-        ShortcutManagerCompat.requestPinShortcut(this, info, null)
-        Toast.makeText(this, getString(R.string.shortcut_requested, name), Toast.LENGTH_SHORT).show()
-    }
-
     private fun confirmDelete(record: SubappRecord, name: String) {
         AlertDialog.Builder(this).setTitle("Delete $name?")
             .setMessage("Its files, data, history, and home-screen shortcut will be removed.")
@@ -157,8 +151,18 @@ class SubappLibraryActivity : AppCompatActivity() {
         val record = repository.createStarter()
         val manager = WorkspaceManager(this, workspaceDir = record.workspaceDir)
         val history = com.example.runtimecompiler.workspace.WorkspaceHistoryManager(this, appDirectory = record.directory)
-        val result = com.example.runtimecompiler.workspace.WorkspacePackageManager.importFromZip(this, uri, manager, history)
-        result.onSuccess { refreshRows(); Toast.makeText(this, "App imported", Toast.LENGTH_SHORT).show() }
+        val result = com.example.runtimecompiler.workspace.WorkspacePackageManager.importFromZip(
+            this, uri, manager, history, savePreImportSnapshot = false
+        )
+        result.onSuccess {
+            val baselineSaved = history.captureInitialVersion(manager, "ZIP Package", replaceExisting = true)
+            refreshRows()
+            Toast.makeText(
+                this,
+                if (baselineSaved) "App imported" else "App imported, but its initial version could not be saved",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
             .onFailure { repository.delete(record.id); Toast.makeText(this, "Import failed: ${it.message}", Toast.LENGTH_LONG).show() }
     }
 }

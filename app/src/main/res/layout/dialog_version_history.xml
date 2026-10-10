@@ -47,7 +47,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
         android:layout_marginBottom="16dp"
-        android:text="Revert to any of your saved workspace snapshots or the official starter template."
+        android:text="Restore this app’s initial version or revert to a saved workspace snapshot."
         android:textColor="@color/on_surface_muted"
         android:textSize="13sp" />
 
