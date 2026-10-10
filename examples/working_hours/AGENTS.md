@@ -110,20 +110,31 @@ The output visualization strictly tracks and displays these exact core fields in
 
 ### Device Testing & Source Synchronization
 
-The tracked source for Working Hours is `examples/working_hours/`. An installed App² app runs a separate private copy from `filesDir/workspace/`; editing this example does not update that copy, and restarting App² alone does not sync it. This separation caused a recent UI fix to appear ineffective because the device still had the old `js/app.js`.
+The tracked source for Working Hours is `examples/working_hours/`. An installed App² app runs its own private copy under `filesDir/subapps/<id>/workspace/`; editing this example does not update that copy, and restarting App² alone does not sync it.
+
+Prefer an emulator for tests that create, edit, import, reset, or delete app data. For external-device smoke testing, preserve user data: target only a dedicated test subapp, use test-only records, and do not reset/import/delete an existing app or touch its `data/`, `app.log`, history, bridge state, notifications, or alarms. Updating the Android package must use `adb install -r`, which retains app data. Never uninstall, use `pm clear`, clear storage, or reinstall without `-r` on the external device. If the update will trigger a first-run migration, or the behavior under test could alter existing data, run it on the emulator unless a verified backup and restore plan is in place.
 
 For an Android device check:
 
-1. Confirm the intended device with `adb devices -l`. If more than one device is listed, pass `-s <serial>` to every ADB command. Confirm App² is installed and debuggable (`com.example.runtimecompiler`; `adb shell run-as com.example.runtimecompiler pwd` should succeed).
-2. Copy each changed app-owned file from `examples/working_hours/` to the same relative path below the returned app data directory's `files/workspace/`. For example, to sync `js/app.js` on a Linux development host:
+1. Run `adb devices -l` and identify the intended target. Set `SERIAL` to that exact device serial; always pass it to every ADB command, especially when emulator and phone are connected. Confirm App² is installed with `adb -s "$SERIAL" shell pm path com.example.runtimecompiler`. The app must be debuggable for `run-as` sync.
+2. Identify the dedicated test subapp's stable ID in the App² library, then set `SUBAPP_ID` to it. Copy only changed app-owned files from `examples/working_hours/` into matching paths under `files/subapps/$SUBAPP_ID/workspace/`. Never sync the `data/` directory, `app.log`, or user-created files. Example for one changed script:
 
    ```sh
-   base64 -w 0 examples/working_hours/js/app.js \
-     | adb shell 'run-as com.example.runtimecompiler sh -c "base64 -d > /data/user/0/com.example.runtimecompiler/files/workspace/js/app.js"'
+   SERIAL="emulator-5554" # replace with the exact serial from adb devices -l
+   SUBAPP_ID="your-disposable-test-app-id"
+   adb -s "$SERIAL" push examples/working_hours/js/app.js /data/local/tmp/appapp-test-app.js
+   adb -s "$SERIAL" shell run-as com.example.runtimecompiler cp /data/local/tmp/appapp-test-app.js "files/subapps/$SUBAPP_ID/workspace/js/app.js"
    ```
 
-   Replace the source and target relative paths for other changed code/assets. Do not copy `data/`, `app.log`, or user-created files; those belong to the installed workspace and must survive code testing. The target path above is for Android user 0; use the app data path printed by `run-as ... pwd` if it differs.
-3. Verify the copy before testing by comparing `sha256sum examples/working_hours/<path>` with `adb exec-out run-as com.example.runtimecompiler cat files/workspace/<path> | sha256sum`. Matching hashes are the precondition for claiming the device ran the current source.
-4. Run `adb shell am force-stop com.example.runtimecompiler`, then launch App² again. This clears the live WebView and reloads the workspace files. Exercise the relevant behavior and record the device/model and checks actually completed; do not treat a local browser check or an old installed workspace as Android validation.
+   Use the app data path reported by `adb -s "$SERIAL" shell run-as com.example.runtimecompiler pwd` if it differs. For external devices, sync only to a dedicated test subapp; never infer or guess an ID.
+3. Set `RELATIVE_PATH` to the changed file path (for example, `js/app.js`) and compare `sha256sum "examples/working_hours/$RELATIVE_PATH"` with `adb -s "$SERIAL" exec-out run-as com.example.runtimecompiler cat "files/subapps/$SUBAPP_ID/workspace/$RELATIVE_PATH" | sha256sum`. Matching hashes are required before claiming that the device ran the current source.
+4. Restart and launch with the same explicit serial:
 
-Use `python3 examples/working_hours/dev_server.py` for quick browser checks against the tracked source. Browser checks do not cover the Android WebView, bridge, keyboard, or native permission flows; use the device procedure for those.
+   ```sh
+   adb -s "$SERIAL" shell am force-stop com.example.runtimecompiler
+   adb -s "$SERIAL" shell monkey -p com.example.runtimecompiler 1
+   ```
+
+   Exercise the relevant behavior and report the device/model and checks completed. A local browser check or an old installed workspace is not Android validation. If sync or run-as is unavailable, use the app's editor or rebuild/install; do not work around the app sandbox.
+
+Use `python3 examples/working_hours/dev_server.py` for quick browser checks against the tracked source. Browser checks do not cover the Android WebView, bridge, keyboard, or native permission flows; use the emulator or the protected external-device procedure above for those.
