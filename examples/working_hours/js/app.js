@@ -29,14 +29,38 @@ function initTabs() {
   });
 }
 
-// Suppress tab bar when soft keyboard is open
+// Hide the tab bar only for the on-screen keyboard, not merely because a field has focus.
 function initKeyboardHandling() {
-  addEventListener('focusin', (e) => {
-    if (e.target.matches('textarea, input:not([type]), input[type="text"], input[type="search"], input[type="url"], input[type="email"], input[type="tel"], input[type="password"], input[type="number"]')) {
-      document.body.classList.add('kb');
-    }
+  let nativeImeVisible = null;
+  let baselineHeight = window.visualViewport?.height || window.innerHeight;
+  let baselineWidth = window.innerWidth;
+  const viewportHeight = () => window.visualViewport?.height || window.innerHeight;
+  const setKeyboardVisible = (visible) => document.body.classList.toggle('kb', visible);
+
+  addEventListener('app2:insets', (e) => {
+    if (typeof e.detail?.imeVisible !== 'boolean') return;
+    nativeImeVisible = e.detail.imeVisible;
+    setKeyboardVisible(nativeImeVisible);
   });
-  addEventListener('focusout', () => document.body.classList.remove('kb'));
+
+  const updateFromViewport = () => {
+    if (nativeImeVisible !== null) return;
+    const width = window.innerWidth;
+    const height = viewportHeight();
+    if (Math.abs(width - baselineWidth) > 80) {
+      baselineWidth = width;
+      baselineHeight = height;
+      setKeyboardVisible(false);
+      return;
+    }
+    const visible = baselineHeight - height > 120;
+    setKeyboardVisible(visible);
+    if (!visible) baselineHeight = height;
+  };
+
+  window.visualViewport?.addEventListener('resize', updateFromViewport);
+  addEventListener('resize', updateFromViewport);
+  updateFromViewport();
 }
 
 // Every way out of a field or out of the app commits pending edits to disk.
