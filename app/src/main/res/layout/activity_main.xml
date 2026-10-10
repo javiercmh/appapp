@@ -53,6 +53,15 @@
                     android:src="@drawable/ic_history"
                     app:tint="@color/accent_blue" />
 
+                <ImageButton
+                    android:id="@+id/btn_update_app"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/action_update_app"
+                    android:src="@drawable/ic_download"
+                    app:tint="@color/accent_blue" />
+
                 <!-- Transfer / Package Button -->
                 <ImageButton
                     android:id="@+id/btn_package"

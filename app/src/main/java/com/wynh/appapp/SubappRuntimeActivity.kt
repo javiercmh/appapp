@@ -27,7 +27,7 @@ import org.json.JSONObject
 import java.io.FileInputStream
 
 /** Standalone document task bound to the app ID encoded in its launch URI. */
-class SubappRuntimeActivity : AppCompatActivity() {
+class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
     private var webView: WebView? = null
     private var activeId: String? = null
     private var didInitialResume = false
@@ -102,6 +102,7 @@ class SubappRuntimeActivity : AppCompatActivity() {
         (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.let {
             com.wynh.appapp.ai.AiWebMessageBridge(this, web, record.id, taskId, it).install()
         }
+        com.wynh.appapp.updates.UpdateWebMessageBridge(this, web, record).install()
         web.webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
@@ -170,6 +171,19 @@ class SubappRuntimeActivity : AppCompatActivity() {
         val iconFile = iconPath?.let(manager::getFile) ?: manager.getFile("icon.png")
         val taskIcon = if (iconFile.isFile) runCatching { android.graphics.BitmapFactory.decodeFile(iconFile.absolutePath) }.getOrNull() else null
         setTaskDescription(android.app.ActivityManager.TaskDescription(name, taskIcon, 0xff263238.toInt()))
+    }
+
+    override fun pauseForUpdate() {
+        webView?.onPause()
+        webView?.pauseTimers()
+        webView?.visibility = android.view.View.INVISIBLE
+    }
+
+    override fun resumeAfterUpdate() {
+        webView?.resumeTimers()
+        webView?.onResume()
+        webView?.visibility = android.view.View.VISIBLE
+        webView?.reload()
     }
 
     override fun onDestroy() {

@@ -112,3 +112,23 @@ one slot until cancellation or acknowledgement. Restarting the server loses requ
 IDs then return `not_found`. No external requests are made. Mock requests do not reproduce native
 task closure or background service behavior. Notifications keep browser behavior; Android
 permissions, exact alarms, WebView insets and real AI must be tested on Android.
+
+## Native GitHub subapp updates
+
+Share & Package App is export-only. ZIP installation is available in the library
+and creates a separate app. Existing apps update through native Update app,
+following public GitHub package metadata in `manifest.json.app2Update`. The host
+pins downloads to one commit, reviews managed changes/local edits and requires
+confirmation. Managed files update; seeds copy only when absent; all unowned files
+remain. `data/` can contain managed shipped definitions as well as user records,
+so declare ownership explicitly. Domain records and preferences must be seeds,
+never managed replacements. Publisher app identity differs from installed App² ID.
+
+The wrapper exports `updates.available` and `updates.open()` (Promise resolving
+true when native review opens). Browsers report unavailable. The owning HTTPS
+origin and main frame are required; web callers cannot supply endpoints or install
+silently. Finish/save/acknowledge or cancel AI requests before updating. App² 1.3.0
+(version code 4) adds this channel. Native update state, full binary backups and
+recovery journals live beside the workspace; ordinary history is not a full backup.
+See the App² repository's `docs/SUBAPP_UPDATES.md` for publisher metadata, recovery,
+code rollback, deterministic packaging and the phone deployment checklist.
