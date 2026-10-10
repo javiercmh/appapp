@@ -1,4 +1,4 @@
-package com.example.runtimecompiler.bridge
+package com.wynh.appapp.bridge
 
 import android.app.AlarmManager
 import android.app.NotificationChannel
@@ -20,8 +20,8 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.nio.charset.StandardCharsets
-import com.example.runtimecompiler.workspace.WorkspaceManager
-import com.example.runtimecompiler.workspace.SubappRepository
+import com.wynh.appapp.workspace.WorkspaceManager
+import com.wynh.appapp.workspace.SubappRepository
 
 /**
  * JavaScript Interface exposed inside WebView as `window.AndroidStorage`, `window.AndroidMemory`,
@@ -362,7 +362,7 @@ class NativeStorageBridge(
                 return false
             }
 
-            val intent = Intent(context, com.example.runtimecompiler.SubappRuntimeActivity::class.java).apply {
+            val intent = Intent(context, com.wynh.appapp.SubappRuntimeActivity::class.java).apply {
                 data = Uri.parse("appapp://subapp/$subappId")
                 action = Intent.ACTION_VIEW
             }

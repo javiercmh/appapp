@@ -116,23 +116,23 @@ Prefer an emulator for tests that create, edit, import, reset, or delete app dat
 
 For an Android device check:
 
-1. Run `adb devices -l` and identify the intended target. Set `SERIAL` to that exact device serial; always pass it to every ADB command, especially when emulator and phone are connected. Confirm App² is installed with `adb -s "$SERIAL" shell pm path com.example.runtimecompiler`. The app must be debuggable for `run-as` sync.
+1. Run `adb devices -l` and identify the intended target. Set `SERIAL` to that exact device serial; always pass it to every ADB command, especially when emulator and phone are connected. Confirm App² is installed with `adb -s "$SERIAL" shell pm path com.wynh.appapp`. Both the Kotlin namespace and installed application ID are `com.wynh.appapp`. The app must be debuggable for `run-as` sync.
 2. Identify the dedicated test subapp's stable ID in the App² library, then set `SUBAPP_ID` to it. Copy only changed app-owned files from `examples/working_hours/` into matching paths under `files/subapps/$SUBAPP_ID/workspace/`. Never sync the `data/` directory, `app.log`, or user-created files. Example for one changed script:
 
    ```sh
    SERIAL="emulator-5554" # replace with the exact serial from adb devices -l
    SUBAPP_ID="your-disposable-test-app-id"
    adb -s "$SERIAL" push examples/working_hours/js/app.js /data/local/tmp/appapp-test-app.js
-   adb -s "$SERIAL" shell run-as com.example.runtimecompiler cp /data/local/tmp/appapp-test-app.js "files/subapps/$SUBAPP_ID/workspace/js/app.js"
+   adb -s "$SERIAL" shell run-as com.wynh.appapp cp /data/local/tmp/appapp-test-app.js "files/subapps/$SUBAPP_ID/workspace/js/app.js"
    ```
 
-   Use the app data path reported by `adb -s "$SERIAL" shell run-as com.example.runtimecompiler pwd` if it differs. For external devices, sync only to a dedicated test subapp; never infer or guess an ID.
-3. Set `RELATIVE_PATH` to the changed file path (for example, `js/app.js`) and compare `sha256sum "examples/working_hours/$RELATIVE_PATH"` with `adb -s "$SERIAL" exec-out run-as com.example.runtimecompiler cat "files/subapps/$SUBAPP_ID/workspace/$RELATIVE_PATH" | sha256sum`. Matching hashes are required before claiming that the device ran the current source.
+   Use the app data path reported by `adb -s "$SERIAL" shell run-as com.wynh.appapp pwd` if it differs. For external devices, sync only to a dedicated test subapp; never infer or guess an ID.
+3. Set `RELATIVE_PATH` to the changed file path (for example, `js/app.js`) and compare `sha256sum "examples/working_hours/$RELATIVE_PATH"` with `adb -s "$SERIAL" exec-out run-as com.wynh.appapp cat "files/subapps/$SUBAPP_ID/workspace/$RELATIVE_PATH" | sha256sum`. Matching hashes are required before claiming that the device ran the current source.
 4. Restart and launch with the same explicit serial:
 
    ```sh
-   adb -s "$SERIAL" shell am force-stop com.example.runtimecompiler
-   adb -s "$SERIAL" shell monkey -p com.example.runtimecompiler 1
+   adb -s "$SERIAL" shell am force-stop com.wynh.appapp
+   adb -s "$SERIAL" shell monkey -p com.wynh.appapp 1
    ```
 
    Exercise the relevant behavior and report the device/model and checks completed. A local browser check or an old installed workspace is not Android validation. If sync or run-as is unavailable, use the app's editor or rebuild/install; do not work around the app sandbox.

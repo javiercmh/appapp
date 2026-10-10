@@ -66,34 +66,13 @@
                 android:layout_height="1dp"
                 android:layout_weight="1" />
 
-            <!-- History Button -->
-            <ImageButton
-                android:id="@+id/hub_btn_history"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="@string/action_history"
-                android:src="@drawable/ic_history"
-                app:tint="@color/accent_blue" />
-
-            <!-- Share & Package Button -->
-            <ImageButton
-                android:id="@+id/hub_btn_package"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:layout_marginStart="4dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="@string/action_package_share"
-                android:src="@drawable/ic_import_export"
-                app:tint="@color/accent_blue" />
-
             <!-- Run Button -->
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/hub_btn_run"
                 style="@style/Widget.Material3.Button"
                 android:layout_width="wrap_content"
                 android:layout_height="38dp"
-                android:layout_marginStart="8dp"
+                android:layout_marginStart="0dp"
                 android:backgroundTint="@color/primary"
                 android:paddingHorizontal="16dp"
                 android:text="@string/action_compile_run"

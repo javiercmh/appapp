@@ -2,8 +2,19 @@ plugins {
     alias(libs.plugins.android.application)
 }
 
+val releaseStoreFile = providers.gradleProperty("APPAPP_RELEASE_STORE_FILE").orNull
+val releaseStorePassword = providers.gradleProperty("APPAPP_RELEASE_STORE_PASSWORD").orNull
+val releaseKeyAlias = providers.gradleProperty("APPAPP_RELEASE_KEY_ALIAS").orNull
+val releaseKeyPassword = providers.gradleProperty("APPAPP_RELEASE_KEY_PASSWORD").orNull
+val hasReleaseSigning = listOf(
+    releaseStoreFile,
+    releaseStorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword
+).all { !it.isNullOrBlank() }
+
 android {
-    namespace = "com.example.runtimecompiler"
+    namespace = "com.wynh.appapp"
     compileSdk = 37
 
     defaultConfig {
@@ -16,9 +27,23 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    if (hasReleaseSigning) {
+        signingConfigs {
+            create("release") {
+                storeFile = file(checkNotNull(releaseStoreFile))
+                storePassword = checkNotNull(releaseStorePassword)
+                keyAlias = checkNotNull(releaseKeyAlias)
+                keyPassword = checkNotNull(releaseKeyPassword)
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -31,6 +56,18 @@ android {
     }
     buildFeatures {
         viewBinding = true
+    }
+}
+
+tasks.configureEach {
+    if (name == "assembleRelease") {
+        doFirst {
+            check(hasReleaseSigning) {
+                "Release signing is not configured. Set APPAPP_RELEASE_STORE_FILE, " +
+                    "APPAPP_RELEASE_STORE_PASSWORD, APPAPP_RELEASE_KEY_ALIAS, and " +
+                    "APPAPP_RELEASE_KEY_PASSWORD in your user-level Gradle properties."
+            }
+        }
     }
 }
 
