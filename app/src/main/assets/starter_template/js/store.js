@@ -115,3 +115,20 @@ export function dismissTip() {
 export function resetTip() {
   bridge.removePref(TIP_KEY);
 }
+
+// AI request handles and results are inspectable, exportable JSON, never credentials.
+export function loadAiDemo() {
+  const raw = bridge.readFile('data/ai-demo.json');
+  if (!raw.trim()) return { pending: null, latest: null };
+  const value = JSON.parse(raw);
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid AI demo data');
+  if (value.pending && typeof value.pending.id !== 'string') throw new Error('Invalid request ID');
+  if (value.latest && (typeof value.latest.id !== 'string' || typeof value.latest.text !== 'string')) {
+    throw new Error('Invalid saved AI response');
+  }
+  return value;
+}
+
+export function saveAiDemo(value) {
+  if (!bridge.writeFile('data/ai-demo.json', value)) throw new Error('Could not save AI demo data');
+}

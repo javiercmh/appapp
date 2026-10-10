@@ -279,6 +279,8 @@ export function initNotificationPlayground() {
 const FILE_ROLES = {
   'index.html': { icon: '🌐', desc: 'Web markup & UI shell', group: 'code' },
   'css/style.css': { icon: '🎨', desc: 'Theme & safe-area styles', group: 'code' },
+  'js/ai-demo.js': { icon: '✨', desc: 'Recoverable AI request example', group: 'code' },
+  'data/ai-demo.json': { icon: '💾', desc: 'Pending request and latest AI result', group: 'data' },
   'js/app.js': { icon: '⚡', desc: 'Entry point & bootstrap', group: 'code' },
   'js/ui.js': { icon: '🖌️', desc: 'DOM rendering & interactions', group: 'code' },
   'js/store.js': { icon: '💾', desc: 'Data persistence & preferences', group: 'code' },

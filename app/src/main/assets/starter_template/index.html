@@ -37,6 +37,27 @@
 
     <div id="feed" class="feed"></div>
 
+    <div class="card" id="ai-example">
+      <h2>AI example</h2>
+      <p class="muted">Ask ChatGPT a fixed sample question using App²’s native AI bridge.</p>
+      <blockquote class="ai-prompt">Write one short sentence explaining what a subapp is.</blockquote>
+      <label class="ai-label" for="ai-model">Model</label>
+      <select id="ai-model" class="field" disabled></select>
+      <div id="ai-reasoning-field" hidden>
+        <label class="ai-label" for="ai-reasoning">Reasoning effort</label>
+        <select id="ai-reasoning" class="field"><option value="">Provider default</option></select>
+      </div>
+      <p id="ai-status" class="muted" role="status">Checking AI availability…</p>
+      <p class="muted">Generate only when you are ready: this uses your ChatGPT plan usage. Manage the connection in the App² library → Settings → AI.</p>
+      <button id="ai-generate" class="btn btn-primary btn-block" disabled>Generate example</button>
+      <button id="ai-cancel" class="btn btn-ghost btn-block" hidden>Cancel generation</button>
+      <button id="ai-retry-save" class="btn btn-ghost btn-block" hidden>Retry saving</button>
+      <div id="ai-response-box" class="ai-response-box" hidden>
+        <p id="ai-response-meta" class="muted"></p>
+        <p id="ai-response"></p>
+      </div>
+    </div>
+
     <!-- 2. Accent Theme Customization -->
     <div class="card">
       <h2>Accent Colour</h2>
@@ -91,6 +112,34 @@
           App² bar disappears and this is just your app.</li>
       </ol>
       <button id="btn-show-tip" class="btn btn-ghost btn-block">Show the welcome tip again</button>
+    </div>
+
+    <div class="card">
+      <h2>AI from a subapp</h2>
+      <ol class="steps">
+        <li>Connect ChatGPT in the App² library’s <strong>Settings → AI</strong>.</li>
+        <li>Discover providers and models through <code>ai.providers()</code> and <code>ai.models('chatgpt')</code>.</li>
+        <li>Choose a model and one of its supported reasoning levels. Provider default omits the effort setting.</li>
+        <li>Call <code>ai.start()</code>, then wait for the completed text.</li>
+        <li>Save the text and request ID to <code>data/ai-demo.json</code> before acknowledging the request.</li>
+      </ol>
+      <pre class="console ai-code"><code>import { ai, writeFile } from './bridge.js';
+
+const { models } = await ai.models('chatgpt');
+const id = await ai.start({
+  providerId: 'chatgpt',
+  model: models[0].id,
+  instructions: 'Keep the answer concise.',
+  input: 'Write one short sentence explaining what a subapp is.'
+});
+const text = await ai.wait(id);
+if (!writeFile('data/example.json', { id, text })) {
+  throw new Error('Save failed; retain the request ID and retry saving.');
+}
+await ai.acknowledge(id);</code></pre>
+      <p class="muted">The Demo tab implements this flow in <code>js/ai-demo.js</code>. It saves a pending request ID, resumes through <code>ai.result(id)</code>, and retries failed saves without another inference.</p>
+      <p class="muted">One request may run or await acknowledgement per subapp. Switching apps keeps its native request running. Closing its task or reloading cancels it. Browser previews show AI as unavailable.</p>
+      <p class="muted">For all return shapes, events, failure handling and lifecycle rules, read <code>AGENTS.md</code> and <code>PACKAGING.md</code> in the editor.</p>
     </div>
 
     <div class="card">

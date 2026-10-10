@@ -7,6 +7,7 @@
 import * as store from './store.js';
 import * as bridge from './bridge.js';
 import * as ui from './ui.js';
+import { initAiDemo } from './ai-demo.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -146,6 +147,7 @@ ui.initNotificationPlayground();
 ui.initGuide();
 ui.initTip();
 initNotifications();
+initAiDemo(bridge, store);
 ui.renderFeed();
 
 console.log(`[Starter Demo] Ready — ${store.entries.length} notes, native bridge ${bridge.isNative ? 'connected' : 'unavailable (browser fallback)'}.`);

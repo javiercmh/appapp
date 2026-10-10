@@ -18,11 +18,13 @@ object DefaultWebApp {
         "js/bridge.js",
         "js/store.js",
         "js/ui.js",
+        "js/ai-demo.js",
         "manifest.json",
         "AGENTS.md",
         "PACKAGING.md",
         "dev_server.py",
         "data/entries.json",
+        "data/ai-demo.json",
         "data/settings.json"
     )
 

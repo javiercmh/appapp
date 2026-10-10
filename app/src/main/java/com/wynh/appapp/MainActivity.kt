@@ -258,6 +258,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.auth?.setForeground(true)
         // Catches a permission flipped in the system settings screen we sent the user to.
         onNotificationPermissionChanged?.invoke()
         onExactAlarmPermissionChanged?.invoke()
@@ -268,6 +269,11 @@ class MainActivity : AppCompatActivity() {
                 null
             )
         }
+    }
+
+    override fun onPause() {
+        (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.auth?.setForeground(false)
+        super.onPause()
     }
 
     private fun notificationsAllowed(): Boolean =
@@ -416,6 +422,9 @@ class MainActivity : AppCompatActivity() {
         webView.addJavascriptInterface(storageBridge, "AndroidStorage")
         webView.addJavascriptInterface(storageBridge, "AndroidMemory")
         webView.addJavascriptInterface(storageBridge, "AndroidNotification")
+        (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.let {
+            com.wynh.appapp.ai.AiWebMessageBridge(this, webView, subapp.id, taskId, it).install()
+        }
 
         // Intercept JavaScript console logs and errors
         webView.webChromeClient = object : WebChromeClient() {
@@ -790,6 +799,7 @@ class MainActivity : AppCompatActivity() {
      * Loads the workspace project into the WebView, resolving the entry point from manifest.json.
      */
     fun reloadApp() {
+        (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.cancelTask(taskId)
         val entryPoint = try {
             val manifestContent = workspaceManager.readFile("manifest.json")
             if (manifestContent.isNotBlank()) {
@@ -1876,6 +1886,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        if (isFinishing) (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.cancelTask(taskId)
         if (::subapp.isInitialized) SubappSessionRegistry.unregister(subapp.id, this)
         // Release any in-flight file chooser before tearing the WebView down.
         deliverFileChooserResult(null)

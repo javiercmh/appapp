@@ -62,8 +62,14 @@ class SubappLibraryActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.auth?.setForeground(true)
         if (rowsReady) refreshRows()
         refreshSettingsPermissions?.invoke()
+    }
+
+    override fun onPause() {
+        (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.auth?.setForeground(false)
+        super.onPause()
     }
 
     private fun showLibrary() {
@@ -194,6 +200,7 @@ class SubappLibraryActivity : AppCompatActivity() {
             }
         }
         dialog.show()
+        com.wynh.appapp.ai.AiSettingsController.bind(this, dialog)
         dialog.window?.setLayout((resources.displayMetrics.widthPixels * 0.94).toInt(), ViewGroup.LayoutParams.WRAP_CONTENT)
     }
 

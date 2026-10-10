@@ -99,6 +99,9 @@ class SubappRuntimeActivity : AppCompatActivity() {
         web.addJavascriptInterface(bridge, "AndroidStorage")
         web.addJavascriptInterface(bridge, "AndroidMemory")
         web.addJavascriptInterface(bridge, "AndroidNotification")
+        (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.let {
+            com.wynh.appapp.ai.AiWebMessageBridge(this, web, record.id, taskId, it).install()
+        }
         web.webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
@@ -142,16 +145,21 @@ class SubappRuntimeActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.auth?.setForeground(true)
         if (didInitialResume) {
             val id = activeId ?: return
             val data = intent.data
             val record = SubappRepository(this).resolve(id)
             if (data?.lastPathSegment == id && record != null) {
                 updateTaskAppearance(WorkspaceManager(this, workspaceDir = record.workspaceDir))
-                webView?.reload()
             }
         }
         didInitialResume = true
+    }
+
+    override fun onPause() {
+        (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.auth?.setForeground(false)
+        super.onPause()
     }
 
     private fun updateTaskAppearance(manager: WorkspaceManager) {
@@ -165,6 +173,7 @@ class SubappRuntimeActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        if (isFinishing) (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.cancelTask(taskId)
         activeId?.let { SubappSessionRegistry.unregister(it, this) }
         chooserCallback?.onReceiveValue(null); chooserCallback = null
         webView?.destroy(); webView = null; super.onDestroy()
