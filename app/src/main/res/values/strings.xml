@@ -147,4 +147,9 @@
     <string name="settings_history_title">Preserved history per app</string>
     <string name="settings_history_desc">Maximum saved versions for each app. The initial version is always preserved. A lower limit takes effect when the next version is saved.</string>
     <string name="settings_history_saved">History limit updated for all apps</string>
+    <string name="library_rename">Rename</string>
+    <string name="library_rename_title">Rename app</string>
+    <string name="library_name_label">App name</string>
+    <string name="library_name_required">Enter an app name</string>
+    <string name="library_rename_failed">Could not rename app. Please try again.</string>
 </resources>
