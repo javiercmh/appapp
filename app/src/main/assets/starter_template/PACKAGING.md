@@ -4,6 +4,11 @@ The starter runs as plain HTML, CSS, and JavaScript inside App²'s Android WebVi
 native capabilities through `window.AndroidStorage` (also aliased as `window.AndroidMemory` and
 `window.AndroidNotification`). The bundled `js/bridge.js` is the only file that should call it.
 
+Each saved subapp runs at its own stable origin, `https://<subapp-id>.app.local/`. Files, browser
+storage, bridge key-value state, notifications, and scheduled reminders are isolated by subapp ID.
+The ID stays stable when the manifest name changes. Relative asset URLs and module imports continue
+to work, and ZIP operations apply only to the selected app.
+
 ## Scheduled notifications
 
 Use `scheduleNotification(id, triggerAtMillis, title, message)` for a reminder that must fire while
