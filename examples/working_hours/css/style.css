@@ -812,5 +812,5 @@ code {
 .tab.active { color: var(--accent); }
 .tab:active { transform: scale(0.95); }
 
-/* Keyboard hiding */
+/* The app adds .kb only while the on-screen keyboard is visible. */
 body.kb .tabbar { display: none; }

@@ -185,7 +185,10 @@ Design for that:
   - `env(safe-area-inset-*)` covers display cutouts only — Android `WebView` never reports the
     status or navigation bars through it, so it is `0px` on a gesture-nav phone with no notch.
   - App² publishes the real system-bar insets as `--app-inset-top/right/bottom/left` on
-    `document.documentElement`, and fires `app2:insets` when they change.
+    `document.documentElement`, and fires `app2:insets` when they change. Its
+    `event.detail.imeVisible` boolean reports whether the on-screen keyboard is visible. Do not
+    treat text-field focus as proof that it is open; hardware keyboards can focus fields without
+    showing the IME.
   - Take whichever is larger. `css/style.css` already defines the tokens — use them:
     ```css
     --sa-bottom: max(env(safe-area-inset-bottom, 0px), var(--app-inset-bottom));

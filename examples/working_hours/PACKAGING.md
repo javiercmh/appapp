@@ -99,7 +99,9 @@ Two sources describe the unusable edges, and a subapp must combine them:
 | `--app-inset-top/right/bottom/left` | Status bar, navigation bar, cutout | Set by the host on `document.documentElement` in CSS px. `--app-inset-top` is `0` while the App² toolbar is visible (it already consumes that inset) and the full status bar inset in standalone mode. |
 
 The host republishes the variables whenever the insets change and after every page load, and fires an
-`app2:insets` event on `window` for layout that cannot be expressed in CSS.
+`app2:insets` event on `window` for layout that cannot be expressed in CSS. The event's
+`detail.imeVisible` boolean reports whether the on-screen keyboard is visible. Do not infer keyboard
+visibility from input focus: a hardware keyboard can focus a text field while the IME is hidden.
 
 `css/style.css` derives one token per edge and uses it everywhere:
 
