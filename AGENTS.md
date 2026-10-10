@@ -12,11 +12,14 @@ This document provides architectural context, coding standards, and operational 
 
 | Package / File | Purpose |
 | :--- | :--- |
-| `com.example.runtimecompiler.MainActivity` | Main Android Activity. Configures Edge-to-Edge window insets, initializes `WebView`, intercepts relative asset loading (`https://app.local/*`), and hosts the App Editor Hub, File Editor, and App Configuration dialogs. |
+| `com.example.runtimecompiler.SubappLibraryActivity` | Launcher library for opening, editing, installing, importing, and deleting saved subapps. |
+| `com.example.runtimecompiler.MainActivity` | Editor whose tools and WebView remain bound to one subapp ID. |
+| `com.example.runtimecompiler.SubappRuntimeActivity` | Standalone document task launched by each subapp shortcut. |
 | `com.example.runtimecompiler.editor.SyntaxHighlighter` | Fast regex-based syntax highlighter for HTML, CSS, JavaScript, and JSON code in `EditText`. |
 | `com.example.runtimecompiler.editor.SearchHelper` | In-file text search and match navigation helper for `EditText`. |
-| `com.example.runtimecompiler.workspace.WorkspaceManager` | Manages the unified multi-file project workspace stored in internal storage (`filesDir/workspace/`). Handles file reading, writing, creation, deletion, template initialization, and MIME type resolution. |
-| `com.example.runtimecompiler.workspace.WorkspaceHistoryManager` | Manages up to 5 full version snapshots (FIFO) of the workspace in `filesDir/workspace_history.json` with timestamps, enabling one-tap rollback. |
+| `com.example.runtimecompiler.workspace.SubappRepository` | Owns stable app IDs and migrates the former single workspace into the library. |
+| `com.example.runtimecompiler.workspace.WorkspaceManager` | Manages one app workspace under `filesDir/subapps/<id>/workspace/`. |
+| `com.example.runtimecompiler.workspace.WorkspaceHistoryManager` | Manages snapshots in that app's `workspace_history.json`. |
 | `com.example.runtimecompiler.workspace.WorkspacePackageManager` | Handles selective ZIP export/packaging, Android Sharesheet integration, direct stream export, and secure ZIP extraction with Zip-Slip defense and auto-backup snapshots. |
 | `com.example.runtimecompiler.bridge.NativeStorageBridge` | Main `@JavascriptInterface` exposed to the web runtime as `window.AndroidStorage`, `window.AndroidMemory`, and `window.AndroidNotification`. Manages persistent key-value state, unified file I/O directly in `workspace/`, native system notifications, and `AlarmManager`-backed scheduled notifications. |
 | `com.example.runtimecompiler.bridge.ScheduledNotificationReceiver` | Posts a notification armed earlier via `scheduleNotification`. Runs even when the app process is cold, so it re-creates the notification channel itself. |
@@ -27,28 +30,24 @@ This document provides architectural context, coding standards, and operational 
 
 ## 2. Workspace & Unified Directory Architecture
 
-All project code and runtime app files live together in the unified internal storage directory:
+Each saved app has an isolated internal directory:
 ```
-filesDir/workspace/
-├── index.html       # Primary HTML entrypoint & UI layout
-├── manifest.json    # App metadata & identity configuration
-├── AGENTS.md        # App-specific feature and business logic description
-├── PACKAGING.md     # Platform contract & packaging documentation for AI agents
-├── dev_server.py    # Local development server for testing on a computer
-├── css/
-│   └── style.css    # Stylesheet with safe-area variables
-├── js/
-│   ├── app.js       # ES module entry point (<script type="module" src="js/app.js">)
-│   ├── bridge.js    # Sole wrapper around the AndroidStorage bridge
-│   ├── store.js     # Persistence: data files, photos, preferences
-│   └── ui.js        # DOM rendering & interactions
-├── data/
-│   ├── entries.json # User data store (e.g. shifts/notes)
-│   └── settings.json# User configuration & defaults
-├── icon.png         # Custom app icon asset (if configured)
-├── app.log          # Runtime console, error & bridge logs
-└── [custom files]   # Created at runtime (e.g. nested assets, photo_*.jpg)
+filesDir/subapps/<id>/
+├── workspace/
+│   ├── index.html   # Primary HTML entrypoint & UI layout
+│   ├── manifest.json# App metadata & identity configuration
+│   ├── data/        # App data and settings
+│   ├── css/         # Stylesheets
+│   ├── js/          # App modules and bridge wrapper
+│   ├── icon.png     # Optional app icon
+│   └── app.log      # Runtime console, error & bridge logs
+└── workspace_history.json
 ```
+Stable IDs are stored in `filesDir/subapps/index.json`. Runtime pages use
+`https://<id>.app.local/`, isolating WebView origin storage. Bridge state and alarms are scoped to
+the same ID. Shortcuts and Recent Apps document tasks carry that ID, so renaming an app does not
+change its identity. On first launch, a verified migration moves the former single workspace into
+the library.
 
 The starter template ships its own `AGENTS.md` (describing the app itself) and `PACKAGING.md` (documenting the runtime from the web app's point of view: bridge API, platform limits, packaging rules). **When the JavaScript bridge changes, update them accordingly.**
 
@@ -60,7 +59,7 @@ All application data, domain entities, and user settings **must be stored in pla
 - Data works seamlessly with the standalone local `dev_server.py`.
 
 ### Asset Interception
-The `WebView` loads `https://app.local/index.html`. Requests to `https://app.local` (e.g. `<link rel="stylesheet" href="style.css">`, `<script src="app.js"></script>`, or JSON/image assets) are intercepted in `WebViewClient.shouldInterceptRequest` and served directly from `filesDir/workspace/` with auto-resolved MIME types.
+Each app's `WebView` loads `https://<id>.app.local/index.html`. Requests for that exact app host (e.g. `<link rel="stylesheet" href="style.css">`, `<script src="app.js"></script>`, or JSON/image assets) are intercepted in `WebViewClient.shouldInterceptRequest` and served from that app's `filesDir/subapps/<id>/workspace/` with auto-resolved MIME types.
 
 ---
 
@@ -149,7 +148,7 @@ the app prevents delivery until it is opened again.
 
 `WebChromeClient.onShowFileChooser` is implemented in `MainActivity`, so `<input type="file">` works
 inside the runtime web app. Pair it with `writeFileBase64` to persist a picked image as a real
-binary file that the `app.local` interceptor can then serve via `<img src="...">`.
+binary file that the current subapp's origin interceptor can then serve via `<img src="...">`.
 
 ---
 
@@ -158,7 +157,7 @@ binary file that the `app.local` interceptor can then serve via `<img src="...">
 - **Gradle Validation**: Ensure Gradle files (`build.gradle.kts`, `libs.versions.toml`) sync without syntax or version conflicts.
 - **Persistence Verification**: When modifying storage logic, test by adding items, terminating the process, and verifying that state reloads identically on restart.
 - **History & Snapshots**: Verify that workspace snapshots are taken before "Run" and that snapshot restoration properly updates the editor and runtime.
-- **Example App Device Tests**: `examples/<app>/` is source code in this repository; it is not automatically copied to an installed App² instance. Before reporting a device test, sync the changed app-owned files to that device's `filesDir/workspace/`, compare source and device hashes, then force-stop and relaunch App² so the WebView loads the copied files. Never overwrite `data/`, `app.log`, or other user workspace files just to test code. See `examples/working_hours/AGENTS.md` for the Working Hours sync procedure.
+- **Example App Device Tests**: `examples/<app>/` is source code in this repository; it is not automatically copied to an installed App² instance. Before reporting a device test, sync changed app-owned files to the selected app's `filesDir/subapps/<id>/workspace/`, compare source and device hashes, then relaunch that app. Never overwrite `data/`, `app.log`, or other user files just to test code. See `examples/working_hours/AGENTS.md` for the Working Hours sync procedure.
 - **Keyboard-Aware Bottom Bars**: Do not infer that the on-screen keyboard is open from input focus. On Android, use `app2:insets` event `detail.imeVisible`; a hardware keyboard can focus a text field while the IME remains hidden. For browser previews without the host event, compare the viewport height to its pre-keyboard baseline.
 
 ### Android VM smoke tests (this development host)
@@ -180,7 +179,7 @@ binary file that the `app.local` interceptor can then serve via `<img src="...">
   adb -s emulator-5554 shell pm path com.example.runtimecompiler
   ```
   If no APK path is returned, build and install through Android Studio. This repository has no Gradle wrapper or CLI Gradle setup; do not try `./gradlew` or search for a Gradle installation.
-- For a web-app JavaScript/CSS/HTML change, remember the running WebView reads `filesDir/workspace/`, not the repository or APK assets directly. An already initialized workspace can therefore be stale, including when editing `app/src/main/assets/starter_template/`. For a focused smoke test, sync only the changed file to the matching existing workspace path; never reset the workspace or overwrite `data/`, `app.log`, or unrelated files. With a debuggable AppApp build, stage the file and copy it with `run-as`:
+   - For a web-app JavaScript/CSS/HTML change, remember the running WebView reads the selected app's `filesDir/subapps/<id>/workspace/`, not the repository or APK assets directly. An already initialized workspace can therefore be stale, including when editing `app/src/main/assets/starter_template/`. For a focused smoke test, sync only the changed file to the matching app workspace path; never reset the workspace or overwrite `data/`, `app.log`, or unrelated files. With a debuggable AppApp build, stage the file and copy it with `run-as`:
   ```sh
   adb -s emulator-5554 push path/to/changed-file /data/local/tmp/appapp-test-file
   adb -s emulator-5554 shell run-as com.example.runtimecompiler cp /data/local/tmp/appapp-test-file files/workspace/path/to/changed-file
@@ -208,7 +207,7 @@ binary file that the `app.local` interceptor can then serve via `<img src="...">
 3. **Resource Binding CamelCase**:
    - XML view IDs like `btn_reset` or `btn_edit_code` map to ViewBinding properties `binding.btnReset` and `binding.btnEditCode`. When updating layouts, ensure all references in `MainActivity.kt` stay synchronized.
 4. **MIME Resolution & Asset URLs**:
-   - All internal requests to `https://app.local/*` are intercepted by `WebViewClient.shouldInterceptRequest` from `filesDir/workspace/`. Ensure any new file types are registered in `WorkspaceManager.getMimeType()`.
+   - Each app's `https://<id>.app.local/` requests are intercepted from its own workspace. Ensure any new file types are registered in `WorkspaceManager.getMimeType()`.
 5. **Workspace Files & Nested Subdirectories**:
    - `WorkspaceManager` and `NativeStorageBridge` support real nested subdirectories (e.g. `css/style.css`, `js/app.js`, `assets/images/photo.jpg`).
    - Slashes (`/`) are preserved for subdirectories, while path traversal (`..` escaping root) is strictly prevented. Parent directories are auto-created when writing files.

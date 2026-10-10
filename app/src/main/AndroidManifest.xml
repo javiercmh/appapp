@@ -22,13 +22,29 @@
         android:hardwareAccelerated="true"
         tools:targetApi="31">
         <activity
-            android:name=".MainActivity"
+            android:name=".SubappLibraryActivity"
             android:exported="true"
             android:windowSoftInputMode="adjustResize"
             android:configChanges="orientation|screenSize|keyboardHidden">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Exported for already pinned shortcuts from the former single-workspace release. -->
+        <activity android:name=".MainActivity" android:exported="true" />
+        <activity
+            android:name=".SubappRuntimeActivity"
+            android:exported="true"
+            android:launchMode="standard"
+            android:documentLaunchMode="intoExisting"
+            android:maxRecents="50">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="appapp" android:host="subapp" />
             </intent-filter>
         </activity>
 

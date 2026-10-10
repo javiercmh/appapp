@@ -38,7 +38,9 @@ Modules are loaded with `<script type="module" src="js/app.js">`, so:
 
 ## 2. Directory structure & relative paths
 
-App² serves your workspace at `https://app.local/`. All files live within your project workspace, and **nested subdirectories are fully supported** (e.g. `css/style.css`, `js/app.js`, `assets/images/photo.jpg`, `data/entries.json`).
+App² serves each saved subapp from its own origin, `https://<subapp-id>.app.local/`. The ID is stable and independent of the app name. All files live within that app's workspace, and **nested subdirectories are fully supported** (e.g. `css/style.css`, `js/app.js`, `assets/images/photo.jpg`, `data/entries.json`).
+
+Every saved subapp has an independent workspace, history, browser storage, bridge state, notifications, and scheduled reminders. Relative links and module imports continue to work. Exported ZIP files contain only the current app's workspace.
 
 - Reference assets by their relative path: `<img src="assets/photo_123.jpg">`, `<link href="style.css">`.
 - Relative ES module imports work naturally: `import { load } from './store.js'`.

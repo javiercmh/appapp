@@ -28,9 +28,10 @@ data class WorkspaceSnapshot(
  */
 class WorkspaceHistoryManager(
     private val context: Context,
-    private val onLogListener: ((String) -> Unit)? = null
+    private val onLogListener: ((String) -> Unit)? = null,
+    private val appDirectory: File
 ) {
-    private val historyFile = File(context.filesDir, "workspace_history.json")
+    private val historyFile = File(appDirectory, "workspace_history.json")
     private val timeFormat = SimpleDateFormat("HH:mm:ss (MMM d)", Locale.getDefault())
     private val settingsManager = AppSettingsManager(context)
 

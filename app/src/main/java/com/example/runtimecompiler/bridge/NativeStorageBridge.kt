@@ -21,6 +21,7 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.nio.charset.StandardCharsets
 import com.example.runtimecompiler.workspace.WorkspaceManager
+import com.example.runtimecompiler.workspace.SubappRepository
 
 /**
  * JavaScript Interface exposed inside WebView as `window.AndroidStorage`, `window.AndroidMemory`,
@@ -30,15 +31,17 @@ import com.example.runtimecompiler.workspace.WorkspaceManager
  */
 class NativeStorageBridge(
     private val context: Context,
+    private val subappId: String,
+    private val appWorkspaceDir: File,
     private val onLogListener: ((String) -> Unit)? = null,
     private val onRequestNotificationPermission: (() -> Unit)? = null
 ) {
     private val sharedPrefs: SharedPreferences =
-        context.getSharedPreferences("runtime_app_state", Context.MODE_PRIVATE)
+        context.getSharedPreferences("runtime_app_state_$subappId", Context.MODE_PRIVATE)
 
     private val workspaceDir: File
         get() {
-            val dir = File(context.filesDir, "workspace")
+            val dir = appWorkspaceDir
             if (!dir.exists()) dir.mkdirs()
             return dir
         }
@@ -141,7 +144,7 @@ class NativeStorageBridge(
      * Accepts either a bare base64 payload or a full `data:<mime>;base64,...` URL as produced by
      * `FileReader.readAsDataURL()` / `canvas.toDataURL()`.
      *
-     * Once written, the file is served by the `https://app.local` interceptor, so a web app can
+     * Once written, the file is served by this subapp's local origin, so a web app can
      * simply reference it: `<img src="assets/photo_123.jpg">`.
      */
     @JavascriptInterface
@@ -359,15 +362,16 @@ class NativeStorageBridge(
                 return false
             }
 
-            val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
-            val pendingIntent = if (intent != null) {
-                PendingIntent.getActivity(
+            val intent = Intent(context, com.example.runtimecompiler.SubappRuntimeActivity::class.java).apply {
+                data = Uri.parse("appapp://subapp/$subappId")
+                action = Intent.ACTION_VIEW
+            }
+            val pendingIntent = PendingIntent.getActivity(
                     context,
-                    0,
+                    scopedId(subappId, id),
                     intent,
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                 )
-            } else null
 
             val notification = NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
@@ -383,7 +387,8 @@ class NativeStorageBridge(
                 }
                 .build()
 
-            NotificationManagerCompat.from(context).notify(id, notification)
+            NotificationManagerCompat.from(context).notify(subappId, id, notification)
+            rememberNotification(context, subappId, id)
             log("[Notification] Posted notification #$id: '$title' - '$message'")
             true
         } catch (e: Exception) {
@@ -405,7 +410,7 @@ class NativeStorageBridge(
             log("[Notification Warning] Ignored schedule #$id: trigger time is missing or in the past.")
             return false
         }
-        val scheduled = scheduleAlarm(context, id, at, title, message)
+        val scheduled = scheduleAlarm(context, subappId, id, at, title, message)
         log(
             if (scheduled) "[Notification] Scheduled #$id for $at: '$title'"
             else "[Notification Error] Could not schedule #$id"
@@ -415,7 +420,7 @@ class NativeStorageBridge(
 
     @JavascriptInterface
     fun cancelScheduledNotification(id: Int): Boolean {
-        cancelAlarm(context, id)
+        cancelAlarm(context, subappId, id)
         log("[Notification] Cancelled scheduled notification #$id")
         return true
     }
@@ -446,7 +451,8 @@ class NativeStorageBridge(
     @JavascriptInterface
     fun cancelNotification(id: Int): Boolean {
         return try {
-            NotificationManagerCompat.from(context).cancel(id)
+            NotificationManagerCompat.from(context).cancel(subappId, id)
+            forgetNotification(context, subappId, id)
             log("[Notification] Cancelled notification #$id")
             true
         } catch (e: Exception) {
@@ -488,6 +494,7 @@ class NativeStorageBridge(
         /** Arms the alarm and records it so it can be restored after a reboot. */
         fun scheduleAlarm(
             context: Context,
+            subappId: String,
             id: Int,
             triggerAtMillis: Long,
             title: String,
@@ -495,7 +502,7 @@ class NativeStorageBridge(
         ): Boolean {
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
             val pendingIntent = alarmPendingIntent(
-                context, id, title, message,
+                context, subappId, id, title, message,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             ) ?: return false
 
@@ -505,7 +512,7 @@ class NativeStorageBridge(
                         return@synchronized false
                     }
                     alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
-                    persistAlarm(context, id, triggerAtMillis, title, message)
+                    persistAlarm(context, subappId, id, triggerAtMillis, title, message)
                     true
                 } catch (e: Exception) {
                     false
@@ -513,19 +520,23 @@ class NativeStorageBridge(
             }
         }
 
-        fun cancelAlarm(context: Context, id: Int) {
+        fun cancelAlarm(context: Context, subappId: String, id: Int) {
             synchronized(alarmLock) {
                 val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-                alarmPendingIntent(context, id, "", "", PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE)
+                alarmPendingIntent(context, subappId, id, "", "", PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE)
                     ?.let { alarmManager.cancel(it) }
-                forgetPersistedAlarm(context, id)
+                forgetPersistedAlarm(context, subappId, id)
             }
         }
 
         /** Re-arms every still-future alarm; called after boot and after app replacement. */
         fun reschedulePersistedAlarms(context: Context) {
+            SubappRepository(context).ensureMigrated().forEach { reschedulePersistedAlarms(context, it.id) }
+        }
+
+        fun reschedulePersistedAlarms(context: Context, subappId: String) {
             synchronized(alarmLock) {
-                val prefs = context.getSharedPreferences(ALARM_PREFS, Context.MODE_PRIVATE)
+                val prefs = alarmPreferences(context, subappId)
                 val stored = JSONObject(prefs.getString(ALARM_PREFS, "{}") ?: "{}")
                 val now = System.currentTimeMillis()
                 stored.keys().asSequence().toList().forEach { key ->
@@ -534,26 +545,28 @@ class NativeStorageBridge(
                     if (at <= now) stored.remove(key)
                 }
                 prefs.edit().putString(ALARM_PREFS, stored.toString()).commit()
+                stored.keys().asSequence().toList().forEach { key -> key.toIntOrNull()?.let { cancelLegacyAlarm(context, it) } }
                 if (canScheduleExact(context)) {
                     stored.keys().asSequence().toList().forEach { key ->
                         val entry = stored.optJSONObject(key) ?: return@forEach
-                        scheduleAlarm(context, key.toIntOrNull() ?: return@forEach, entry.optLong("at"), entry.optString("title"), entry.optString("message"))
+                        val id = key.toIntOrNull() ?: return@forEach
+                        scheduleAlarm(context, subappId, id, entry.optLong("at"), entry.optString("title"), entry.optString("message"))
                     }
                 }
             }
         }
 
-        fun forgetPersistedAlarm(context: Context, id: Int) {
+        fun forgetPersistedAlarm(context: Context, subappId: String, id: Int) {
             synchronized(alarmLock) {
-                val prefs = context.getSharedPreferences(ALARM_PREFS, Context.MODE_PRIVATE)
+                val prefs = alarmPreferences(context, subappId)
                 val stored = JSONObject(prefs.getString(ALARM_PREFS, "{}") ?: "{}")
                 stored.remove(id.toString())
                 prefs.edit().putString(ALARM_PREFS, stored.toString()).commit()
             }
         }
 
-        private fun persistAlarm(context: Context, id: Int, at: Long, title: String, message: String) {
-            val prefs = context.getSharedPreferences(ALARM_PREFS, Context.MODE_PRIVATE)
+        private fun persistAlarm(context: Context, subappId: String, id: Int, at: Long, title: String, message: String) {
+            val prefs = alarmPreferences(context, subappId)
             val stored = JSONObject(prefs.getString(ALARM_PREFS, "{}") ?: "{}")
             stored.put(id.toString(), JSONObject().put("at", at).put("title", title).put("message", message))
             prefs.edit().putString(ALARM_PREFS, stored.toString()).commit()
@@ -561,17 +574,59 @@ class NativeStorageBridge(
 
         private fun alarmPendingIntent(
             context: Context,
+            subappId: String,
             id: Int,
             title: String,
             message: String,
             flags: Int
         ): PendingIntent? {
             val intent = Intent(context, ScheduledNotificationReceiver::class.java).apply {
+                data = Uri.parse("appapp-alarm://subapp/$subappId/notification/$id")
                 putExtra(ScheduledNotificationReceiver.EXTRA_ID, id)
+                putExtra(ScheduledNotificationReceiver.EXTRA_SUBAPP_ID, subappId)
                 putExtra(ScheduledNotificationReceiver.EXTRA_TITLE, title)
                 putExtra(ScheduledNotificationReceiver.EXTRA_MESSAGE, message)
             }
-            return PendingIntent.getBroadcast(context, id, intent, flags)
+            return PendingIntent.getBroadcast(context, scopedId(subappId, id), intent, flags)
+        }
+
+        private fun cancelLegacyAlarm(context: Context, id: Int) {
+            val legacyIntent = Intent(context, ScheduledNotificationReceiver::class.java)
+            PendingIntent.getBroadcast(context, id, legacyIntent, PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE)
+                ?.let { pending ->
+                    (context.getSystemService(Context.ALARM_SERVICE) as AlarmManager).cancel(pending)
+                    pending.cancel()
+                }
+        }
+
+        private fun alarmPreferences(context: Context, subappId: String) =
+            context.getSharedPreferences("${ALARM_PREFS}_$subappId", Context.MODE_PRIVATE)
+
+        fun scopedId(subappId: String, id: Int): Int = 31 * subappId.hashCode() + id
+
+        private fun rememberNotification(context: Context, subappId: String, id: Int) {
+            val prefs = context.getSharedPreferences("runtime_notifications_$subappId", Context.MODE_PRIVATE)
+            prefs.edit().putStringSet("ids", prefs.getStringSet("ids", emptySet()).orEmpty() + id.toString()).apply()
+        }
+
+        private fun forgetNotification(context: Context, subappId: String, id: Int) {
+            val prefs = context.getSharedPreferences("runtime_notifications_$subappId", Context.MODE_PRIVATE)
+            prefs.edit().putStringSet("ids", prefs.getStringSet("ids", emptySet()).orEmpty() - id.toString()).apply()
+        }
+
+        fun cancelAllForSubapp(context: Context, subappId: String) {
+            val notificationPrefs = context.getSharedPreferences("runtime_notifications_$subappId", Context.MODE_PRIVATE)
+            notificationPrefs.getStringSet("ids", emptySet()).orEmpty().forEach { raw ->
+                raw.toIntOrNull()?.let { NotificationManagerCompat.from(context).cancel(subappId, it) }
+            }
+            notificationPrefs.edit().clear().commit()
+            val alarms = alarmPreferences(context, subappId)
+            val ids = runCatching {
+                val keys = JSONObject(alarms.getString(ALARM_PREFS, "{}") ?: "{}").keys()
+                buildList { while (keys.hasNext()) keys.next().toIntOrNull()?.let(::add) }
+            }.getOrDefault(emptyList())
+            ids.forEach { cancelAlarm(context, subappId, it) }
+            alarms.edit().clear().commit()
         }
 
         /**
