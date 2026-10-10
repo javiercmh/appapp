@@ -73,7 +73,7 @@ The `WebView` loads `https://app.local/index.html`. Requests to `https://app.loc
    - The runtime `WebView` is rendered edge-to-edge with zero native view padding, so the inner web application owns all of its own padding and layout.
 2. **Web Safe Areas** — two sources, combined:
    - Android `WebView` derives `env(safe-area-inset-*)` from the **display cutout only**. It never reports the status or navigation bars, so `env(safe-area-inset-bottom)` is `0px` on a gesture-nav phone.
-   - `MainActivity.pushInsetsToWebView()` therefore publishes the real `systemBars() | displayCutout()` insets onto `document.documentElement` as `--app-inset-top`, `--app-inset-right`, `--app-inset-bottom` and `--app-inset-left` (CSS px), and fires an `app2:insets` event. The top value is `0` while the App² toolbar is visible, because the toolbar already consumes it, and the full status bar inset in standalone mode.
+   - `MainActivity.pushInsetsToWebView()` therefore publishes the real `systemBars() | displayCutout()` insets onto `document.documentElement` as `--app-inset-top`, `--app-inset-right`, `--app-inset-bottom` and `--app-inset-left` (CSS px), and fires an `app2:insets` event whose `detail.imeVisible` reports whether Android's on-screen keyboard is visible. The IME inset is not included in the safe-area variables. The top value is `0` while the App² toolbar is visible, because the toolbar already consumes it, and the full status bar inset in standalone mode.
    - Web stylesheets must combine both: `max(env(safe-area-inset-bottom, 0px), var(--app-inset-bottom, 0px))`. See the `--sa-*` tokens in the starter template's `css/style.css`.
    - Set `viewport-fit=cover` in the `<meta name="viewport">` tag, or `env()` stays zero.
 3. **Editor Responsiveness & Flow**:
@@ -159,6 +159,41 @@ binary file that the `app.local` interceptor can then serve via `<img src="...">
 - **Persistence Verification**: When modifying storage logic, test by adding items, terminating the process, and verifying that state reloads identically on restart.
 - **History & Snapshots**: Verify that workspace snapshots are taken before "Run" and that snapshot restoration properly updates the editor and runtime.
 - **Example App Device Tests**: `examples/<app>/` is source code in this repository; it is not automatically copied to an installed App² instance. Before reporting a device test, sync the changed app-owned files to that device's `filesDir/workspace/`, compare source and device hashes, then force-stop and relaunch App² so the WebView loads the copied files. Never overwrite `data/`, `app.log`, or other user workspace files just to test code. See `examples/working_hours/AGENTS.md` for the Working Hours sync procedure.
+- **Keyboard-Aware Bottom Bars**: Do not infer that the on-screen keyboard is open from input focus. On Android, use `app2:insets` event `detail.imeVisible`; a hardware keyboard can focus a text field while the IME remains hidden. For browser previews without the host event, compare the viewport height to its pre-keyboard baseline.
+
+### Android VM smoke tests (this development host)
+
+- The Android SDK is at `/home/melo/Android/Sdk`; its emulator executable is `/home/melo/Android/Sdk/emulator/emulator` and is not on `PATH`. The installed AVD is named `Medium_Phone` (Android 36, x86_64). Do not search the filesystem for another SDK or install another emulator.
+- Check `adb devices -l` before starting anything. If `emulator-5554` is already listed as `device`, use it. If it is `offline`, wait for boot to finish and check again. The physical phone may also be listed; use the emulator serial explicitly so tests do not accidentally run on the phone.
+- To start the AVD when it is not running, run this in a terminal and leave it open:
+  ```sh
+  /home/melo/Android/Sdk/emulator/emulator -avd Medium_Phone -no-snapshot-load -no-boot-anim -gpu swangle
+  ```
+  On this host, the default software renderer repeatedly exited with status 139; `-gpu swangle` booted successfully. `-no-snapshot-load` requests a cold boot but preserves the AVD's data. **Do not add `-wipe-data`** for routine tests.
+- In another terminal, check `adb devices -l` until the emulator state is `device`, then confirm Android has completed booting:
+  ```sh
+  adb -s emulator-5554 shell getprop sys.boot_completed
+  ```
+  Continue when it prints `1`. The emulator can appear as `offline` briefly during startup. If it exits before becoming ready, report the emulator failure rather than claiming an app test ran.
+- Confirm AppApp is installed before testing:
+  ```sh
+  adb -s emulator-5554 shell pm path com.example.runtimecompiler
+  ```
+  If no APK path is returned, build and install through Android Studio. This repository has no Gradle wrapper or CLI Gradle setup; do not try `./gradlew` or search for a Gradle installation.
+- For a web-app JavaScript/CSS/HTML change, remember the running WebView reads `filesDir/workspace/`, not the repository or APK assets directly. An already initialized workspace can therefore be stale, including when editing `app/src/main/assets/starter_template/`. For a focused smoke test, sync only the changed file to the matching existing workspace path; never reset the workspace or overwrite `data/`, `app.log`, or unrelated files. With a debuggable AppApp build, stage the file and copy it with `run-as`:
+  ```sh
+  adb -s emulator-5554 push path/to/changed-file /data/local/tmp/appapp-test-file
+  adb -s emulator-5554 shell run-as com.example.runtimecompiler cp /data/local/tmp/appapp-test-file files/workspace/path/to/changed-file
+  sha256sum path/to/changed-file
+  adb -s emulator-5554 shell run-as com.example.runtimecompiler sha256sum files/workspace/path/to/changed-file
+  ```
+  The two hashes must match. If `run-as` is unavailable, use Android Studio to build/install or use the app's editor; do not work around the app sandbox. For native Android code or manifest changes, build/install through Android Studio instead of copying files into the web workspace.
+- Restart the app after syncing so the WebView reloads the files, then launch it:
+  ```sh
+  adb -s emulator-5554 shell am force-stop com.example.runtimecompiler
+  adb -s emulator-5554 shell monkey -p com.example.runtimecompiler 1
+  ```
+  Verify the behavior in the UI. Use `adb -s emulator-5554 exec-out screencap -p > /tmp/appapp-emulator.png` when a screenshot helps. Report exactly which controls and flows were exercised; do not claim a checkbox/date-field test if the installed app has no such controls.
 
 ---
 

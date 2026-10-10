@@ -27,12 +27,38 @@ function initTabs() {
   });
 }
 
-// The host window uses adjustResize, so the keyboard would otherwise shove the tab bar up.
+// Hide bottom chrome only for the on-screen keyboard, not merely because a field has focus.
 function initKeyboardHandling() {
-  addEventListener('focusin', (e) => {
-    if (e.target.matches('input, textarea')) document.body.classList.add('kb');
+  let nativeImeVisible = null;
+  let baselineHeight = window.visualViewport?.height || window.innerHeight;
+  let baselineWidth = window.innerWidth;
+  const viewportHeight = () => window.visualViewport?.height || window.innerHeight;
+  const setKeyboardVisible = (visible) => document.body.classList.toggle('kb', visible);
+
+  addEventListener('app2:insets', (e) => {
+    if (typeof e.detail?.imeVisible !== 'boolean') return;
+    nativeImeVisible = e.detail.imeVisible;
+    setKeyboardVisible(nativeImeVisible);
   });
-  addEventListener('focusout', () => document.body.classList.remove('kb'));
+
+  const updateFromViewport = () => {
+    if (nativeImeVisible !== null) return;
+    const width = window.innerWidth;
+    const height = viewportHeight();
+    if (Math.abs(width - baselineWidth) > 80) {
+      baselineWidth = width;
+      baselineHeight = height;
+      setKeyboardVisible(false);
+      return;
+    }
+    const visible = baselineHeight - height > 120;
+    setKeyboardVisible(visible);
+    if (!visible) baselineHeight = height;
+  };
+
+  window.visualViewport?.addEventListener('resize', updateFromViewport);
+  addEventListener('resize', updateFromViewport);
+  updateFromViewport();
 }
 
 // --- Notification permission ---

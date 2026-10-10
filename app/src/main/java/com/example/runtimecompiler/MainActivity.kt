@@ -105,6 +105,7 @@ class MainActivity : AppCompatActivity() {
 
     /** Last system-bar + cutout insets, republished to the WebView as CSS custom properties. */
     private var lastInsets: Insets = Insets.NONE
+    private var lastImeVisible: Boolean = false
 
     /**
      * Held between `onShowFileChooser` and the picker result. WebView requires this callback to be
@@ -293,7 +294,7 @@ class MainActivity : AppCompatActivity() {
               s.setProperty('--app-inset-bottom','${cssPx(lastInsets.bottom)}');
               s.setProperty('--app-inset-left','${cssPx(lastInsets.left)}');
             })(document.documentElement.style);
-            window.dispatchEvent(new CustomEvent('app2:insets'));
+            window.dispatchEvent(new CustomEvent('app2:insets',{detail:{imeVisible:$lastImeVisible}}));
         """.trimIndent()
         binding.webView.evaluateJavascript(js, null)
     }
@@ -316,6 +317,7 @@ class MainActivity : AppCompatActivity() {
 
         // Handle dynamic system window insets (Notches, Cutouts, Status Bar, Navigation Bar)
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, windowInsets ->
+            lastImeVisible = windowInsets.isVisible(WindowInsetsCompat.Type.ime())
             val insets = windowInsets.getInsets(
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
             )
