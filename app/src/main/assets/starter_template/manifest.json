@@ -1,9 +1,9 @@
 {
   "name": "Starter Demo",
   "short_name": "Demo",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "templateVersion": 3,
-  "description": "An interactive starter demo showcasing the App² runtime platform",
+  "description": "An interactive starter demo showcasing the App\u00b2 runtime platform",
   "main": "index.html",
   "files": [
     "index.html",
@@ -14,6 +14,9 @@
     "js/ui.js",
     "manifest.json",
     "AGENTS.md",
-    "data/entries.json"
+    "data/entries.json",
+    "js/ai-demo.js",
+    "PACKAGING.md",
+    "data/ai-demo.json"
   ]
 }

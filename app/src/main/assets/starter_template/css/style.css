@@ -487,3 +487,13 @@ code {
 
 /* Hidden only while the on-screen keyboard is visible (native insets or viewport fallback). */
 body.kb .tabbar, body.kb .tip { display: none; }
+
+/* Native AI demo */
+.ai-label { display: block; margin: 12px 0 6px; color: var(--muted); font-size: .85rem; }
+.ai-prompt { margin: 12px 0; padding: 12px; border-left: 3px solid var(--accent); line-height: 1.5; }
+.ai-response-box { margin-top: 16px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; }
+#ai-response { white-space: pre-wrap; overflow-wrap: anywhere; }
+.ai-code { max-height: none; white-space: pre; overflow-x: auto; }
+select.field { width: 100%; color: inherit; background-color: var(--surface); }
+button:disabled { opacity: .5; cursor: default; }
+[hidden] { display: none !important; }
