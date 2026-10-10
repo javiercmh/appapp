@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="12dp" app:cardBackgroundColor="@color/surface" app:cardCornerRadius="20dp" app:cardElevation="0dp" app:strokeWidth="0dp">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
+            <com.google.android.material.imageview.ShapeableImageView android:id="@+id/app_icon" android:layout_width="48dp" android:layout_height="48dp" android:scaleType="centerCrop" android:importantForAccessibility="no" />
+            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:layout_marginStart="14dp">
+                <TextView android:id="@+id/app_name" android:layout_width="match_parent" android:layout_height="wrap_content" android:textAppearance="@style/TextAppearance.Material3.TitleMedium" android:textColor="@color/on_surface" android:breakStrategy="simple" />
+                <TextView android:id="@+id/app_description" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:maxLines="2" android:ellipsize="end" android:textAppearance="@style/TextAppearance.Material3.BodyMedium" android:textColor="@color/on_surface_muted" />
+            </LinearLayout>
+            <androidx.appcompat.widget.AppCompatImageButton android:id="@+id/app_menu" android:layout_width="48dp" android:layout_height="48dp" android:background="?attr/selectableItemBackgroundBorderless" android:padding="12dp" app:srcCompat="@drawable/ic_more_vertical" app:tint="@color/on_surface_muted" />
+        </LinearLayout>
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:orientation="horizontal">
+            <com.google.android.material.button.MaterialButton android:id="@+id/open_app" style="@style/Widget.Material3.Button.TonalButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:minHeight="48dp" android:text="@string/library_open" android:textAllCaps="false" android:textColor="@color/on_surface" app:backgroundTint="@color/surface_variant" app:icon="@drawable/ic_play" app:iconTint="@color/accent_blue" app:iconGravity="textStart" />
+            <com.google.android.material.button.MaterialButton android:id="@+id/edit_app" style="@style/Widget.Material3.Button.TextButton" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="8dp" android:minHeight="48dp" android:text="@string/action_edit_code" android:textAllCaps="false" android:textColor="@color/accent_blue" app:icon="@drawable/ic_code" app:iconTint="@color/accent_blue" app:iconGravity="textStart" />
+        </LinearLayout>
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>

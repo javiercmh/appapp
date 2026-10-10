@@ -4,13 +4,15 @@ import android.content.Intent
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
-import android.view.Gravity
-import android.view.ViewGroup
-import android.widget.Button
-import android.widget.ImageView
-import android.widget.LinearLayout
-import android.widget.ScrollView
-import android.widget.TextView
+import android.view.View
+import androidx.activity.enableEdgeToEdge
+import androidx.appcompat.widget.PopupMenu
+import androidx.core.view.WindowInsetsControllerCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import com.google.android.material.shape.ShapeAppearanceModel
+import com.example.runtimecompiler.databinding.ActivitySubappLibraryBinding
+import com.example.runtimecompiler.databinding.ItemSubappBinding
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -26,7 +28,7 @@ import org.json.JSONObject
 
 class SubappLibraryActivity : AppCompatActivity() {
     private lateinit var repository: SubappRepository
-    private lateinit var listContainer: LinearLayout
+    private lateinit var binding: ActivitySubappLibraryBinding
     private var rowsReady = false
     private val importLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) importApp(uri)
@@ -45,48 +47,67 @@ class SubappLibraryActivity : AppCompatActivity() {
     }
 
     private fun showLibrary() {
-        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 28, 24, 12) }
-        root.addView(TextView(this).apply { text = "Your apps"; textSize = 28f })
-        root.addView(TextView(this).apply { text = "Each app keeps its own files and data."; textSize = 14f; setPadding(0, 4, 0, 16) })
-        val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        actions.addView(Button(this).apply { text = "New starter app"; setOnClickListener { edit(repository.createStarter()) } })
-        actions.addView(Button(this).apply { text = "Import ZIP"; setOnClickListener { importLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "*/*")) } })
-        root.addView(actions)
-        val scroll = ScrollView(this)
-        listContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        scroll.addView(listContainer)
-        root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
-        setContentView(root)
+        enableEdgeToEdge()
+        binding = ActivitySubappLibraryBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+        ViewCompat.setOnApplyWindowInsetsListener(binding.libraryRoot) { view, insets ->
+            WindowInsetsControllerCompat(window, view).apply {
+                isAppearanceLightStatusBars = false
+                isAppearanceLightNavigationBars = false
+            }
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            insets
+        }
+        ViewCompat.requestApplyInsets(binding.root)
+        binding.newApp.setOnClickListener { edit(repository.createStarter()) }
+        binding.importApp.setOnClickListener {
+            importLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "*/*"))
+        }
         rowsReady = true
-        title = "App²"
         refreshRows()
     }
 
     private fun refreshRows() {
-        listContainer.removeAllViews()
-        repository.list().forEach { record ->
+        binding.appList.removeAllViews()
+        val records = repository.list()
+        binding.appCount.text = resources.getQuantityString(R.plurals.library_count, records.size, records.size)
+        binding.emptyState.visibility = if (records.isEmpty()) View.VISIBLE else View.GONE
+        records.forEach { record ->
             val manager = WorkspaceManager(this, workspaceDir = record.workspaceDir)
             val manifest = try { JSONObject(manager.readFile("manifest.json")) } catch (_: Exception) { JSONObject() }
-            val name = manifest.optString("name", "Untitled app")
-            val row = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(4, 14, 4, 10) }
-            val heading = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-            val iconName = manifest.optJSONArray("icons")?.optJSONObject(0)?.optString("src") ?: "icon.png"
+            val name = manifest.optString("name").ifBlank { getString(R.string.library_untitled) }
+            val row = ItemSubappBinding.inflate(layoutInflater, binding.appList, false)
+            val iconName = manifest.optJSONArray("icons")?.optJSONObject(0)?.optString("src")?.takeIf { it.isNotBlank() } ?: "icon.png"
             val iconFile = manager.getFile(iconName)
-            if (iconFile.isFile) {
-                val image = ImageView(this).apply { setImageBitmap(BitmapFactory.decodeFile(iconFile.absolutePath)); scaleType = ImageView.ScaleType.CENTER_CROP }
-                heading.addView(image, LinearLayout.LayoutParams(52, 52))
-            } else {
-                heading.addView(ImageView(this).apply { setImageResource(R.mipmap.ic_launcher_round) }, LinearLayout.LayoutParams(52, 52))
+            val bitmap = if (iconFile.isFile) runCatching { BitmapFactory.decodeFile(iconFile.absolutePath) }.getOrNull() else null
+            row.appIcon.shapeAppearanceModel = ShapeAppearanceModel.builder()
+                .setAllCorners(com.google.android.material.shape.CornerFamily.ROUNDED, resources.displayMetrics.density * 12f)
+                .build()
+            if (bitmap != null) row.appIcon.setImageBitmap(bitmap)
+            else row.appIcon.setImageResource(R.mipmap.ic_launcher_round)
+            row.appName.text = name
+            row.appDescription.text = manifest.optString("description").ifBlank { getString(R.string.library_app_fallback) }
+            row.openApp.contentDescription = getString(R.string.library_open_app, name)
+            row.editApp.contentDescription = getString(R.string.library_edit_app, name)
+            row.openApp.setOnClickListener { open(record) }
+            row.editApp.setOnClickListener { edit(record) }
+            row.appMenu.contentDescription = getString(R.string.library_menu, name)
+            row.appMenu.setOnClickListener { anchor ->
+                PopupMenu(this, anchor).apply {
+                    menu.add(0, 1, 0, R.string.library_install)
+                    menu.add(0, 2, 1, R.string.library_delete)
+                    setOnMenuItemClickListener { item ->
+                        when (item.itemId) {
+                            1 -> install(record, name, iconFile)
+                            2 -> confirmDelete(record, name)
+                        }
+                        true
+                    }
+                    show()
+                }
             }
-            heading.addView(TextView(this).apply { text = name; textSize = 18f; setPadding(12, 0, 8, 0) }, LinearLayout.LayoutParams(0, -2, 1f))
-            row.addView(heading)
-            val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-            actions.addView(Button(this).apply { text = "Open"; setOnClickListener { open(record) } }, LinearLayout.LayoutParams(0, -2, 1f))
-            actions.addView(Button(this).apply { text = "Edit"; setOnClickListener { edit(record) } }, LinearLayout.LayoutParams(0, -2, 1f))
-            actions.addView(Button(this).apply { text = "Install"; setOnClickListener { install(record, name, iconFile) } }, LinearLayout.LayoutParams(0, -2, 1f))
-            actions.addView(Button(this).apply { text = "Delete"; setOnClickListener { confirmDelete(record, name) } }, LinearLayout.LayoutParams(0, -2, 1f))
-            row.addView(actions)
-            listContainer.addView(row)
+            binding.appList.addView(row.root)
         }
     }
 
