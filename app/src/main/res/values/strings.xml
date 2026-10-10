@@ -119,8 +119,11 @@
     <string name="library_new">New app</string>
     <string name="library_import">Import ZIP</string>
     <string name="library_open">Open</string>
+    <string name="library_run">Run</string>
     <string name="library_install">Add to home screen</string>
     <string name="library_delete">Delete app</string>
+    <string name="library_install_app">Install %1$s</string>
+    <string name="library_edit">Edit</string>
     <string name="library_menu">More options for %1$s</string>
     <string name="library_open_app">Open %1$s</string>
     <string name="library_edit_app">Edit %1$s</string>
