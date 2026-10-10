@@ -20,9 +20,9 @@ data class WorkspaceFile(
  */
 class WorkspaceManager(
     private val context: Context,
-    private val onLogListener: ((String) -> Unit)? = null
+    private val onLogListener: ((String) -> Unit)? = null,
+    val workspaceDir: File
 ) {
-    val workspaceDir: File = File(context.filesDir, "workspace")
 
     init {
         ensureWorkspaceInitialized()

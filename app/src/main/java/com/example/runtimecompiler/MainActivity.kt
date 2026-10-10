@@ -67,6 +67,8 @@ import com.example.runtimecompiler.workspace.WorkspaceHistoryManager
 import com.example.runtimecompiler.workspace.WorkspaceManager
 import com.example.runtimecompiler.workspace.WorkspacePackageManager
 import com.example.runtimecompiler.workspace.WorkspaceSnapshot
+import com.example.runtimecompiler.workspace.SubappRepository
+import com.example.runtimecompiler.workspace.SubappRecord
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.checkbox.MaterialCheckBox
@@ -95,6 +97,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var workspaceManager: WorkspaceManager
     private lateinit var historyManager: WorkspaceHistoryManager
     private lateinit var settingsManager: AppSettingsManager
+    private lateinit var subapp: SubappRecord
+    private lateinit var subappRepository: SubappRepository
 
     private val logBuffer = StringBuilder()
     private val timeFormat = SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault())
@@ -311,9 +315,7 @@ class MainActivity : AppCompatActivity() {
 
         // Check if launched from a Deployed Home Screen Shortcut
         val isStandalone = intent.getBooleanExtra("EXTRA_STANDALONE_MODE", false)
-        if (isStandalone) {
-            binding.appBarLayout.visibility = View.GONE
-        }
+        if (isStandalone) binding.appBarLayout.visibility = View.GONE
 
         // Handle dynamic system window insets (Notches, Cutouts, Status Bar, Navigation Bar)
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, windowInsets ->
@@ -336,9 +338,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Initialize Workspace Manager
-        workspaceManager = WorkspaceManager(this) { msg ->
-            runOnUiThread { appendLog(msg) }
-        }
+        subappRepository = SubappRepository(this)
+        val requestedId = intent.getStringExtra(EXTRA_SUBAPP_ID)
+        subapp = requestedId?.let(subappRepository::resolve)
+            ?: subappRepository.ensureMigrated().firstOrNull()
+            ?: subappRepository.createStarter()
+        SubappSessionRegistry.register(subapp.id, this)
+        workspaceManager = WorkspaceManager(this, { msg -> runOnUiThread { appendLog(msg) } }, subapp.workspaceDir)
 
         appendLog("[System] App² initialized with Edge-to-Edge & Unified Workspace.")
 
@@ -346,9 +352,8 @@ class MainActivity : AppCompatActivity() {
         settingsManager = AppSettingsManager(this)
 
         // Initialize Workspace History Manager
-        historyManager = WorkspaceHistoryManager(this) { msg ->
-            runOnUiThread { appendLog(msg) }
-        }
+        historyManager = WorkspaceHistoryManager(this, { msg -> runOnUiThread { appendLog(msg) } }, subapp.directory)
+        binding.toolbar.title = loadAppConfig().name
 
         // Save initial snapshot if none exists
         if (historyManager.getSnapshots().isEmpty()) {
@@ -358,6 +363,8 @@ class MainActivity : AppCompatActivity() {
         // Initialize Native Storage & State Bridge
         storageBridge = NativeStorageBridge(
             context = this,
+            subappId = subapp.id,
+            appWorkspaceDir = subapp.workspaceDir,
             onLogListener = { storageLog ->
                 runOnUiThread { appendLog(storageLog) }
             },
@@ -369,7 +376,7 @@ class MainActivity : AppCompatActivity() {
         setupWebView()
         setupListeners()
         reloadApp()
-        NativeStorageBridge.reschedulePersistedAlarms(this)
+        NativeStorageBridge.reschedulePersistedAlarms(this, subapp.id)
 
         // Handle Back button for WebView history
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
@@ -469,9 +476,9 @@ class MainActivity : AppCompatActivity() {
                 val host = url.host ?: ""
                 val scheme = url.scheme ?: ""
 
-                // Intercept https://app.local/* requests to serve unified local workspace files
+                // Intercept this subapp's origin and serve only its own workspace files.
                 if ((scheme.equals("https", ignoreCase = true) || scheme.equals("http", ignoreCase = true))
-                    && host.equals("app.local", ignoreCase = true)) {
+                    && host.equals("${subapp.id}.app.local", ignoreCase = true)) {
 
                     var path = url.path ?: "/index.html"
                     if (path.isEmpty() || path == "/") {
@@ -553,10 +560,8 @@ class MainActivity : AppCompatActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        val isStandalone = intent.getBooleanExtra("EXTRA_STANDALONE_MODE", false)
-        binding.appBarLayout.visibility = if (isStandalone) View.GONE else View.VISIBLE
-        if (isStandalone) {
-            reloadApp()
+        if (intent.getStringExtra(EXTRA_SUBAPP_ID) != subapp.id) {
+            finish()
         }
     }
 
@@ -649,6 +654,8 @@ class MainActivity : AppCompatActivity() {
             }
 
             workspaceManager.writeFile("manifest.json", serializeManifest(json))
+            binding.toolbar.title = config.name
+            refreshPinnedShortcut(config.name, config.iconFileName)
             appendLog("[Config] Updated manifest.json for '${config.name}'")
         } catch (e: Exception) {
             appendLog("[Config Error] Failed to write manifest.json: ${e.message}")
@@ -688,16 +695,16 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Build launch Intent with standalone mode flag
-        val shortcutIntent = Intent(this, MainActivity::class.java).apply {
+        val shortcutIntent = Intent(this, SubappRuntimeActivity::class.java).apply {
             action = Intent.ACTION_VIEW
-            putExtra("EXTRA_STANDALONE_MODE", true)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            data = Uri.parse("appapp://subapp/${subapp.id}")
+            addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT or Intent.FLAG_ACTIVITY_RETAIN_IN_RECENTS)
         }
 
         // Build and request pinned shortcut
-        val shortcutId = "appapp_shortcut_${appName.lowercase().replace(Regex("[^a-z0-9_-]"), "_")}"
+        val shortcutId = "appapp_subapp_${subapp.id}"
         val pinShortcutInfo = ShortcutInfoCompat.Builder(this, shortcutId)
-            .setShortLabel(appName)
+            .setShortLabel(appName.take(25))
             .setLongLabel(appName)
             .setIcon(iconCompat)
             .setIntent(shortcutIntent)
@@ -711,6 +718,23 @@ class MainActivity : AppCompatActivity() {
             appendLog("[Deploy Error] Failed to request pinned shortcut.")
             Toast.makeText(this, R.string.shortcut_not_supported, Toast.LENGTH_SHORT).show()
         }
+    }
+
+    private fun refreshPinnedShortcut(name: String, iconName: String?) {
+        val shortcutId = "appapp_subapp_${subapp.id}"
+        val iconFile = iconName?.let(workspaceManager::getFile) ?: workspaceManager.getFile("icon.png")
+        val icon = if (iconFile.isFile) runCatching {
+            BitmapFactory.decodeFile(iconFile.absolutePath)?.let { IconCompat.createWithBitmap(it) }
+        }.getOrNull() else null
+        val info = ShortcutInfoCompat.Builder(this, shortcutId)
+            .setShortLabel(name.take(25)).setLongLabel(name)
+            .setIcon(icon ?: renderAppShortcutIcon())
+            .setIntent(Intent(this, SubappRuntimeActivity::class.java).apply {
+                action = Intent.ACTION_VIEW
+                data = Uri.parse("appapp://subapp/${subapp.id}")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT or Intent.FLAG_ACTIVITY_RETAIN_IN_RECENTS)
+            }).build()
+        ShortcutManagerCompat.updateShortcuts(this, listOf(info))
     }
 
     /**
@@ -774,11 +798,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         appendLog("[Compiler] Loading App² workspace entry '$entryPoint' into runtime...")
-        try {
-            android.webkit.WebStorage.getInstance().deleteAllData()
-        } catch (_: Exception) {}
         binding.webView.clearCache(true)
-        binding.webView.loadUrl("https://app.local/$entryPoint")
+        binding.webView.loadUrl("https://${subapp.id}.app.local/$entryPoint")
     }
 
     private fun appendLog(message: String) {
@@ -1269,12 +1290,13 @@ class MainActivity : AppCompatActivity() {
             }
             override fun afterTextChanged(s: Editable?) {
                 highlightRunnable?.let { handler.removeCallbacks(it) }
-                highlightRunnable = Runnable {
+                val runnable = Runnable {
                     if (s != null) {
                         SyntaxHighlighter.highlight(s, fileName)
                     }
                 }
-                handler.postDelayed(highlightRunnable!!, 400)
+                highlightRunnable = runnable
+                handler.postDelayed(runnable, 400)
             }
         })
 
@@ -1777,7 +1799,7 @@ class MainActivity : AppCompatActivity() {
         btnClearCache?.setOnClickListener {
             binding.webView.clearCache(true)
             binding.webView.clearFormData()
-            WebStorage.getInstance().deleteAllData()
+            WebStorage.getInstance().deleteOrigin("https://${subapp.id}.app.local")
             workspaceManager.writeFile("app.log", "[System] Logs and cache cleared.\n")
             logBuffer.clear()
             reloadApp()
@@ -1883,7 +1905,7 @@ class MainActivity : AppCompatActivity() {
         binding.webView.clearCache(true)
         binding.webView.clearFormData()
         binding.webView.clearHistory()
-        WebStorage.getInstance().deleteAllData()
+        WebStorage.getInstance().deleteOrigin("https://${subapp.id}.app.local")
 
         logBuffer.clear()
         appendLog("[System] App² factory reset completed. Starter template restored.")
@@ -1895,8 +1917,11 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        if (::subapp.isInitialized) SubappSessionRegistry.unregister(subapp.id, this)
         // Release any in-flight file chooser before tearing the WebView down.
         deliverFileChooserResult(null)
         binding.webView.destroy()
     }
+
+    companion object { const val EXTRA_SUBAPP_ID = "EXTRA_SUBAPP_ID" }
 }
