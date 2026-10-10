@@ -81,6 +81,7 @@ class SubappRepository(private val context: Context) {
     @Synchronized
     fun delete(id: String): Boolean {
         if (!validId(id)) return false
+        (context.applicationContext as? com.wynh.appapp.ai.AppAiApplication)?.ai?.cancelApp(id)
         val record = resolve(id) ?: return false
         val deleted = record.directory.deleteRecursively()
         if (deleted) {

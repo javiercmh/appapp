@@ -84,6 +84,11 @@ dependencies {
     implementation(libs.androidx.constraintlayout)
     implementation(libs.androidx.webkit)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.okhttp)
+    implementation(libs.gson)
+    implementation(libs.nimbus.jose.jwt)
+    implementation(libs.androidx.browser)
+    implementation(libs.androidx.lifecycle.runtime)
 
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")

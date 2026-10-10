@@ -8,6 +8,110 @@ const N = window.AndroidStorage || null;
 
 export const isNative = !!N;
 
+// --- Native AI requests (available only in supported App² WebViews) ---
+const AI = window.AppAI || null;
+let aiCounter = 0;
+const aiPending = new Map();
+const aiResults = new Map();
+if (AI) {
+  window.addEventListener('message', (event) => {
+    let message;
+    try { message = JSON.parse(event.data); } catch { return; }
+    if (message?.event === 'connection') {
+      window.dispatchEvent(new CustomEvent('app2:ai:connection', { detail: message.data }));
+      return;
+    }
+    if (message?.event === 'status') {
+      window.dispatchEvent(new CustomEvent('app2:ai:status', { detail: { id: message.id, ...message.data } }));
+      return;
+    }
+    if (message?.event !== 'complete' && message?.event !== 'error') return;
+    const request = aiResults.get(message.id);
+    if (request) {
+      request.done = true;
+      request.value = message.data;
+      request.error = message.event === 'error' ? message.data : null;
+      request.resolve?.(request);
+      request.notify?.(request);
+    }
+  });
+}
+
+function aiCall(action, extra = {}) {
+  if (!AI) return Promise.reject(new Error('AI is unavailable in this browser.'));
+  const id = `ai-${Date.now()}-${++aiCounter}`;
+  return new Promise((resolve, reject) => {
+    aiPending.set(id, { resolve, reject });
+    AI.postMessage(JSON.stringify({ id, action, ...extra }));
+    setTimeout(() => {
+      const pending = aiPending.get(id);
+      if (pending) { aiPending.delete(id); reject(new Error('AI request timed out.')); }
+    }, 30000);
+  }).then((response) => {
+    if (response.type === 'error') {
+      const error = new Error(response.data?.message || String(response.data));
+      error.code = response.data?.code || 'service';
+      throw error;
+    }
+    return response.data;
+  });
+}
+
+if (AI) {
+  AI.onmessage = (event) => {
+    let response;
+    try { response = JSON.parse(event.data); } catch { return; }
+    const pending = aiPending.get(response.id);
+    if (!pending) return;
+    aiPending.delete(response.id);
+    pending.resolve(response);
+  };
+}
+
+export const ai = {
+  // Channel presence only; discover connection separately via providers().
+  available: !!AI,
+  // -> {providers:[{id,name,connected}]} without account identifiers.
+  providers: () => aiCall('providers'),
+  // -> {models:[{id,name,reasoningLevels}]} in account-specific server order.
+  models: (providerId = 'chatgpt') => aiCall('models', { providerId }),
+  // -> request ID. Omit reasoningEffort for provider default; use advertised levels.
+  start: async ({ providerId = 'chatgpt', model, instructions = '', input, reasoningEffort } = {}) => {
+    const id = await aiCall('start', { data: { providerId, model, instructions, input, reasoningEffort } });
+    const request = { id, done: false, value: null, error: null, listeners: new Set() };
+    request.notify = (value) => request.listeners.forEach((listener) => listener(value));
+    aiResults.set(id, request);
+    return id;
+  },
+  // -> {id,done,value,error?}; native failures may reject with Error.code instead.
+  // Poll persisted IDs here after recreation. Never serialize wrapper internals.
+  result: async (id) => {
+    const cached = aiResults.get(id);
+    if (cached?.done) return cached;
+    const value = await aiCall('result', { requestId: id });
+    if (cached && value !== null) Object.assign(cached, { done: true, value });
+    return cached || { id, done: value !== null, value };
+  },
+  // -> completed text. Only supports requests started in this page instance.
+  wait: (id) => new Promise((resolve, reject) => {
+    const request = aiResults.get(id);
+    if (!request) { reject(new Error('Request not found.')); return; }
+    if (request.done) { request.error ? reject(Object.assign(new Error(request.error.message), { code: request.error.code })) : resolve(request.value); return; }
+    const poll = async () => {
+      try {
+        const result = await ai.result(id);
+        if (result?.done) return result.error ? reject(Object.assign(new Error(result.error.message), { code: result.error.code })) : resolve(result.value);
+        setTimeout(poll, 400);
+      } catch (error) { reject(error); }
+    };
+    poll();
+  }),
+  // Cancels and releases the native request; subsequent result() may be not_found.
+  cancel: (id) => aiCall('cancel', { requestId: id }),
+  // Release terminal results only after durable save or handled failure. -> true
+  acknowledge: async (id) => { const result = await aiCall('acknowledge', { requestId: id }); aiResults.delete(id); return result; },
+};
+
 // --- Preferences (Android SharedPreferences) ---
 
 export function savePref(key, value) {
