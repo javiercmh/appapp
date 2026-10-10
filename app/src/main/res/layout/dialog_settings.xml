@@ -139,6 +139,7 @@
 
             <!-- 3. Workspace Storage & Cache Card -->
             <com.google.android.material.card.MaterialCardView
+                android:id="@+id/settings_card_storage"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="12dp"
@@ -296,6 +297,7 @@
 
             <!-- 5. Compact, Aligned About App² Card -->
             <com.google.android.material.card.MaterialCardView
+                android:id="@+id/settings_card_about"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="12dp"
@@ -380,6 +382,7 @@
 
             <!-- 5. Danger Zone / Full Reset Card -->
             <com.google.android.material.card.MaterialCardView
+                android:id="@+id/settings_card_factory_reset"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="4dp"

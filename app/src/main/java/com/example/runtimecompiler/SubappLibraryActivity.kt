@@ -1,5 +1,14 @@
 package com.example.runtimecompiler
 
+import android.Manifest
+import android.app.Dialog
+import android.os.Build
+import android.view.ViewGroup
+import android.widget.TextView
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
+import com.google.android.material.button.MaterialButton
+import com.example.runtimecompiler.settings.AppSettingsManager
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -27,6 +36,18 @@ import org.json.JSONObject
 class SubappLibraryActivity : AppCompatActivity() {
     private lateinit var repository: SubappRepository
     private lateinit var binding: ActivitySubappLibraryBinding
+    private val settingsManager by lazy { AppSettingsManager(this) }
+    private var refreshSettingsPermissions: (() -> Unit)? = null
+    private var notificationPromptRefused = false
+    private val notificationPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        notificationPromptRefused = !granted
+        refreshSettingsPermissions?.invoke()
+    }
+    private fun notificationsAllowed() = NotificationManagerCompat.from(this).areNotificationsEnabled()
+    private fun canPromptForNotifications() = Build.VERSION.SDK_INT >= 33 && !notificationPromptRefused
+    private fun promptNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= 33) notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
     private var rowsReady = false
     private val importLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) importApp(uri)
@@ -42,6 +63,7 @@ class SubappLibraryActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         if (rowsReady) refreshRows()
+        refreshSettingsPermissions?.invoke()
     }
 
     private fun showLibrary() {
@@ -60,11 +82,7 @@ class SubappLibraryActivity : AppCompatActivity() {
         ViewCompat.requestApplyInsets(binding.root)
         binding.libraryToolbar.setOnMenuItemClickListener { item ->
             if (item.itemId == R.id.action_settings) {
-                repository.list().firstOrNull()?.let { record ->
-                    startActivity(Intent(this, MainActivity::class.java)
-                        .putExtra(MainActivity.EXTRA_SUBAPP_ID, record.id)
-                        .putExtra(MainActivity.EXTRA_OPEN_SETTINGS, true))
-                }
+                showLibrarySettings()
                 true
             } else false
         }
@@ -74,6 +92,109 @@ class SubappLibraryActivity : AppCompatActivity() {
         }
         rowsReady = true
         refreshRows()
+    }
+
+    /** Opens library-wide preferences without creating or selecting a subapp workspace. */
+    private fun showLibrarySettings() {
+        val dialog = Dialog(this)
+        dialog.setContentView(R.layout.dialog_library_settings)
+        dialog.window?.setLayout(
+            (resources.displayMetrics.widthPixels * 0.94).toInt(),
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+
+        val btnFontSmall = dialog.findViewById<MaterialButton>(R.id.settings_btn_font_small)
+        val btnFontNormal = dialog.findViewById<MaterialButton>(R.id.settings_btn_font_normal)
+        val btnFontLarge = dialog.findViewById<MaterialButton>(R.id.settings_btn_font_large)
+        val fontButtons = mapOf(
+            AppSettingsManager.FONT_SIZE_SMALL to btnFontSmall,
+            AppSettingsManager.FONT_SIZE_NORMAL to btnFontNormal,
+            AppSettingsManager.FONT_SIZE_LARGE to btnFontLarge
+        )
+        fun updateFontButtonsUI(selectedSize: Float) {
+            fontButtons.forEach { (size, button) ->
+                button ?: return@forEach
+                val selected = Math.abs(size - selectedSize) < 0.5f
+                button.setBackgroundColor(ContextCompat.getColor(this, if (selected) R.color.primary else R.color.surface_elevated))
+                button.setTextColor(ContextCompat.getColor(this, if (selected) R.color.on_primary else R.color.on_surface_muted))
+            }
+        }
+        updateFontButtonsUI(settingsManager.editorFontSizeSp)
+        fontButtons.forEach { (size, button) -> button?.setOnClickListener {
+            settingsManager.editorFontSizeSp = size
+            updateFontButtonsUI(size)
+            Toast.makeText(this, "Editor font size updated", Toast.LENGTH_SHORT).show()
+        } }
+
+
+        val tvNotifications = dialog.findViewById<TextView>(R.id.settings_tv_notification_status)
+        val btnNotifications = dialog.findViewById<MaterialButton>(R.id.settings_btn_notification_permission)
+        val tvExactAlarms = dialog.findViewById<TextView>(R.id.settings_tv_exact_alarm_status)
+        val btnExactAlarms = dialog.findViewById<MaterialButton>(R.id.settings_btn_exact_alarm_permission)
+        val refreshNotificationRow = {
+            val allowed = notificationsAllowed()
+            tvNotifications?.text = getString(if (allowed) R.string.settings_notifications_allowed else R.string.settings_notifications_blocked)
+            tvNotifications?.setTextColor(ContextCompat.getColor(this, if (allowed) R.color.accent_green else R.color.accent_red))
+            btnNotifications?.text = getString(if (!allowed && canPromptForNotifications()) R.string.settings_notifications_allow else R.string.settings_notifications_open)
+        }
+        refreshNotificationRow()
+
+        btnNotifications?.setOnClickListener {
+            if (!notificationsAllowed() && canPromptForNotifications()) promptNotificationPermission()
+            else startActivity(Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName))
+        }
+        val refreshExactAlarmRow = {
+            val allowed = NativeStorageBridge.canScheduleExact(this)
+            tvExactAlarms?.text = getString(if (allowed) R.string.settings_exact_alarms_allowed else R.string.settings_exact_alarms_blocked)
+            tvExactAlarms?.setTextColor(ContextCompat.getColor(this, if (allowed) R.color.accent_green else R.color.accent_red))
+            btnExactAlarms?.text = getString(if (allowed) R.string.settings_exact_alarms_allowed_button else R.string.settings_exact_alarms_allow)
+            btnExactAlarms?.isEnabled = !allowed
+        }
+        refreshExactAlarmRow()
+        refreshSettingsPermissions = { refreshNotificationRow(); refreshExactAlarmRow(); Unit }
+        dialog.setOnDismissListener { refreshSettingsPermissions = null }
+        btnExactAlarms?.setOnClickListener {
+            val intent = Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
+                .setData(android.net.Uri.parse("package:$packageName"))
+            if (!NativeStorageBridge.canScheduleExact(this) && intent.resolveActivity(packageManager) != null) {
+                startActivity(intent)
+            } else if (!NativeStorageBridge.canScheduleExact(this)) {
+                Toast.makeText(this, R.string.settings_exact_alarms_open_failed, Toast.LENGTH_SHORT).show()
+            }
+        }
+        val close = dialog.findViewById<MaterialButton>(R.id.settings_btn_close)
+        close?.setOnClickListener { dialog.dismiss() }
+        dialog.findViewById<View>(R.id.settings_card_about)?.let { card ->
+            dialog.findViewById<TextView>(R.id.settings_tv_app_version)?.text = settingsManager.getAppVersion()
+            dialog.findViewById<TextView>(R.id.settings_tv_webview_version)?.text = settingsManager.getWebViewEngineVersion()
+        }
+        val historyButtons = mapOf(
+            2 to dialog.findViewById<MaterialButton>(R.id.settings_btn_history_2),
+            4 to dialog.findViewById<MaterialButton>(R.id.settings_btn_history_4),
+            6 to dialog.findViewById<MaterialButton>(R.id.settings_btn_history_6),
+            8 to dialog.findViewById<MaterialButton>(R.id.settings_btn_history_8),
+            10 to dialog.findViewById<MaterialButton>(R.id.settings_btn_history_10)
+        )
+        fun updateHistoryButtons(selected: Int) {
+            historyButtons.forEach { (count, button) ->
+                button.setBackgroundColor(ContextCompat.getColor(this,
+                    if (count == selected) R.color.primary else R.color.surface_elevated))
+                button.setTextColor(ContextCompat.getColor(this,
+                    if (count == selected) R.color.on_primary else R.color.on_surface_muted))
+            }
+        }
+        updateHistoryButtons(settingsManager.maxHistorySnapshots)
+        historyButtons.forEach { (count, button) ->
+            button.setOnClickListener {
+                settingsManager.maxHistorySnapshots = count
+                updateHistoryButtons(count)
+                Toast.makeText(this, R.string.settings_history_saved, Toast.LENGTH_SHORT).show()
+            }
+        }
+        dialog.show()
+        dialog.window?.setLayout((resources.displayMetrics.widthPixels * 0.94).toInt(), ViewGroup.LayoutParams.WRAP_CONTENT)
     }
 
     private fun refreshRows() {
