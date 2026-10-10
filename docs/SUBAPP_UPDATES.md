@@ -59,14 +59,16 @@ The backup is `files/subapps/<id>/update-backup/`, outside the web workspace and
 ordinary workspace ZIP exports. It retains only the most recent recovery point;
 ordinary History remains independent and is not a complete binary backup.
 
-After a second tracked installation, Update app offers **Roll back code**. It
-restores previously managed code while preserving current records/settings and
-other unowned files. The first adoption has a full recovery backup, but no tracked
-previous code identity, so code-only rollback is unavailable. Rollback is also
-blocked when it would overwrite a formerly managed file now classified as a user
-seed. Do not restore the
-full backup manually after new records have been created without first exporting
-the current workspace.
+GitHub updates save the workspace before and after installation in **Edit → Version history**.
+Manual editor saves and app settings changes also save versions immediately, without
+requiring Run. Restore earlier versions exclusively from that dialog; Update app
+only checks, reviews and installs publisher updates. If publisher content matches the
+last installed update, it reports **App is up to date** with no Update action, even
+when local edits differ or unrelated repository commits exist. Restoring also saves the current
+workspace first. History restores text files (including JSON data/settings); binary
+assets and runtime logs remain untouched. Export current data before restoring if
+it needs to be retained. Installed publisher metadata remains the last GitHub update,
+so restored code is reported as local changes during the next update review.
 
 ## Low-token routine
 
@@ -100,12 +102,31 @@ the current workspace.
 - Run `adb devices -l`; always use `-s <serial>`. Check `pm path com.wynh.appapp`
   and inspect installed version/certificate. Pull the installed APK read-only if
   necessary. Verify both APKs with the SDK's `apksigner verify --print-certs`.
+- Before touching a physical phone, record its exact serial/model and run
+  `adb -s <serial> shell pm list users`. Select the intended Android user/profile
+  and verify AppApp is already installed there with
+  `adb -s <serial> shell pm list packages --user <userId> com.wynh.appapp`.
+  Secure Folder and work profiles have separate package data;
+  if the expected installation is absent in the intended profile, stop. Do not
+  create a fresh installation in another profile as a recovery or test shortcut.
+- Keep physical-phone testing read-only by default; run imports, edits, reorder,
+  deletion, migrations, and other workspace mutations on `Medium_Phone`. If a
+  phone-specific mutation is necessary, first export the relevant apps from the
+  library, verify each ZIP includes its manifest and user `data/`, and copy the
+  exports off-device. Android cloud backup is not a verified workspace backup.
+  Use only a separate, named disposable app with test data. Never import over,
+  delete, recreate, or clean up a user's existing phone app.
 - The Galaxy S24 installation uses SHA-256
   `d3a30c1acecc9008f11711c39013353f00fc58b540a26eba95bb3556eb02e89a`.
   Stop on any mismatch; never uninstall or clear storage.
 - Use `adb -s <serial> install -r app/build/outputs/apk/release/app-release.apk`.
-  Check migration implications before launching. A configured library's normal
-  update does not create a new legacy migration.
+  `-r` preserves data only if package, profile/user, and signing certificate
+  match; it does not restore data that is missing. Do not install a debug APK on
+  a phone unless its certificate is verified to match. Check migration
+  implications before launching. A configured library's normal update does not
+  create a new legacy migration. Record app names/count and a harmless data
+  sentinel before and after; on any unexpected change, stop without cleanup and
+  report the observed state.
 - For first preview delivery, push the ZIP to Downloads and use the library's
   ZIP picker to create a separate app. Never import over the user's app or use
   `run-as` to bypass a signed release's sandbox.
