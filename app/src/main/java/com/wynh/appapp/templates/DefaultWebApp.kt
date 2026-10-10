@@ -1,4 +1,4 @@
-package com.example.runtimecompiler.templates
+package com.wynh.appapp.templates
 
 import android.content.Context
 import java.nio.charset.StandardCharsets

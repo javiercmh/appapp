@@ -1,7 +1,7 @@
-package com.example.runtimecompiler.workspace
+package com.wynh.appapp.workspace
 
 import android.content.Context
-import com.example.runtimecompiler.settings.AppSettingsManager
+import com.wynh.appapp.settings.AppSettingsManager
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File

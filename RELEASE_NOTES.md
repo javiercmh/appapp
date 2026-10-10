@@ -10,7 +10,7 @@
 
 ## Installation
 
-The application ID is now `com.wynh.appapp`. Android installs this release as a
+The Kotlin namespace and application ID are now both `com.wynh.appapp`. Android installs this release as a
 separate app from releases using `com.example.runtimecompiler`; existing data
 is not copied automatically. Export any apps you want to retain from the old
 installation and import them into the new one.

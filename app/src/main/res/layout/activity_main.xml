@@ -42,6 +42,28 @@
                     android:src="@drawable/ic_refresh"
                     app:tint="@color/on_surface_muted" />
 
+                <!-- Version History Button -->
+                <ImageButton
+                    android:id="@+id/btn_history"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_marginStart="4dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/action_history"
+                    android:src="@drawable/ic_history"
+                    app:tint="@color/accent_blue" />
+
+                <!-- Transfer / Package Button -->
+                <ImageButton
+                    android:id="@+id/btn_package"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_marginStart="4dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/action_package_share"
+                    android:src="@drawable/ic_import_export"
+                    app:tint="@color/accent_blue" />
+
                 <!-- Edit Code Studio Button (Plain </> Icon) -->
                 <ImageButton
                     android:id="@+id/btn_edit_code"

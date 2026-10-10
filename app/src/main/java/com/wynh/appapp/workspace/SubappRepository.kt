@@ -1,7 +1,7 @@
-package com.example.runtimecompiler.workspace
+package com.wynh.appapp.workspace
 
 import android.content.Context
-import com.example.runtimecompiler.templates.DefaultWebApp
+import com.wynh.appapp.templates.DefaultWebApp
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File

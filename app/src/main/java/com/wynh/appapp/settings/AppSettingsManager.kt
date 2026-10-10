@@ -1,11 +1,11 @@
-package com.example.runtimecompiler.settings
+package com.wynh.appapp.settings
 
 import android.content.Context
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.webkit.WebViewCompat
-import com.example.runtimecompiler.workspace.WorkspaceManager
+import com.wynh.appapp.workspace.WorkspaceManager
 import java.util.Locale
 
 /**

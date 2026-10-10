@@ -52,7 +52,7 @@
         android:background="@color/border_color" />
 
     <!-- Interactive 1:1 Square Crop View -->
-    <com.example.runtimecompiler.editor.SquareCropView
+    <com.wynh.appapp.editor.SquareCropView
         android:id="@+id/crop_square_view"
         android:layout_width="match_parent"
         android:layout_height="270dp"

@@ -1,4 +1,4 @@
-package com.example.runtimecompiler.bridge
+package com.wynh.appapp.bridge
 
 import android.annotation.SuppressLint
 import android.app.PendingIntent
@@ -7,7 +7,7 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import com.example.runtimecompiler.workspace.SubappRepository
+import com.wynh.appapp.workspace.SubappRepository
 
 /**
  * Posts a notification that was scheduled earlier through
@@ -34,7 +34,7 @@ class ScheduledNotificationReceiver : BroadcastReceiver() {
 
         NativeStorageBridge.ensureNotificationChannel(context)
 
-        val launchIntent = Intent(context, com.example.runtimecompiler.SubappRuntimeActivity::class.java).apply {
+        val launchIntent = Intent(context, com.wynh.appapp.SubappRuntimeActivity::class.java).apply {
             data = android.net.Uri.parse("appapp://subapp/$subappId")
             action = Intent.ACTION_VIEW
         }

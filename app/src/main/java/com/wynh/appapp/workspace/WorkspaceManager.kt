@@ -1,7 +1,7 @@
-package com.example.runtimecompiler.workspace
+package com.wynh.appapp.workspace
 
 import android.content.Context
-import com.example.runtimecompiler.templates.DefaultWebApp
+import com.wynh.appapp.templates.DefaultWebApp
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream

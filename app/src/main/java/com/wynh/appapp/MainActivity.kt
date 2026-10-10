@@ -1,4 +1,4 @@
-package com.example.runtimecompiler
+package com.wynh.appapp
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -56,19 +56,19 @@ import androidx.core.graphics.drawable.IconCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
-import com.example.runtimecompiler.bridge.NativeStorageBridge
-import com.example.runtimecompiler.databinding.ActivityMainBinding
-import com.example.runtimecompiler.editor.ImageCropManager
-import com.example.runtimecompiler.editor.SearchHelper
-import com.example.runtimecompiler.editor.SyntaxHighlighter
-import com.example.runtimecompiler.settings.AppSettingsManager
-import com.example.runtimecompiler.workspace.WorkspaceFile
-import com.example.runtimecompiler.workspace.WorkspaceHistoryManager
-import com.example.runtimecompiler.workspace.WorkspaceManager
-import com.example.runtimecompiler.workspace.WorkspacePackageManager
-import com.example.runtimecompiler.workspace.WorkspaceSnapshot
-import com.example.runtimecompiler.workspace.SubappRepository
-import com.example.runtimecompiler.workspace.SubappRecord
+import com.wynh.appapp.bridge.NativeStorageBridge
+import com.wynh.appapp.databinding.ActivityMainBinding
+import com.wynh.appapp.editor.ImageCropManager
+import com.wynh.appapp.editor.SearchHelper
+import com.wynh.appapp.editor.SyntaxHighlighter
+import com.wynh.appapp.settings.AppSettingsManager
+import com.wynh.appapp.workspace.WorkspaceFile
+import com.wynh.appapp.workspace.WorkspaceHistoryManager
+import com.wynh.appapp.workspace.WorkspaceManager
+import com.wynh.appapp.workspace.WorkspacePackageManager
+import com.wynh.appapp.workspace.WorkspaceSnapshot
+import com.wynh.appapp.workspace.SubappRepository
+import com.wynh.appapp.workspace.SubappRecord
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.checkbox.MaterialCheckBox
@@ -543,6 +543,18 @@ class MainActivity : AppCompatActivity() {
             showAppEditorDialog()
         }
 
+        binding.btnHistory.setOnClickListener {
+            showHistoryDialog {
+                reloadApp()
+            }
+        }
+
+        binding.btnPackage.setOnClickListener {
+            showImportExportDialog {
+                reloadApp()
+            }
+        }
+
         // Top Bar Refresh Button: Refresh site & clear cache
         binding.btnReset.setOnClickListener {
             binding.webView.clearCache(true)
@@ -821,8 +833,6 @@ class MainActivity : AppCompatActivity() {
         val rootContainer = dialog.findViewById<LinearLayout>(R.id.hub_root_container)
         val btnClose = dialog.findViewById<ImageButton>(R.id.hub_btn_close)
         val subtitleText = dialog.findViewById<TextView>(R.id.hub_subtitle)
-        val btnHistory = dialog.findViewById<ImageButton>(R.id.hub_btn_history)
-        val btnPackage = dialog.findViewById<ImageButton>(R.id.hub_btn_package)
         val btnRun = dialog.findViewById<MaterialButton>(R.id.hub_btn_run)
 
         val appConfigCard = dialog.findViewById<MaterialCardView>(R.id.hub_app_config_card)
@@ -1020,24 +1030,6 @@ class MainActivity : AppCompatActivity() {
 
         // The editor opens directly on project files; identity changes are available from Install.
         appConfigCard.visibility = View.GONE
-
-        // Version History
-        btnHistory.setOnClickListener {
-            showHistoryDialog {
-                refreshAppCard()
-                refreshFileList()
-                reloadApp()
-            }
-        }
-
-        // Share & Package
-        btnPackage.setOnClickListener {
-            showImportExportDialog {
-                refreshAppCard()
-                refreshFileList()
-                reloadApp()
-            }
-        }
 
         // Run
         btnRun.setOnClickListener {

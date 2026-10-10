@@ -1,4 +1,4 @@
 # Proguard rules for AppApp runtime bridge
--keepclassmembers class com.example.runtimecompiler.bridge.NativeStorageBridge {
+-keepclassmembers class com.wynh.appapp.bridge.NativeStorageBridge {
     @android.webkit.JavascriptInterface <methods>;
 }
