@@ -154,54 +154,50 @@ binary file that the current subapp's origin interceptor can then serve via `<im
 
 ## 6. Testing & Verification
 
-- **Gradle Validation**: Ensure Gradle files (`build.gradle.kts`, `libs.versions.toml`) sync without syntax or version conflicts.
+- **Gradle Validation**: Use the checked-in Gradle Wrapper for CLI builds, or build/sync in Android Studio. First check `./gradlew --version` so the Gradle version and JVM are known; then run `./gradlew :app:assembleDebug`. Run `./gradlew test` or the relevant module task when JVM tests exist. Include `--warning-mode all` when diagnosing Gradle deprecations; fix the originating build logic/plugin rather than hiding warnings. Do not install or update Gradle outside the wrapper just to build this project.
 - **Persistence Verification**: When modifying storage logic, test by adding items, terminating the process, and verifying that state reloads identically on restart.
 - **History & Snapshots**: Verify that workspace snapshots are taken before "Run" and that snapshot restoration properly updates the editor and runtime.
 - **Example App Device Tests**: `examples/<app>/` is source code in this repository; it is not automatically copied to an installed App² instance. Before reporting a device test, sync changed app-owned files to the selected app's `filesDir/subapps/<id>/workspace/`, compare source and device hashes, then relaunch that app. Never overwrite `data/`, `app.log`, or other user files just to test code. See `examples/working_hours/AGENTS.md` for the Working Hours sync procedure.
 - **Keyboard-Aware Bottom Bars**: Do not infer that the on-screen keyboard is open from input focus. On Android, use `app2:insets` event `detail.imeVisible`; a hardware keyboard can focus a text field while the IME remains hidden. For browser previews without the host event, compare the viewport height to its pre-keyboard baseline.
 
-### Android VM smoke tests (this development host)
+### Android emulator and device testing
 
-- The Android SDK is at `/home/melo/Android/Sdk`; its emulator executable is `/home/melo/Android/Sdk/emulator/emulator` and is not on `PATH`. The installed AVD is named `Medium_Phone` (Android 36, x86_64). Do not search the filesystem for another SDK or install another emulator.
-- Check `adb devices -l` before starting anything. If `emulator-5554` is already listed as `device`, use it. If it is `offline`, wait for boot to finish and check again. The physical phone may also be listed; use the emulator serial explicitly so tests do not accidentally run on the phone.
+- Check `adb devices -l` before starting or installing. Use `-s <serial>` on every ADB command whenever an emulator and an external device may both be connected. Confirm the selected serial is the intended target; never rely on whichever device ADB happens to choose.
+- Emulator tests are the default for flows that create, edit, import, reset, delete, migrate, or otherwise mutate subapp data. The development host's Android SDK is at `/home/melo/Android/Sdk`; its emulator executable is `/home/melo/Android/Sdk/emulator/emulator` and is not on `PATH`. The installed AVD is named `Medium_Phone` (Android 36, x86_64). Do not search for another SDK or install another emulator.
 - To start the AVD when it is not running, run this in a terminal and leave it open:
   ```sh
   /home/melo/Android/Sdk/emulator/emulator -avd Medium_Phone -no-snapshot-load -no-boot-anim -gpu swangle
   ```
-  On this host, the default software renderer repeatedly exited with status 139; `-gpu swangle` booted successfully. `-no-snapshot-load` requests a cold boot but preserves the AVD's data. **Do not add `-wipe-data`** for routine tests.
-- In another terminal, check `adb devices -l` until the emulator state is `device`, then confirm Android has completed booting:
-  ```sh
-  adb -s emulator-5554 shell getprop sys.boot_completed
-  ```
-  Continue when it prints `1`. The emulator can appear as `offline` briefly during startup. If it exits before becoming ready, report the emulator failure rather than claiming an app test ran.
+  On this host, the default software renderer repeatedly exited with status 139; `-gpu swangle` booted successfully. `-no-snapshot-load` requests a cold boot while preserving AVD data. Do not add `-wipe-data` for routine tests.
+- Wait for the selected device to be in state `device`, and, for an emulator, wait for `adb -s <serial> shell getprop sys.boot_completed` to print `1`. If the target does not become ready, report that instead of claiming an app test ran. In the examples below, replace `<serial>` with the exact serial shown by `adb devices -l` and `<id>` with the selected test subapp ID.
+- **External-device data protection is mandatory.** Treat a connected physical device as containing valuable user data. Prefer the emulator for all destructive or data-changing test cases. For a necessary external-device smoke test, use a dedicated test subapp and test-only records, avoid actions that alter the user's existing apps or settings, and confirm the package/device serial before each operation. `adb install -r` updates the APK while retaining app data; never use `adb uninstall`, `pm clear`, clear-storage UI, factory reset, or reinstall without `-r` on the external device. Before launching an update, check whether it will trigger a first-run migration or other storage mutation; run that validation on the emulator unless a verified backup and restore plan is in place. Do not delete/replace subapps, reset workspaces, import over an existing app, or copy test fixtures over its `data/`, `app.log`, history, bridge state, notifications, or alarms. If a test could touch existing data, do it on the emulator. Do not claim external-device data was preserved unless the chosen test path left it untouched (or a verified backup and restore was completed).
 - Confirm AppApp is installed before testing:
   ```sh
-  adb -s emulator-5554 shell pm path com.example.runtimecompiler
+  adb -s <serial> shell pm path com.example.runtimecompiler
   ```
-  If no APK path is returned, build and install through Android Studio. This repository has no Gradle wrapper or CLI Gradle setup; do not try `./gradlew` or search for a Gradle installation.
-   - For a web-app JavaScript/CSS/HTML change, remember the running WebView reads the selected app's `filesDir/subapps/<id>/workspace/`, not the repository or APK assets directly. An already initialized workspace can therefore be stale, including when editing `app/src/main/assets/starter_template/`. For a focused smoke test, sync only the changed file to the matching app workspace path; never reset the workspace or overwrite `data/`, `app.log`, or unrelated files. With a debuggable AppApp build, stage the file and copy it with `run-as`:
+  Install a debug update with `adb -s <serial> install -r app/build/outputs/apk/debug/app-debug.apk`; `-r` is required to retain app data. If replacement fails due to a signing mismatch, stop and report it—do not uninstall to work around it, especially on an external device.
+- For a web-app JavaScript/CSS/HTML change, the WebView reads the selected app's `filesDir/subapps/<id>/workspace/`, not the repository or APK assets directly. An initialized workspace can be stale, including after editing the starter template. On the emulator, sync only changed app-owned code/assets into a disposable test subapp's matching workspace path; do not sync over user data. Identify its `<id>` from the library/repository before copying. With a debuggable build, stage a file and copy it to that exact workspace path with `run-as`, then compare hashes:
   ```sh
-  adb -s emulator-5554 push path/to/changed-file /data/local/tmp/appapp-test-file
-  adb -s emulator-5554 shell run-as com.example.runtimecompiler cp /data/local/tmp/appapp-test-file files/workspace/path/to/changed-file
+  adb -s <serial> push path/to/changed-file /data/local/tmp/appapp-test-file
+  adb -s <serial> shell run-as com.example.runtimecompiler cp /data/local/tmp/appapp-test-file files/subapps/<id>/workspace/path/to/changed-file
   sha256sum path/to/changed-file
-  adb -s emulator-5554 shell run-as com.example.runtimecompiler sha256sum files/workspace/path/to/changed-file
+  adb -s <serial> shell run-as com.example.runtimecompiler sha256sum files/subapps/<id>/workspace/path/to/changed-file
   ```
-  The two hashes must match. If `run-as` is unavailable, use Android Studio to build/install or use the app's editor; do not work around the app sandbox. For native Android code or manifest changes, build/install through Android Studio instead of copying files into the web workspace.
-- Restart the app after syncing so the WebView reloads the files, then launch it:
+  Only use direct sync on an emulator or a dedicated test subapp on an external device; never copy to an unknown ID or a user's app. If `run-as` is unavailable, use the app's editor or rebuild/reinstall; do not work around the app sandbox. For native Android code or manifest changes, build and install the APK rather than copying files into a web workspace.
+- After syncing, restart the app so the WebView reloads the files, then launch it on the explicitly selected serial:
   ```sh
-  adb -s emulator-5554 shell am force-stop com.example.runtimecompiler
-  adb -s emulator-5554 shell monkey -p com.example.runtimecompiler 1
+  adb -s <serial> shell am force-stop com.example.runtimecompiler
+  adb -s <serial> shell monkey -p com.example.runtimecompiler 1
   ```
-  Verify the behavior in the UI. Use `adb -s emulator-5554 exec-out screencap -p > /tmp/appapp-emulator.png` when a screenshot helps. Report exactly which controls and flows were exercised; do not claim a checkbox/date-field test if the installed app has no such controls.
+  Verify the behavior in the UI. Use `adb -s <serial> exec-out screencap -p > /tmp/appapp-device.png` when a screenshot helps. Report the emulator/device model and exactly which controls and flows were exercised; do not claim an interaction was tested if the installed app does not expose it.
 
 ---
 
 ## 7. Common Gotchas & Environment Quirks
 
-1. **Missing `./gradlew` Wrapper & CLI `gradle` Command**:
-   - The repository does **not** check in the root `./gradlew` / `./gradlew.bat` wrapper scripts or `gradle-wrapper.jar`.
-   - Standalone `gradle` is not installed on the system `$PATH`.
-   - **Agent Rule**: Do **not** run `./gradlew` commands or spend tool calls hunting for Gradle installations across `/tmp`, `/home`, or SDK folders. Code changes, dependencies, and resources are built and synchronized directly within **Android Studio**.
+1. **Use the checked-in Gradle Wrapper**:
+   - The repository includes `./gradlew`, `gradlew.bat`, and `gradle/wrapper/gradle-wrapper.jar`; the selected Gradle distribution is in `gradle/wrapper/gradle-wrapper.properties`.
+   - Use `./gradlew` for CLI validation or Android Studio's configured Gradle integration. Do not hunt for or invoke a separate Gradle installation.
 2. **Terminal Sandbox Isolation**:
    - The execution sandbox isolates filesystem access outside the workspace (`/home/melo/Android/Sdk` etc. cannot be probed from standard sandbox mode).
 3. **Resource Binding CamelCase**:
