@@ -30,7 +30,7 @@ export function load() {
 }
 
 export function save() {
-  bridge.writeFile(FILE, entries);
+  if (!bridge.writeFile(FILE, entries)) throw new Error('Could not save notes to the workspace.');
 }
 
 export function add({ text, photo = null }) {
@@ -40,7 +40,7 @@ export function add({ text, photo = null }) {
     photo,
     createdAt: Date.now()
   });
-  save();
+  try { save(); } catch (error) { entries.shift(); throw error; }
 }
 
 /** Removes an entry but leaves its photo on disk, so an undo can restore it intact. */
@@ -48,13 +48,13 @@ export function remove(id) {
   const index = entries.findIndex((e) => e.id === id);
   if (index === -1) return null;
   const [removed] = entries.splice(index, 1);
-  save();
+  try { save(); } catch (error) { entries.splice(index, 0, removed); throw error; }
   return { entry: removed, index };
 }
 
 export function restore(entry, index) {
   entries.splice(index, 0, entry);
-  save();
+  try { save(); } catch (error) { entries.splice(index, 1); throw error; }
 }
 
 /** Called once the undo window closes — only then is the photo really gone. */

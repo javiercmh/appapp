@@ -17,6 +17,7 @@
     "data/entries.json",
     "js/ai-demo.js",
     "PACKAGING.md",
+    "dev_server.py",
     "data/ai-demo.json"
   ]
 }
