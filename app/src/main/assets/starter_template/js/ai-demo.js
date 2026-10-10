@@ -93,7 +93,7 @@ export function createAiDemoSession({ ai, load, save, changed = () => {}, pause 
       state.connected = providers.some((p) => p.id === 'chatgpt' && p.connected);
       state.models = state.connected ? (await ai.models('chatgpt')).models : [];
       if (!state.pending && !state.storageError) state.message = state.connected
-        ? 'Ready. Generating an example uses your ChatGPT plan usage.'
+        ? (ai.developmentMock ? 'Ready. Development mock is offline and uses no ChatGPT plan usage.' : 'Ready. Generating an example uses your ChatGPT plan usage.')
         : 'Connect ChatGPT in the App² library → Settings → AI, then return here.';
     } catch (error) {
       state.connected = false;
@@ -152,6 +152,10 @@ export function initAiDemo(bridge, store) {
   const $ = (id) => document.getElementById(id);
   const modelSelect = $('ai-model');
   const effortSelect = $('ai-reasoning');
+  if (bridge.ai.developmentMock) {
+    $('ai-description').textContent = 'Test a fixed sample question with the offline development mock.';
+    $('ai-usage').textContent = 'Development mock: fixed responses, no credentials and no ChatGPT plan usage.';
+  }
   let catalog = '';
   function renderReasoning() {
     const model = session.state.models.find((m) => m.id === modelSelect.value);
