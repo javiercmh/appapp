@@ -196,28 +196,29 @@ class WorkspaceManager(
      * Appends text content to a workspace file (e.g. app.log) in a thread-safe manner.
      * Automatically truncates/rolls over if the file exceeds maxBytes (default: 200KB).
      */
-    @Synchronized
     fun appendToFile(fileName: String, content: String, maxBytes: Long = 200_000): Boolean {
-        return try {
-            val file = getFile(fileName)
-            file.parentFile?.mkdirs()
-            if (!file.exists()) {
-                file.createNewFile()
-            } else if (file.length() > maxBytes) {
-                // Keep the last ~half of the log content on rollover
-                val existing = readFile(fileName)
-                val halfLen = (maxBytes / 2).toInt()
-                val trimmed = if (existing.length > halfLen) {
-                    "[System] Log truncated due to size limit...\n" + existing.substring(existing.length - halfLen)
-                } else existing
-                writeFile(fileName, trimmed)
+        return synchronized(com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(workspaceDir)) {
+            try {
+                val file = getFile(fileName)
+                file.parentFile?.mkdirs()
+                if (!file.exists()) {
+                    file.createNewFile()
+                } else if (file.length() > maxBytes) {
+                    // Keep the last ~half of the log content on rollover
+                    val existing = readFile(fileName)
+                    val halfLen = (maxBytes / 2).toInt()
+                    val trimmed = if (existing.length > halfLen) {
+                        "[System] Log truncated due to size limit...\n" + existing.substring(existing.length - halfLen)
+                    } else existing
+                    writeFile(fileName, trimmed)
+                }
+                FileOutputStream(file, true).use { output ->
+                    output.write(content.toByteArray(StandardCharsets.UTF_8))
+                }
+                true
+            } catch (e: Exception) {
+                false
             }
-            FileOutputStream(file, true).use { output ->
-                output.write(content.toByteArray(StandardCharsets.UTF_8))
-            }
-            true
-        } catch (e: Exception) {
-            false
         }
     }
 

@@ -90,7 +90,7 @@ data class AppConfigData(
     val iconFileName: String?
 )
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity(), UpdatableSubappSession {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var storageBridge: NativeStorageBridge
@@ -104,7 +104,6 @@ class MainActivity : AppCompatActivity() {
     private val timeFormat = SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault())
 
     private var pendingExportFiles: Set<String>? = null
-    private var onImportCompletedCallback: (() -> Unit)? = null
     private var onIconUpdatedCallback: (() -> Unit)? = null
 
     /** Last system-bar + cutout insets, republished to the WebView as CSS custom properties. */
@@ -133,21 +132,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
         pendingExportFiles = null
-    }
-
-    private val importZipLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
-        if (uri != null) {
-            val result = WorkspacePackageManager.importFromZip(this, uri, workspaceManager, historyManager)
-            result.onSuccess { importedList ->
-                appendLog("[Package] Successfully imported ${importedList.size} files from ZIP: ${importedList.joinToString(", ")}")
-                Toast.makeText(this, getString(R.string.import_success, importedList.size), Toast.LENGTH_LONG).show()
-                onImportCompletedCallback?.invoke()
-            }.onFailure { err ->
-                appendLog("[Package Error] ZIP Import failed: ${err.message}")
-                Toast.makeText(this, "${getString(R.string.import_error)}: ${err.message}", Toast.LENGTH_LONG).show()
-            }
-        }
-        onImportCompletedCallback = null
     }
 
     private val pickIconLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
@@ -426,6 +410,8 @@ class MainActivity : AppCompatActivity() {
             com.wynh.appapp.ai.AiWebMessageBridge(this, webView, subapp.id, taskId, it).install()
         }
 
+        com.wynh.appapp.updates.UpdateWebMessageBridge(this, webView, subapp).install()
+
         // Intercept JavaScript console logs and errors
         webView.webChromeClient = object : WebChromeClient() {
             override fun onConsoleMessage(consoleMessage: ConsoleMessage): Boolean {
@@ -558,10 +544,12 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        binding.btnUpdateApp.setOnClickListener {
+            com.wynh.appapp.updates.UpdateController(this, subapp).open()
+        }
+
         binding.btnPackage.setOnClickListener {
-            showImportExportDialog {
-                reloadApp()
-            }
+            showPackageDialog()
         }
 
         // Top Bar Refresh Button: Refresh site & clear cache
@@ -1535,11 +1523,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Opens modal dialog for selective ZIP export, direct packaging & sharing, and ZIP import.
+     * Opens modal dialog for selective ZIP export and sharing.
      */
-    private fun showImportExportDialog(onWorkspaceUpdated: () -> Unit) {
+    private fun showPackageDialog() {
         val dialog = Dialog(this, com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog)
-        dialog.setContentView(R.layout.dialog_import_export)
+        dialog.setContentView(R.layout.dialog_package)
         dialog.window?.setLayout(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT
@@ -1551,7 +1539,6 @@ class MainActivity : AppCompatActivity() {
         val masterCheckboxRow = dialog.findViewById<LinearLayout>(R.id.package_master_checkbox_row)
         val btnShareZip = dialog.findViewById<MaterialButton>(R.id.package_btn_share_zip)
         val btnSaveZip = dialog.findViewById<MaterialButton>(R.id.package_btn_save_zip)
-        val btnImportZip = dialog.findViewById<MaterialButton>(R.id.package_btn_import_zip)
         val btnClose = dialog.findViewById<MaterialButton>(R.id.package_btn_close)
 
         // Attempt to prefill package name from manifest.json
@@ -1689,21 +1676,6 @@ class MainActivity : AppCompatActivity() {
 
             pendingExportFiles = selectedFiles.toSet()
             saveZipLauncher.launch("$customPackageName.zip")
-        }
-
-        btnImportZip.setOnClickListener {
-            MaterialAlertDialogBuilder(this)
-                .setTitle(R.string.import_confirm_title)
-                .setMessage(R.string.import_confirm_msg)
-                .setPositiveButton(R.string.import_action_proceed) { _, _ ->
-                    onImportCompletedCallback = {
-                        onWorkspaceUpdated()
-                        dialog.dismiss()
-                    }
-                    importZipLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream", "*/*"))
-                }
-                .setNegativeButton("Cancel", null)
-                .show()
         }
 
         btnClose.setOnClickListener {
@@ -1882,6 +1854,19 @@ class MainActivity : AppCompatActivity() {
         reloadApp()
 
         Toast.makeText(this, getString(R.string.settings_reset_success), Toast.LENGTH_LONG).show()
+    }
+
+    override fun pauseForUpdate() {
+        binding.webView.onPause()
+        binding.webView.pauseTimers()
+        binding.webView.visibility = View.INVISIBLE
+    }
+
+    override fun resumeAfterUpdate() {
+        binding.webView.resumeTimers()
+        binding.webView.onResume()
+        binding.webView.visibility = View.VISIBLE
+        reloadApp()
     }
 
     override fun onDestroy() {

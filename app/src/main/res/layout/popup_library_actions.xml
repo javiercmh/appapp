@@ -23,6 +23,10 @@
         android:textColor="@color/on_surface"
         android:textSize="16sp" />
     </LinearLayout>
+    <LinearLayout android:id="@+id/update_app" android:layout_width="match_parent" android:layout_height="56dp" android:gravity="center_vertical" android:orientation="horizontal" android:paddingHorizontal="16dp" android:background="?attr/selectableItemBackground" android:focusable="true" android:clickable="true">
+        <ImageView android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_refresh" android:tint="@color/on_surface" android:contentDescription="@null" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="16dp" android:text="@string/action_update_app" android:textColor="@color/on_surface" android:textSize="16sp" />
+    </LinearLayout>
     <LinearLayout android:id="@+id/delete_app" android:layout_width="match_parent" android:layout_height="56dp" android:gravity="center_vertical" android:orientation="horizontal" android:paddingHorizontal="16dp" android:background="?attr/selectableItemBackground" android:focusable="true" android:clickable="true">
     <ImageView
         android:layout_width="24dp"

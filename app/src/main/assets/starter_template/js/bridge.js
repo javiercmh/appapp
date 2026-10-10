@@ -285,3 +285,29 @@ export function notify(title, message) {
   console.log(`[notify] ${title}: ${message}`);
   return false;
 }
+
+// Native review only: installing an update always requires a host confirmation.
+const UPDATES = window.AppUpdates || null;
+const updateRequests = new Map();
+if (UPDATES) UPDATES.onmessage = event => {
+  let result;
+  try { result = JSON.parse(event.data); } catch { return; }
+  const pending = updateRequests.get(result.id);
+  if (!pending) return;
+  clearTimeout(pending.timer);
+  updateRequests.delete(result.id);
+  pending.resolve(Boolean(result.opened));
+};
+export const updates = {
+  available: Boolean(UPDATES),
+  open() {
+    if (!UPDATES) return Promise.reject(new Error('App updates require a supported App² host.'));
+    const id = `update-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => { updateRequests.delete(id); reject(new Error('Update review did not open.')); }, 10000);
+      updateRequests.set(id, { resolve, timer });
+      try { UPDATES.postMessage(JSON.stringify({ id, action: 'open' })); }
+      catch (error) { clearTimeout(timer); updateRequests.delete(id); reject(error); }
+    });
+  }
+};

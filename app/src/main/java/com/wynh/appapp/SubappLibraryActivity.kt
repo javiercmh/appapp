@@ -2,8 +2,10 @@ package com.wynh.appapp
 
 import android.Manifest
 import android.app.Dialog
+import android.content.ClipData
 import android.os.Build
 import android.view.ViewGroup
+import android.view.DragEvent
 import android.widget.TextView
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -49,6 +51,7 @@ class SubappLibraryActivity : AppCompatActivity() {
         if (Build.VERSION.SDK_INT >= 33) notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
     private var rowsReady = false
+    private val displayedRecords = mutableListOf<SubappRecord>()
     private val importLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) importApp(uri)
     }
@@ -207,6 +210,8 @@ class SubappLibraryActivity : AppCompatActivity() {
     private fun refreshRows() {
         binding.appList.removeAllViews()
         val records = repository.list()
+        displayedRecords.clear()
+        displayedRecords.addAll(records)
         binding.appCount.text = resources.getQuantityString(R.plurals.library_count, records.size, records.size)
         binding.emptyState.visibility = if (records.isEmpty()) View.VISIBLE else View.GONE
         records.forEach { record ->
@@ -224,6 +229,14 @@ class SubappLibraryActivity : AppCompatActivity() {
             else row.appIcon.setImageResource(R.mipmap.ic_launcher_round)
             row.appName.text = name
             row.appDescription.text = manifest.optString("description").ifBlank { getString(R.string.library_app_fallback) }
+            row.appDragHandle.contentDescription = getString(R.string.library_drag_to_reorder)
+            row.appDragHandle.setOnLongClickListener { handle ->
+                val clip = ClipData.newPlainText("subapp-id", record.id)
+                val started = handle.startDragAndDrop(clip, View.DragShadowBuilder(row.appCard), row.appCard, 0)
+                if (started) row.appCard.alpha = 0.65f
+                started
+            }
+            row.appCard.setOnDragListener(::handleReorderDrag)
             row.editApp.contentDescription = getString(R.string.library_edit_app, name)
             row.appCard.contentDescription = getString(R.string.library_open_app, name)
             row.appCard.setOnClickListener { open(record) }
@@ -242,6 +255,10 @@ class SubappLibraryActivity : AppCompatActivity() {
                     setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
                     isOutsideTouchable = true
                 }
+                content.findViewById<View>(R.id.update_app).setOnClickListener {
+                    popup.dismiss()
+                    com.wynh.appapp.updates.UpdateController(this, record) { refreshRows() }.open()
+                }
                 content.findViewById<View>(R.id.delete_app).setOnClickListener {
                     popup.dismiss()
                     confirmDelete(record, name)
@@ -254,6 +271,64 @@ class SubappLibraryActivity : AppCompatActivity() {
             }
             binding.appList.addView(row.root)
         }
+        binding.appList.setOnDragListener(::handleReorderDrag)
+    }
+
+    private fun handleReorderDrag(target: View, event: DragEvent): Boolean {
+        val source = event.localState as? View ?: return false
+        when (event.action) {
+            DragEvent.ACTION_DRAG_STARTED -> return source.parent === binding.appList
+            DragEvent.ACTION_DRAG_ENTERED -> {
+                if (target is com.google.android.material.card.MaterialCardView && target !== source) {
+                    target.strokeWidth = (2 * resources.displayMetrics.density).toInt()
+                    target.strokeColor = ContextCompat.getColor(this, R.color.primary)
+                }
+                return true
+            }
+            DragEvent.ACTION_DRAG_EXITED -> {
+                if (target is com.google.android.material.card.MaterialCardView) target.strokeWidth = 0
+                return true
+            }
+            DragEvent.ACTION_DROP -> {
+                val from = binding.appList.indexOfChild(source)
+                if (from < 0) return true
+                val insertionIndex = if (target === binding.appList) {
+                    (0 until binding.appList.childCount).firstOrNull { index ->
+                        val child = binding.appList.getChildAt(index)
+                        event.y < child.top + child.height / 2f
+                    } ?: binding.appList.childCount
+                } else {
+                    val targetIndex = binding.appList.indexOfChild(target)
+                    if (targetIndex < 0) return true
+                    targetIndex + if (event.y >= target.height / 2f) 1 else 0
+                }
+                val to = (insertionIndex - if (from < insertionIndex) 1 else 0)
+                    .coerceIn(0, displayedRecords.lastIndex)
+                if (from != to) {
+                    val movedRecord = displayedRecords.removeAt(from)
+                    displayedRecords.add(to, movedRecord)
+                    binding.appList.removeViewAt(from)
+                    binding.appList.addView(source, to)
+                    runCatching { repository.reorder(displayedRecords.map { it.id }) }
+                        .onFailure {
+                            displayedRecords.removeAt(to)
+                            displayedRecords.add(from, movedRecord)
+                            binding.appList.removeView(source)
+                            binding.appList.addView(source, from)
+                            Toast.makeText(this, R.string.library_reorder_failed, Toast.LENGTH_SHORT).show()
+                        }
+                }
+                return true
+            }
+            DragEvent.ACTION_DRAG_ENDED -> {
+                source.alpha = 1f
+                for (index in 0 until binding.appList.childCount) {
+                    (binding.appList.getChildAt(index) as? com.google.android.material.card.MaterialCardView)?.strokeWidth = 0
+                }
+                return true
+            }
+        }
+        return true
     }
 
     private fun open(record: SubappRecord) {

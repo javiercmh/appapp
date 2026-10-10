@@ -1,0 +1,127 @@
+# Subapp updates and phone delivery
+
+Share & Package App exports selected files or opens Android sharing. It cannot
+import a ZIP into an existing workspace. Library → Import → ZIP installs another
+app. Library app menu → Update app, the editor download button, and a subapp's
+`updates.open()` all open the same native GitHub review.
+
+## Publisher contract
+
+A public repository's root `manifest.json` must declare:
+
+```json
+{
+  "version": "1.1.0",
+  "app2Update": {
+    "appId": "com.example.myapp",
+    "minimumHostVersionCode": 4,
+    "github": { "owner": "owner", "repository": "repo", "branch": "main" },
+    "managedFiles": ["index.html", "manifest.json", "css/style.css", "js/app.js", "js/bridge.js", "data/definitions.json"],
+    "seedFiles": ["data/records.json", "data/settings.json"],
+    "seedDefaults": { "data/records.json": [], "data/settings.json": {} }
+  }
+}
+```
+
+Publisher IDs are independent of App²'s stable installed subapp IDs. The host
+resolves the branch to a commit and downloads only declared files at that commit.
+It records commit, source and managed hashes beside the workspace. Private repos,
+repository subfolders and automatic data migrations are not supported in v1.
+The repository must be anonymously readable from the phone; SSH access on the
+development computer alone does not grant phone access. Every package must manage `index.html` and `manifest.json`. File paths must be
+relative, unique, without hidden components or traversal, and cannot overlap as
+files/directories. Update limits: 256 files, 8 MiB per asset, 256 KiB manifest and 32 MiB
+per download. The host rejects redirects and identity/source changes. Library ZIP installation
+also rejects traversal, duplicate paths, missing root index.html and archives over
+1024 entries, 8 MiB per file or 32 MiB expanded total.
+
+Managed files are replaced; previously managed files omitted from the new package
+are removed (unless reclassified as seeds). Seed files are copied only when
+absent. All other files are preserved. Ownership is explicit: `data/` alone does
+not imply user ownership. Lingomage's stories/settings are seeds; its learning
+profiles are managed shipped definitions. New managed paths can replace existing
+files only after native review; never declare a user's domain records managed.
+App authors must maintain saved-record compatibility and bump readable versions.
+Actual changes are identified by commit and hashes.
+
+Older installs require explicit linking to a repository and confirmation of the
+publisher ID. Locally edited/missing code is listed before replacement. Do not
+use display names to identify an update target. Updates cannot run with unfinished
+or unacknowledged AI requests. Save/acknowledge or cancel them first.
+
+## Recovery
+
+The host pauses live subapp screens, serializes bridge file operations, verifies a
+binary-inclusive full workspace backup, builds a candidate preserving unowned
+files, then swaps directories with a synced recovery journal. Startup recovery
+restores the full pre-install workspace and metadata after an incomplete swap.
+The backup is `files/subapps/<id>/update-backup/`, outside the web workspace and
+ordinary workspace ZIP exports. It retains only the most recent recovery point;
+ordinary History remains independent and is not a complete binary backup.
+
+After a second tracked installation, Update app offers **Roll back code**. It
+restores previously managed code while preserving current records/settings and
+other unowned files. The first adoption has a full recovery backup, but no tracked
+previous code identity, so code-only rollback is unavailable. Rollback is also
+blocked when it would overwrite a formerly managed file now classified as a user
+seed. Do not restore the
+full backup manually after new records have been created without first exporting
+the current workspace.
+
+## Low-token routine
+
+1. Work in the publisher repo. Update version/ownership metadata and keep user
+   records compatible. Publish only when the user explicitly authorizes commit
+   and push. GitHub cannot serve local uncommitted changes.
+2. For a local preview, run:
+   `python3 scripts/package_subapp.py /absolute/subapp/path /tmp/App.zip`.
+   For Lingomage use `--preview` to name the separate installation LingoMage Preview.
+   The script uses declared empty seed defaults, excludes unlisted files, and
+   emits a deterministic ZIP plus `.checks.json` with source revision and hashes.
+   `buildDirty` distinguishes a local preview from a published revision.
+3. For a published update, open Update app and Check GitHub, review source,
+   commit and file changes, then confirm. If managed code changes after review, check again. Reload occurs
+   after installation.
+   No APK rebuild is needed for subapp-only changes.
+4. Report revision, verification result and any blockers. Inspect verbose logs
+   only on failure; avoid repeated repository scans or full UI dumps.
+
+## Host APK delivery
+
+- Run `./gradlew --version` before builds; use the checked-in wrapper. The current
+  wrapper is Gradle 9.6 and this host currently runs JDK 25; the wrapper has already
+  been upgraded. Kotlin bytecode remains JVM 17. Do not change JVM settings merely
+  to deliver an update.
+- Build/check on the emulator first. For routine validation use
+  `:app:assembleDebug :app:testDebugUnitTest :app:assembleDebugAndroidTest`.
+  Install the matching APK and test APK on the selected emulator and run
+  `com.wynh.appapp.updates.UpdaterDeviceTest` with AndroidJUnitRunner.
+- Build signed release with `./gradlew :app:assembleRelease`.
+- Run `adb devices -l`; always use `-s <serial>`. Check `pm path com.wynh.appapp`
+  and inspect installed version/certificate. Pull the installed APK read-only if
+  necessary. Verify both APKs with the SDK's `apksigner verify --print-certs`.
+- The Galaxy S24 installation uses SHA-256
+  `d3a30c1acecc9008f11711c39013353f00fc58b540a26eba95bb3556eb02e89a`.
+  Stop on any mismatch; never uninstall or clear storage.
+- Use `adb -s <serial> install -r app/build/outputs/apk/release/app-release.apk`.
+  Check migration implications before launching. A configured library's normal
+  update does not create a new legacy migration.
+- For first preview delivery, push the ZIP to Downloads and use the library's
+  ZIP picker to create a separate app. Never import over the user's app or use
+  `run-as` to bypass a signed release's sandbox.
+- Verify actual UI controls and source hashes. When release sandbox access is
+  unavailable, export the selected preview through the public UI and compare ZIP
+  file hashes. Do not claim hidden device data was inspected or preserved unless
+  the chosen path leaves it untouched or verification was actually performed.
+
+## Web API
+
+```js
+import { updates } from './bridge.js';
+if (updates.available) await updates.open();
+```
+
+The Promise resolves `true` when native review opens, not when installation
+completes. It rejects on an unavailable channel or timeout. Only the owning HTTPS
+origin and main frame can open review. Callers cannot supply download endpoints
+or silently install. Browsers and development mocks report unavailable.

@@ -62,3 +62,10 @@ permissions and exact alarms require device testing.
 
 Run development checks with `python3 -B -m unittest discover -s tests -p 'test_demo_dev_server.py'`
 and `node --test tests/*.test.mjs`.
+
+## Updating saved apps
+
+Use an app's library menu → **Update app** to review an update from its public
+GitHub repository. Updates replace declared app code and preserve user records.
+The editor has a separate update button; Share & Package App only exports/shares.
+Library ZIP import creates another app. See [the update and deployment guide](docs/SUBAPP_UPDATES.md).

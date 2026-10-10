@@ -38,9 +38,20 @@ class SubappRepository(private val context: Context) {
         return ids.distinct().mapNotNull(::resolve)
     }
 
+    /** Persists a caller-provided permutation of the currently installed apps. */
+    @Synchronized
+    fun reorder(ids: List<String>) {
+        val currentIds = list().map { it.id }
+        require(ids.size == currentIds.size && ids.toSet() == currentIds.toSet()) {
+            "App order must contain every installed app exactly once"
+        }
+        writeIndex(ids)
+    }
+
     fun resolve(id: String): SubappRecord? {
         if (!validId(id)) return null
         val dir = File(root, id)
+        if (dir.isDirectory) com.wynh.appapp.updates.WorkspaceUpdater(dir).recover()
         return if (File(dir, "workspace/index.html").isFile) SubappRecord(id, dir) else null
     }
 

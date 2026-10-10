@@ -104,38 +104,42 @@ class NativeStorageBridge(
 
     @JavascriptInterface
     fun writeFile(fileName: String, content: String): Boolean {
-        return try {
-            val file = getAppFile(fileName)
-            file.parentFile?.mkdirs()
-            FileOutputStream(file).use { output ->
-                output.write(content.toByteArray(StandardCharsets.UTF_8))
+        return synchronized(com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(appWorkspaceDir)) {
+            try {
+                val file = getAppFile(fileName)
+                file.parentFile?.mkdirs()
+                FileOutputStream(file).use { output ->
+                    output.write(content.toByteArray(StandardCharsets.UTF_8))
+                }
+                val relPath = file.relativeTo(workspaceDir).path.replace('\\', '/')
+                log("[Storage] Wrote ${content.length} chars to workspace file '$relPath' (${file.length()} bytes)")
+                true
+            } catch (e: Exception) {
+                log("[Storage Error] Failed to write file '$fileName': ${e.message}")
+                false
             }
-            val relPath = file.relativeTo(workspaceDir).path.replace('\\', '/')
-            log("[Storage] Wrote ${content.length} chars to workspace file '$relPath' (${file.length()} bytes)")
-            true
-        } catch (e: Exception) {
-            log("[Storage Error] Failed to write file '$fileName': ${e.message}")
-            false
         }
     }
 
     @JavascriptInterface
     fun readFile(fileName: String): String {
-        return try {
-            val file = getAppFile(fileName)
-            if (!file.exists() || !file.isFile) {
-                log("[Storage] File '$fileName' does not exist yet.")
-                return ""
+        return synchronized(com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(appWorkspaceDir)) {
+            try {
+                val file = getAppFile(fileName)
+                if (!file.exists() || !file.isFile) {
+                    log("[Storage] File '$fileName' does not exist yet.")
+                    return ""
+                }
+                val content = FileInputStream(file).use { input ->
+                    input.bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
+                }
+                val relPath = file.relativeTo(workspaceDir).path.replace('\\', '/')
+                log("[Storage] Read ${content.length} chars from workspace file '$relPath'")
+                content
+            } catch (e: Exception) {
+                log("[Storage Error] Failed to read file '$fileName': ${e.message}")
+                ""
             }
-            val content = FileInputStream(file).use { input ->
-                input.bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
-            }
-            val relPath = file.relativeTo(workspaceDir).path.replace('\\', '/')
-            log("[Storage] Read ${content.length} chars from workspace file '$relPath'")
-            content
-        } catch (e: Exception) {
-            log("[Storage Error] Failed to read file '$fileName': ${e.message}")
-            ""
         }
     }
 
@@ -149,33 +153,35 @@ class NativeStorageBridge(
      */
     @JavascriptInterface
     fun writeFileBase64(fileName: String, base64: String): Boolean {
-        return try {
-            if (base64.length > MAX_BASE64_CHARS) {
-                log("[Storage Error] Refused '$fileName': ${base64.length} base64 chars exceeds cap of $MAX_BASE64_CHARS")
-                return false
+        return synchronized(com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(appWorkspaceDir)) {
+            try {
+                if (base64.length > MAX_BASE64_CHARS) {
+                    log("[Storage Error] Refused '$fileName': ${base64.length} base64 chars exceeds cap of $MAX_BASE64_CHARS")
+                    return false
+                }
+                // Strip an optional data-URL prefix; browsers hand these out by default.
+                val payload = if (base64.startsWith("data:")) base64.substringAfter("base64,", "") else base64
+                if (payload.isEmpty()) {
+                    log("[Storage Error] Empty base64 payload for '$fileName'")
+                    return false
+                }
+                // DEFAULT (not NO_WRAP) so line breaks and padding from a data URL are tolerated.
+                val bytes = Base64.decode(payload, Base64.DEFAULT)
+                val file = getAppFile(fileName)
+                file.parentFile?.mkdirs()
+                FileOutputStream(file).use { output ->
+                    output.write(bytes)
+                }
+                val relPath = file.relativeTo(workspaceDir).path.replace('\\', '/')
+                log("[Storage] Wrote binary '$relPath' (${bytes.size} bytes)")
+                true
+            } catch (e: IllegalArgumentException) {
+                log("[Storage Error] Invalid base64 for '$fileName': ${e.message}")
+                false
+            } catch (e: Exception) {
+                log("[Storage Error] Failed to write binary '$fileName': ${e.message}")
+                false
             }
-            // Strip an optional data-URL prefix; browsers hand these out by default.
-            val payload = if (base64.startsWith("data:")) base64.substringAfter("base64,", "") else base64
-            if (payload.isEmpty()) {
-                log("[Storage Error] Empty base64 payload for '$fileName'")
-                return false
-            }
-            // DEFAULT (not NO_WRAP) so line breaks and padding from a data URL are tolerated.
-            val bytes = Base64.decode(payload, Base64.DEFAULT)
-            val file = getAppFile(fileName)
-            file.parentFile?.mkdirs()
-            FileOutputStream(file).use { output ->
-                output.write(bytes)
-            }
-            val relPath = file.relativeTo(workspaceDir).path.replace('\\', '/')
-            log("[Storage] Wrote binary '$relPath' (${bytes.size} bytes)")
-            true
-        } catch (e: IllegalArgumentException) {
-            log("[Storage Error] Invalid base64 for '$fileName': ${e.message}")
-            false
-        } catch (e: Exception) {
-            log("[Storage Error] Failed to write binary '$fileName': ${e.message}")
-            false
         }
     }
 
@@ -185,108 +191,118 @@ class NativeStorageBridge(
      */
     @JavascriptInterface
     fun readFileBase64(fileName: String): String {
-        return try {
-            val file = getAppFile(fileName)
-            if (!file.exists() || !file.isFile) {
-                log("[Storage] Binary file '$fileName' does not exist yet.")
-                return ""
+        return synchronized(com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(appWorkspaceDir)) {
+            try {
+                val file = getAppFile(fileName)
+                if (!file.exists() || !file.isFile) {
+                    log("[Storage] Binary file '$fileName' does not exist yet.")
+                    return ""
+                }
+                if (file.length() > MAX_BINARY_BYTES) {
+                    log("[Storage Error] '$fileName' is ${file.length()} bytes; too large to read as base64")
+                    return ""
+                }
+                val encoded = Base64.encodeToString(file.readBytes(), Base64.NO_WRAP)
+                val relPath = file.relativeTo(workspaceDir).path.replace('\\', '/')
+                log("[Storage] Read binary '$relPath' (${file.length()} bytes)")
+                encoded
+            } catch (e: Exception) {
+                log("[Storage Error] Failed to read binary '$fileName': ${e.message}")
+                ""
             }
-            if (file.length() > MAX_BINARY_BYTES) {
-                log("[Storage Error] '$fileName' is ${file.length()} bytes; too large to read as base64")
-                return ""
-            }
-            val encoded = Base64.encodeToString(file.readBytes(), Base64.NO_WRAP)
-            val relPath = file.relativeTo(workspaceDir).path.replace('\\', '/')
-            log("[Storage] Read binary '$relPath' (${file.length()} bytes)")
-            encoded
-        } catch (e: Exception) {
-            log("[Storage Error] Failed to read binary '$fileName': ${e.message}")
-            ""
         }
     }
 
     @JavascriptInterface
     fun fileExists(fileName: String): Boolean {
-        return try {
-            val file = getAppFile(fileName)
-            file.exists() && file.isFile
-        } catch (_: Exception) {
-            false
+        return synchronized(com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(appWorkspaceDir)) {
+            try {
+                val file = getAppFile(fileName)
+                file.exists() && file.isFile
+            } catch (_: Exception) {
+                false
+            }
         }
     }
 
     @JavascriptInterface
     fun deleteFile(fileName: String): Boolean {
-        return try {
-            val file = getAppFile(fileName)
-            if (file.exists() && file.isFile) {
-                val deleted = file.delete()
-                log("[Storage] Deleted file '$fileName': $deleted")
-                if (deleted) {
-                    var parent = file.parentFile
-                    while (parent != null && parent != workspaceDir && parent.canonicalPath.startsWith(workspaceDir.canonicalPath)) {
-                        val children = parent.listFiles()
-                        if (children == null || children.isEmpty()) {
-                            parent.delete()
-                            parent = parent.parentFile
-                        } else {
-                            break
+        return synchronized(com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(appWorkspaceDir)) {
+            try {
+                val file = getAppFile(fileName)
+                if (file.exists() && file.isFile) {
+                    val deleted = file.delete()
+                    log("[Storage] Deleted file '$fileName': $deleted")
+                    if (deleted) {
+                        var parent = file.parentFile
+                        while (parent != null && parent != workspaceDir && parent.canonicalPath.startsWith(workspaceDir.canonicalPath)) {
+                            val children = parent.listFiles()
+                            if (children == null || children.isEmpty()) {
+                                parent.delete()
+                                parent = parent.parentFile
+                            } else {
+                                break
+                            }
                         }
                     }
+                    deleted
+                } else {
+                    false
                 }
-                deleted
-            } else {
+            } catch (e: Exception) {
+                log("[Storage Error] Failed to delete file '$fileName': ${e.message}")
                 false
             }
-        } catch (e: Exception) {
-            log("[Storage Error] Failed to delete file '$fileName': ${e.message}")
-            false
         }
     }
 
     @JavascriptInterface
     fun listFiles(): String {
-        if (!workspaceDir.exists()) return "[]"
-        val jsonArray = JSONArray()
-        for (file in workspaceDir.walkTopDown().filter { it.isFile }) {
-            val relativePath = file.relativeTo(workspaceDir).path.replace('\\', '/')
-            val obj = JSONObject().apply {
-                put("name", relativePath)
-                put("size", file.length())
-                put("lastModified", file.lastModified())
+        return synchronized(com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(appWorkspaceDir)) {
+            if (!workspaceDir.exists()) return "[]"
+            val jsonArray = JSONArray()
+            for (file in workspaceDir.walkTopDown().filter { it.isFile }) {
+                val relativePath = file.relativeTo(workspaceDir).path.replace('\\', '/')
+                val obj = JSONObject().apply {
+                    put("name", relativePath)
+                    put("size", file.length())
+                    put("lastModified", file.lastModified())
+                }
+                jsonArray.put(obj)
             }
-            jsonArray.put(obj)
+            jsonArray.toString()
         }
-        return jsonArray.toString()
     }
 
     // --- Storage & System Telemetry ---
 
     @JavascriptInterface
     fun getStorageStats(): String {
-        val filesDir = context.filesDir
-        val freeSpace = filesDir.freeSpace
-        val totalSpace = filesDir.totalSpace
-        val usableSpace = filesDir.usableSpace
+        return synchronized(com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(appWorkspaceDir)) {
+            val filesDir = context.filesDir
+            val freeSpace = filesDir.freeSpace
+            val totalSpace = filesDir.totalSpace
+            val usableSpace = filesDir.usableSpace
 
-        var appFilesBytes = 0L
-        var appFilesCount = 0
-        if (workspaceDir.exists()) {
-            for (f in workspaceDir.walkTopDown().filter { it.isFile }) {
-                appFilesBytes += f.length()
-                appFilesCount++
+            var appFilesBytes = 0L
+            var appFilesCount = 0
+            if (workspaceDir.exists()) {
+                for (f in workspaceDir.walkTopDown().filter { it.isFile }) {
+                    appFilesBytes += f.length()
+                    appFilesCount++
+                }
             }
-        }
 
-        val json = JSONObject().apply {
-            put("freeSpaceBytes", freeSpace)
-            put("totalSpaceBytes", totalSpace)
-            put("usableSpaceBytes", usableSpace)
-            put("appFilesCount", appFilesCount)
-            put("appFilesBytes", appFilesBytes)
-            put("filesDir", workspaceDir.absolutePath)
+            val json = JSONObject().apply {
+                put("freeSpaceBytes", freeSpace)
+                put("totalSpaceBytes", totalSpace)
+                put("usableSpaceBytes", usableSpace)
+                put("appFilesCount", appFilesCount)
+                put("appFilesBytes", appFilesBytes)
+                put("filesDir", workspaceDir.absolutePath)
+            }
+            return json.toString()
         }
-        return json.toString()
     }
 
     // --- Workspace Project Access Aliases ---
