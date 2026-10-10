@@ -49,3 +49,16 @@ The Android host uses Kotlin, Material components, and WebView. Build with JDK 1
 MIT License.
 This means, you can do whatever you want with App².
 Just one personal request: please do not put ads, non-consensual trackers, or other invasive code in your apps.
+
+
+### Preview the Starter Demo
+
+Run `python3 app/src/main/assets/starter_template/dev_server.py --mock-ai` and open
+[localhost:8888](http://localhost:8888). Omit `--mock-ai` to leave AI unavailable, or add a positional
+port to change the port. Python 3.9+ is sufficient; no dependencies are needed.
+The server writes real notes, photos and AI results to the served workspace, so use a disposable
+copy for testing. Mock AI is offline and uses no ChatGPT credentials or plan usage. Android
+permissions and exact alarms require device testing.
+
+Run development checks with `python3 -B -m unittest discover -s tests -p 'test_demo_dev_server.py'`
+and `node --test tests/*.test.mjs`.

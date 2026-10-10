@@ -2,11 +2,41 @@
 // Platform rules and the full API are in AGENTS.md in this workspace.
 //
 // window.AndroidStorage, window.AndroidMemory and window.AndroidNotification are all the same
-// native object. When they are absent we are in a plain browser, so fall back to localStorage.
+// native object. Browser previews use the local development server when present, otherwise localStorage.
 
 const N = window.AndroidStorage || null;
 
 export const isNative = !!N;
+
+// Probe once. Once selected, a failed disk operation must never become a localStorage save.
+function devRequest(action, params = {}, body) {
+  const xhr = new XMLHttpRequest();
+  const query = new URLSearchParams(params);
+  xhr.open(body === undefined ? 'GET' : 'POST', `/__bridge/${action}?${query}`, false);
+  if (body !== undefined) xhr.setRequestHeader('Content-Type', 'text/plain;charset=UTF-8');
+  xhr.send(body);
+  if (xhr.status !== 200) throw new Error(`Development storage ${action} failed (${xhr.status}).`);
+  return xhr.responseText;
+}
+let DEV = null;
+if (!N && !window.AppAI) {
+  try {
+    const info = JSON.parse(devRequest('info'));
+    if (info.server === 'app2-demo-dev') DEV = info;
+  } catch { /* Ordinary browser previews keep their localStorage backend. */ }
+}
+if (DEV?.mockAi) {
+  const indicator = document.createElement('div');
+  indicator.textContent = 'Development mock AI · offline · no ChatGPT usage';
+  indicator.setAttribute('role', 'status');
+  indicator.style.cssText = 'padding:8px;text-align:center;background:#fef3c7;color:#713f12';
+  document.body.prepend(indicator);
+}
+function devWrite(action, params, body = '') {
+  try { return JSON.parse(devRequest(action, params, body)) === true; }
+  catch (error) { console.error(error); return false; }
+}
+
 
 // --- Native AI requests (available only in supported App² WebViews) ---
 const AI = window.AppAI || null;
@@ -38,6 +68,16 @@ if (AI) {
 }
 
 function aiCall(action, extra = {}) {
+  if (!AI && DEV?.mockAi) {
+    return fetch('/__bridge/ai', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, ...extra }),
+    }).then(async (response) => {
+      const value = await response.json();
+      if (!response.ok) throw Object.assign(new Error(value.error?.message || 'Development mock failed.'), { code: value.error?.code || 'service' });
+      return value;
+    });
+  }
   if (!AI) return Promise.reject(new Error('AI is unavailable in this browser.'));
   const id = `ai-${Date.now()}-${++aiCounter}`;
   return new Promise((resolve, reject) => {
@@ -70,7 +110,8 @@ if (AI) {
 
 export const ai = {
   // Channel presence only; discover connection separately via providers().
-  available: !!AI,
+  available: !!AI || !!DEV?.mockAi,
+  developmentMock: !AI && !!DEV?.mockAi,
   // -> {providers:[{id,name,connected}]} without account identifiers.
   providers: () => aiCall('providers'),
   // -> {models:[{id,name,reasoningLevels}]} in account-specific server order.
@@ -81,6 +122,7 @@ export const ai = {
     const request = { id, done: false, value: null, error: null, listeners: new Set() };
     request.notify = (value) => request.listeners.forEach((listener) => listener(value));
     aiResults.set(id, request);
+    if (!AI && DEV?.mockAi) window.dispatchEvent(new CustomEvent('app2:ai:status', { detail: { id, status: 'running' } }));
     return id;
   },
   // -> {id,done,value,error?}; native failures may reject with Error.code instead.
@@ -107,7 +149,7 @@ export const ai = {
     poll();
   }),
   // Cancels and releases the native request; subsequent result() may be not_found.
-  cancel: (id) => aiCall('cancel', { requestId: id }),
+  cancel: async (id) => { const result = await aiCall('cancel', { requestId: id }); aiResults.delete(id); return result; },
   // Release terminal results only after durable save or handled failure. -> true
   acknowledge: async (id) => { const result = await aiCall('acknowledge', { requestId: id }); aiResults.delete(id); return result; },
 };
@@ -117,6 +159,7 @@ export const ai = {
 export function savePref(key, value) {
   const text = typeof value === 'string' ? value : JSON.stringify(value);
   if (N) return N.saveState(key, text);
+  if (DEV) return devWrite('saveState', { key }, text);
   localStorage.setItem(key, text);
   return true;
 }
@@ -124,12 +167,14 @@ export function savePref(key, value) {
 // Note: the native loadState has no optional-argument support — both args are always required.
 export function loadPref(key, fallback = '') {
   if (N) return N.loadState(key, fallback);
+  if (DEV) return devRequest('loadState', { key, fallback });
   const value = localStorage.getItem(key);
   return value === null ? fallback : value;
 }
 
 export function removePref(key) {
   if (N) return N.removeState(key);
+  if (DEV) return devWrite('removeState', { key });
   localStorage.removeItem(key);
   return true;
 }
@@ -138,12 +183,14 @@ export function removePref(key) {
 
 export function readFile(name) {
   if (N) return N.readFile(name);
+  if (DEV) return devRequest('readFile', { name });
   return localStorage.getItem(`file:${name}`) || '';
 }
 
 export function writeFile(name, content) {
   const text = typeof content === 'string' ? content : JSON.stringify(content, null, 2);
   if (N) return N.writeFile(name, text);
+  if (DEV) return devWrite('writeFile', { name }, text);
   localStorage.setItem(`file:${name}`, text);
   return true;
 }
@@ -151,17 +198,20 @@ export function writeFile(name, content) {
 // Binary write. Accepts a bare base64 payload or a full `data:...;base64,...` URL.
 export function writeFileBase64(name, base64) {
   if (N) return N.writeFileBase64(name, base64);
+  if (DEV) return devWrite('writeFileBase64', { name }, base64);
   localStorage.setItem(`file:${name}`, base64);
   return true;
 }
 
 export function deleteFile(name) {
   if (N) return N.deleteFile(name);
+  if (DEV) return devWrite('deleteFile', { name });
   localStorage.removeItem(`file:${name}`);
   return true;
 }
 
 export function listFiles() {
+  if (DEV) return JSON.parse(devRequest('listFiles'));
   if (N) {
     try {
       return JSON.parse(N.listFiles());
@@ -176,6 +226,7 @@ export function listFiles() {
 }
 
 export function storageStats() {
+  if (DEV) return JSON.parse(devRequest('storageStats'));
   if (N) {
     try {
       return JSON.parse(N.getStorageStats());

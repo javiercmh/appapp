@@ -110,13 +110,17 @@ function entryRow(entry) {
 }
 
 function deleteEntry(id) {
-  const removed = store.remove(id);
+  let removed;
+  try { removed = store.remove(id); } catch (error) { toast(error.message); return; }
   if (!removed) return;
   renderFeed();
   toast(
     'Note deleted',
     'Undo',
-    () => { store.restore(removed.entry, removed.index); renderFeed(); },
+    () => {
+      try { store.restore(removed.entry, removed.index); renderFeed(); }
+      catch (error) { toast(error.message); }
+    },
     () => store.discardPhoto(removed.entry)   // photo survives until undo expires
   );
 }
@@ -168,7 +172,8 @@ export function initComposer() {
       input.focus();
       return;
     }
-    store.add({ text, photo: pendingPhoto });
+    try { store.add({ text, photo: pendingPhoto }); }
+    catch (error) { toast(error.message); return; }
     input.value = '';
     clearPhoto();
     renderFeed();

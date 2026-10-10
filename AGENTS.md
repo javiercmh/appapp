@@ -347,3 +347,31 @@ Listen for `app2:ai:connection` with `event.detail = {providerId, connected}` an
 The native host binds requests to the exact subapp HTTPS origin and main frame and derives subapp/task ownership. Another subapp cannot retrieve, cancel or acknowledge your request. Callers cannot provide arbitrary endpoints or authentication headers. Only one unfinished **or unacknowledged** request per subapp is allowed. Native credentials remain encrypted outside workspaces, snapshots and exports.
 
 Requests use native Responses streaming with `store:false`; text succeeds only after `response.completed`. Switching apps or opening the sign-in browser allows the active request to continue under a foreground notification. Rotation preserves the native request. Explicit reload, final screen closure, deletion and swiping the owning task from Recent Apps cancel its requests; closing another task does not. Completed results remain available until acknowledgement or task closure. Process death, force-stop and reboot do not restart inference. Persisted IDs can become `not_found`. Web workflows after inference (validation and auto-save) resume when the web app runs again; the foreground service does not execute the whole web app in the background.
+
+
+## Starter Demo browser development
+
+The Starter Demo includes `dev_server.py`. From the repository, run:
+
+```sh
+python3 app/src/main/assets/starter_template/dev_server.py
+# Optional deterministic AI simulation, without credentials or ChatGPT usage:
+python3 app/src/main/assets/starter_template/dev_server.py --mock-ai
+```
+
+Open `http://localhost:8888`. A positional port is also accepted, e.g. `dev_server.py 9000 --mock-ai`.
+For an exported workspace, run `python3 dev_server.py` inside that workspace. The server always
+serves the script's directory and binds only to localhost. Use Python 3.9 or newer, with no dependencies.
+
+Browser file operations read/write actual workspace files, including JPEG photos; development
+preferences live in `data/dev-preferences.json`. Use a disposable workspace copy for tests because
+notes, photos and AI results change files on disk. The bridge probes `/__bridge/info` once; ordinary
+static previews retain localStorage. After selecting the server, failed writes return false and
+failed reads throw; they never silently fall back to localStorage.
+
+`--mock-ai` enables a visibly labelled development mock and one offline model. Generate returns
+fixed text after 1.5 seconds. Requests survive browser reloads while the server runs and occupy
+one slot until cancellation or acknowledgement. Restarting the server loses requests; persisted
+IDs then return `not_found`. No external requests are made. Mock requests do not reproduce native
+task closure or background service behavior. Notifications keep browser behavior; Android
+permissions, exact alarms, WebView insets and real AI must be tested on Android.
