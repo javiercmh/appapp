@@ -7,11 +7,11 @@ android {
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.example.runtimecompiler"
+        applicationId = "com.wynh.appapp"
         minSdk = 26
         targetSdk = 37
-        versionCode = 2
-        versionName = "1.1.0"
+        versionCode = 3
+        versionName = "1.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
