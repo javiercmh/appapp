@@ -6,7 +6,6 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.FileInputStream
-import java.io.FileOutputStream
 import java.nio.charset.StandardCharsets
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -147,7 +146,7 @@ class WorkspaceHistoryManager(
             val timestamp = System.currentTimeMillis()
             val formattedTime = timeFormat.format(Date(timestamp))
             val snapshot = WorkspaceSnapshot(
-                id = "snap_$timestamp",
+                id = "snap_${java.util.UUID.randomUUID()}",
                 timestamp = timestamp,
                 formattedTime = formattedTime,
                 fileCount = filesMap.size,
@@ -237,9 +236,7 @@ class WorkspaceHistoryManager(
             jsonArray.put(obj)
         }
 
-        FileOutputStream(historyFile).use { out ->
-            out.write(jsonArray.toString().toByteArray(StandardCharsets.UTF_8))
-        }
+        writeAtomically(historyFile, jsonArray.toString())
     }
 
     /**
@@ -252,6 +249,10 @@ class WorkspaceHistoryManager(
             val target = snapshots.find { it.id == snapshotId } ?: run {
                 log("[History Error] Snapshot '$snapshotId' not found.")
                 return false
+            }
+
+            check(saveSnapshot(workspaceManager, "Before restoring ${target.formattedTime}") != null) {
+                "Could not save current version before restore"
             }
 
             // 1. Clean up workspace files that were created after the snapshot. Runtime logs and
@@ -268,7 +269,7 @@ class WorkspaceHistoryManager(
 
             // 2. Write all files from snapshot
             for ((fileName, content) in target.files) {
-                workspaceManager.writeFile(fileName, content)
+                if (fileName != "app.log") check(workspaceManager.writeFile(fileName, content)) { "Could not restore $fileName" }
             }
 
             log("[History] Successfully restored snapshot from ${target.formattedTime}")
@@ -283,7 +284,7 @@ class WorkspaceHistoryManager(
         val files = linkedMapOf<String, String>()
         for (file in workspaceManager.listFiles()) {
             // History stores text; binary assets remain untouched on disk and outside snapshots.
-            if (!WorkspaceManager.isBinaryAsset(file.name)) {
+            if (file.name != "app.log" && !WorkspaceManager.isBinaryAsset(file.name)) {
                 files[file.name] = workspaceManager.readFile(file.name)
             }
         }
@@ -326,6 +327,18 @@ class WorkspaceHistoryManager(
             put("files", filesJson)
         }
         file.parentFile?.mkdirs()
-        FileOutputStream(file).use { it.write(json.toString().toByteArray(StandardCharsets.UTF_8)) }
+        writeAtomically(file, json.toString())
+    }
+
+    private fun writeAtomically(file: File, text: String) {
+        val atomic = android.util.AtomicFile(file)
+        val stream = atomic.startWrite()
+        try {
+            stream.write(text.toByteArray(StandardCharsets.UTF_8))
+            atomic.finishWrite(stream)
+        } catch (e: Exception) {
+            atomic.failWrite(stream)
+            throw e
+        }
     }
 }

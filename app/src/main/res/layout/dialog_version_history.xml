@@ -47,7 +47,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
         android:layout_marginBottom="16dp"
-        android:text="Restore this app’s initial version or revert to a saved workspace snapshot."
+        android:text="GitHub updates and editor saves are tracked here. Restore an earlier version of text files, including data and settings. Images are kept."
         android:textColor="@color/on_surface_muted"
         android:textSize="13sp" />
 

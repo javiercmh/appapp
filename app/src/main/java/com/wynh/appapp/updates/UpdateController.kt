@@ -1,11 +1,14 @@
 package com.wynh.appapp.updates
 
-import android.widget.EditText
+import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.wynh.appapp.workspace.WorkspaceHistoryManager
+import com.wynh.appapp.workspace.WorkspaceManager
 import com.wynh.appapp.workspace.SubappRecord
 import com.wynh.appapp.SubappSessionRegistry
 import com.wynh.appapp.ai.AppAiApplication
@@ -27,15 +30,20 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
             val old = updater.installed()
             if (old != null) {
                 val builder = MaterialAlertDialogBuilder(activity).setTitle("Update app")
-                    .setMessage("Installed ${old.version}\n${old.source.display}\nCommit ${old.commit.take(12)}")
+                    .setMessage("Current version: ${old.version}\nRepository: ${old.source.owner}/${old.source.repository}\nBranch: ${old.source.branch}\n\nCheck for the latest publisher update. You can review file changes before installing.\n\nTo restore an earlier version, open Edit → Version history.")
                     .setPositiveButton("Check GitHub") { _, _ -> check(old.source) }.setNegativeButton("Cancel", null)
-                if (File(record.directory, "update-backup/state.json").isFile) builder.setNeutralButton("Roll back code") { _, _ -> confirmRollback() }
                 builder.show()
             } else {
                 val suggested = runCatching { UpdatePackage.parse(File(record.workspaceDir, "manifest.json").readText()).source }.getOrNull()
-                val repo = EditText(activity).apply { hint = "owner/repository"; setText(suggested?.let { "${it.owner}/${it.repository}" } ?: "") }
-                val branch = EditText(activity).apply { hint = "Branch"; setText(suggested?.branch ?: "main") }
-                val form = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL; setPadding(40, 8, 40, 8); addView(repo); addView(branch) }
+                val repo = TextInputEditText(activity).apply { setSingleLine(); setText(suggested?.let { "${it.owner}/${it.repository}" } ?: "") }
+                val branch = TextInputEditText(activity).apply { setSingleLine(); setText(suggested?.branch ?: "main") }
+                val padding = (24 * activity.resources.displayMetrics.density).toInt()
+                val form = LinearLayout(activity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(padding, padding / 2, padding, padding / 2)
+                    addView(TextInputLayout(activity).apply { hint = "Repository (owner/repository)"; addView(repo) })
+                    addView(TextInputLayout(activity).apply { hint = "Branch"; addView(branch) })
+                }
                 val dialog = MaterialAlertDialogBuilder(activity).setTitle("Link this app to GitHub")
                     .setMessage("Choose the publisher repository for this app. No files change until you review and confirm the update.")
                     .setView(form).setPositiveButton("Check", null).setNegativeButton("Cancel", null).show()
@@ -54,24 +62,32 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
             try {
                 download = withContext(Dispatchers.IO) { GitHubUpdateDownloader(activity.cacheDir).download(source, hostVersion) }
                 val value = download
-                val (preview, reviewed) = withContext(Dispatchers.IO) {
+                val (preview, reviewed, unchanged) = withContext(Dispatchers.IO) {
                     synchronized(WorkspaceLocks.forWorkspace(record.workspaceDir)) {
-                        updater.preview(value.pkg, value.directory) to updater.reviewedFiles(value.pkg)
+                        Triple(updater.preview(value.pkg, value.directory), updater.reviewedFiles(value.pkg), updater.publisherUnchanged(value.pkg, value.directory))
                     }
                 }
                 progress.dismiss()
+                if (unchanged) {
+                    MaterialAlertDialogBuilder(activity).setTitle("App is up to date")
+                        .setMessage("Version ${value.pkg.version}\n${source.display}\n\nThere are no publisher changes to install. Your local edits and saved data are kept.")
+                        .setPositiveButton("Done", null)
+                        .setOnDismissListener { value.directory.deleteRecursively() }.show()
+                    return@launch
+                }
                 val text = buildString {
-                    append("${value.pkg.version} · ${value.commit.take(12)}\n${source.display}\n")
+                    append("Version: ${value.pkg.version}\n${source.display}\n\n${preview.added.size} added · ${preview.changed.size} changed · ${preview.removed.size} removed\n")
                     if (preview.adoption) append("\nLink publisher identity: ${value.pkg.appId}\n")
                     append("\nUser records and unowned files are preserved.\n")
                     fun section(label: String, files: List<String>) { if (files.isNotEmpty()) append("\n$label:\n${files.joinToString("\n")}\n") }
                     section("Added", preview.added); section("Replaced", preview.changed); section("Removed", preview.removed)
+                    if (preview.edited.isNotEmpty()) append("\nLocal changes listed below will be replaced by publisher files.\n")
                     section(if (preview.adoption) "Existing files to adopt and replace" else "Locally edited or missing code", preview.edited)
-                    append("\nA full recovery backup will be created.")
+                    append("\nThe current and updated versions will be saved in Edit → Version history. A recovery backup will also be created.")
                 }
                 MaterialAlertDialogBuilder(activity).setTitle("Review app update").setMessage(text)
                     .setPositiveButton(if (preview.adoption) "Link and update" else "Update") { _, _ ->
-                        applyUpdate { updater.install(value.pkg, value.directory, value.commit, hostVersion, reviewed) }
+                        applyUpdate("GitHub update ${value.pkg.version} · ${value.commit.take(12)}") { updater.install(value.pkg, value.directory, value.commit, hostVersion, reviewed) }
                         value.directory.deleteRecursively()
                     }.setNegativeButton("Cancel", null)
                     .setOnDismissListener { value.directory.deleteRecursively() }.show()
@@ -79,18 +95,21 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
         }
     }
 
-    private fun confirmRollback() {
-        MaterialAlertDialogBuilder(activity).setTitle("Roll back app code?")
-            .setMessage("Restore code from before the last update. Current stories, settings and other unowned files remain unchanged. Locally edited managed code will be replaced.")
-            .setPositiveButton("Roll back") { _, _ -> applyUpdate { updater.rollback() } }.setNegativeButton("Cancel", null).show()
-    }
-
-    private fun applyUpdate(operation: () -> Unit) {
+    private fun applyUpdate(label: String, operation: () -> Unit) {
         try {
             require(!ai.hasRequest(record.id)) { "Finish and save or cancel the AI request before updating." }
             // Keep the UI thread occupied during the short local transaction so editors cannot race it.
             SubappSessionRegistry.pause(record.id)
-            try { operation() } finally { SubappSessionRegistry.resume(record.id) }
+            try {
+                synchronized(WorkspaceLocks.forWorkspace(record.workspaceDir)) {
+                    val workspace = WorkspaceManager(activity, workspaceDir = record.workspaceDir)
+                    val history = WorkspaceHistoryManager(activity, appDirectory = record.directory)
+                    history.ensureInitialVersion(workspace)
+                    check(history.saveSnapshot(workspace, "Before $label") != null) { "Could not save version history; update cancelled" }
+                    operation()
+                    check(history.saveSnapshot(workspace, label) != null) { "App updated, but version history could not be saved" }
+                }
+            } finally { SubappSessionRegistry.resume(record.id) }
             Toast.makeText(activity, "App code updated; user files preserved", Toast.LENGTH_LONG).show()
             finished()
         } catch (e: Exception) { error(e) }

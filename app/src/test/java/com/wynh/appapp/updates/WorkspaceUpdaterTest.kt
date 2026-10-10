@@ -23,7 +23,7 @@ class WorkspaceUpdaterTest {
     private fun write(root: File, path: String, value: String) { val f = File(root, path); f.parentFile!!.mkdirs(); f.writeText(value) }
     private fun workspace(): File = temp.newFolder().also { write(it, "workspace/index.html", "old"); write(it, "workspace/data/stories.json", "saved stories"); write(it, "workspace/data/settings.json", "user settings"); val photo = File(it, "workspace/photos/photo.png"); photo.parentFile!!.mkdirs(); photo.writeBytes(byteArrayOf(0, -1, 42, 0)) }
 
-    @Test fun updatePreservesUserFilesRemovesOnlyManagedAndRollbackKeepsNewRecords() {
+    @Test fun updatePreservesUserFilesAndRemovesOnlyManaged() {
         val root = workspace(); val engine = WorkspaceUpdater(root)
         val (v1, files1) = packageFiles("1")
         engine.install(v1, files1, sha1, 3)
@@ -36,12 +36,21 @@ class WorkspaceUpdaterTest {
         assertEquals("user file", File(root, "workspace/js/unowned.js").readText())
         assertEquals("user settings", File(root, "workspace/data/settings.json").readText())
         assertArrayEquals(byteArrayOf(0, -1, 42, 0), File(root, "workspace/photos/photo.png").readBytes())
-        write(root, "workspace/data/stories.json", "new stories")
-        engine.rollback()
-        assertEquals("new stories", File(root, "workspace/data/stories.json").readText())
-        assertEquals("version 1", File(root, "workspace/index.html").readText())
-        assertFalse(File(root, "workspace/js/new.js").exists())
-        assertEquals(sha1, engine.installed()!!.commit)
+
+    }
+
+    @Test fun unchangedPublisherDoesNotOfferToOverwriteLocalEdits() {
+        val root = workspace()
+        val engine = WorkspaceUpdater(root)
+        val (pkg, files) = packageFiles("1")
+        assertFalse(engine.publisherUnchanged(pkg, files))
+        engine.install(pkg, files, sha1, 3)
+        assertTrue(engine.publisherUnchanged(pkg, files))
+        write(root, "workspace/index.html", "local edit")
+        assertTrue(engine.publisherUnchanged(pkg, files))
+        write(files, "index.html", "publisher change without version bump")
+        assertFalse(engine.publisherUnchanged(pkg, files))
+        assertEquals("local edit", File(root, "workspace/index.html").readText())
     }
 
     @Test fun editedManagedFilesAreReportedAndMissingSeedsAreCreated() {
@@ -75,19 +84,6 @@ class WorkspaceUpdaterTest {
         assertArrayEquals(byteArrayOf(0, -1, 42, 0), File(root, "workspace/photos/photo.png").readBytes())
         assertNull(engine.installed())
         assertFalse(File(root, "update-journal").exists())
-    }
-
-    @Test fun rollbackCannotOverwriteFilesReclassifiedAsUserSeeds() {
-        val root = workspace(); val engine = WorkspaceUpdater(root); val (v1, files1) = packageFiles("1")
-        engine.install(v1, files1, sha1, 3)
-        val (v2base, files2) = packageFiles("2", "js/new.js")
-        val manifest = File(files2, "manifest.json")
-        manifest.writeText(manifest.readText().replace("\"data/definitions.json\",", "").replace("\"data/settings.json\"]", "\"data/settings.json\",\"data/definitions.json\"]"))
-        val v2 = UpdatePackage.parse(manifest.readText())
-        engine.install(v2, files2, sha2, 3)
-        write(root, "workspace/data/definitions.json", "new user records")
-        assertThrows(IllegalArgumentException::class.java) { engine.rollback() }
-        assertEquals("new user records", File(root, "workspace/data/definitions.json").readText())
     }
 
     @Test fun rejectsCodeChangedAfterReview() {

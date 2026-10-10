@@ -131,4 +131,4 @@ silently. Finish/save/acknowledge or cancel AI requests before updating. App² 1
 (version code 4) adds this channel. Native update state, full binary backups and
 recovery journals live beside the workspace; ordinary history is not a full backup.
 See the App² repository's `docs/SUBAPP_UPDATES.md` for publisher metadata, recovery,
-code rollback, deterministic packaging and the phone deployment checklist.
+version history, deterministic packaging and the phone deployment checklist.

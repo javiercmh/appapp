@@ -104,7 +104,6 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
     private val timeFormat = SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault())
 
     private var pendingExportFiles: Set<String>? = null
-    private var onIconUpdatedCallback: (() -> Unit)? = null
 
     /** Last system-bar + cutout insets, republished to the WebView as CSS custom properties. */
     private var lastInsets: Insets = Insets.NONE
@@ -134,27 +133,7 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
         pendingExportFiles = null
     }
 
-    private val pickIconLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        if (uri != null) {
-            ImageCropManager.openCropper(this, uri) { croppedBitmap ->
-                try {
-                    val iconFile = workspaceManager.getFile("icon.png")
-                    FileOutputStream(iconFile).use { out ->
-                        croppedBitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
-                    }
-                    appendLog("[Workspace] Updated app icon: icon.png")
-                    Toast.makeText(this, "Custom icon updated", Toast.LENGTH_SHORT).show()
-                    onIconUpdatedCallback?.invoke()
-                } catch (e: Exception) {
-                    appendLog("[Workspace Error] Failed to save icon: ${e.message}")
-                    Toast.makeText(this, "Failed to save icon: ${e.message}", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
-    }
-
-    // Backs `<input type="file">` inside the runtime web app. Registered as property initialisers
-    // (i.e. before STARTED), matching pickIconLauncher above.
+    // Backs `<input type="file">` inside the runtime web app.
     private val webFileChooserLauncher =
         registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
             deliverFileChooserResult(if (uri != null) arrayOf(uri) else null)
@@ -364,12 +343,6 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
         if (intent.getBooleanExtra(EXTRA_OPEN_SETTINGS, false)) {
             binding.root.postDelayed({ if (!isFinishing && !isDestroyed) showSettingsDialog() }, 500)
             intent.removeExtra(EXTRA_OPEN_SETTINGS)
-        }
-        if (intent.getBooleanExtra(EXTRA_OPEN_APP_CONFIG, false)) {
-            binding.root.postDelayed({
-                if (!isFinishing && !isDestroyed) showAppConfigDialog { deployToHomeScreen() }
-            }, 500)
-            intent.removeExtra(EXTRA_OPEN_APP_CONFIG)
         }
 
         // Handle Back button for WebView history
@@ -603,183 +576,20 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
         return AppConfigData(name, description, iconFileName)
     }
 
-    /**
-     * Adds a packaged file to the manifest's `files` list if that list exists and lacks it. The host
-     * itself walks the whole workspace directory, so `files` is a documented convention (PACKAGING.md)
-     * that the host should keep intact rather than rely on.
-     */
-    private fun addToManifestFiles(json: JSONObject, fileName: String) {
-        val files = json.optJSONArray("files") ?: return
-        for (i in 0 until files.length()) {
-            if (files.optString(i) == fileName) return
-        }
-        files.put(fileName)
-    }
-
-    /**
-     * `org.json` escapes every "/" as "\/" and emits no trailing newline, which churns hand-written
-     * manifests on each save. Unescaping is safe because a literal backslash is emitted as "\\",
-     * so "\\\/" becomes "\\/" and still decodes to a backslash followed by a slash.
-     */
-    private fun serializeManifest(json: JSONObject): String =
-        json.toString(2).replace("\\/", "/") + "\n"
-
-    /**
-     * Writes app identity configuration back to manifest.json.
-     */
     private fun saveAppConfig(config: AppConfigData) {
-        try {
-            val manifestContent = workspaceManager.readFile("manifest.json")
-            val json = if (manifestContent.isNotBlank()) {
-                try { JSONObject(manifestContent) } catch (_: Exception) { JSONObject() }
-            } else JSONObject()
-
-            json.put("name", config.name)
-            json.put("description", config.description)
-            // `short_name` is the launcher label and is deliberately distinct from `name`; only seed
-            // it, never overwrite an existing one, or every save flattens the two into one string.
-            if (!json.has("short_name")) json.put("short_name", config.name)
-            if (!json.has("version")) json.put("version", "1.0.0")
-            if (!json.has("main")) json.put("main", "index.html")
-
-            if (config.iconFileName != null) {
-                val iconArray = JSONArray()
-                val iconObj = JSONObject().apply {
-                    put("src", config.iconFileName)
-                    put("sizes", "512x512")
-                    put("type", "image/png")
-                }
-                iconArray.put(iconObj)
-                json.put("icons", iconArray)
-                addToManifestFiles(json, config.iconFileName)
-            } else {
-                json.remove("icons")
-            }
-
-            workspaceManager.writeFile("manifest.json", serializeManifest(json))
+        val identity = com.wynh.appapp.workspace.AppIdentityManager(this, subapp)
+        val iconChange = if (config.iconFileName == null) {
+            com.wynh.appapp.workspace.AppIdentityManager.IconChange.Reset
+        } else {
+            com.wynh.appapp.workspace.AppIdentityManager.IconChange.Keep
+        }
+        if (identity.save(config.name, config.description, iconChange)) {
             binding.toolbar.title = config.name
-            refreshPinnedShortcut(config.name, config.iconFileName)
+            identity.refreshPinnedShortcut()
             appendLog("[Config] Updated manifest.json for '${config.name}'")
-        } catch (e: Exception) {
-            appendLog("[Config Error] Failed to write manifest.json: ${e.message}")
-        }
-    }
-
-    /**
-     * Creates a pinned Home Screen shortcut for the current web app using manifest.json metadata and icon.
-     */
-    private fun deployToHomeScreen() {
-        if (!ShortcutManagerCompat.isRequestPinShortcutSupported(this)) {
-            Toast.makeText(this, R.string.shortcut_not_supported, Toast.LENGTH_LONG).show()
-            appendLog("[Deploy Error] Device launcher does not support pinned shortcuts.")
-            return
-        }
-
-        val config = loadAppConfig()
-        val appName = config.name
-
-        // Resolve custom workspace icon or default App² logo
-        val iconFile = config.iconFileName?.let { workspaceManager.getFile(it) }
-            ?: workspaceManager.getFile("icon.png").takeIf { it.exists() }
-
-        val iconCompat = if (iconFile != null && iconFile.exists() && iconFile.isFile) {
-            try {
-                val bitmap = BitmapFactory.decodeFile(iconFile.absolutePath)
-                if (bitmap != null) {
-                    IconCompat.createWithBitmap(bitmap)
-                } else {
-                    renderAppShortcutIcon()
-                }
-            } catch (_: Exception) {
-                renderAppShortcutIcon()
-            }
         } else {
-            renderAppShortcutIcon()
-        }
-
-        // Build launch Intent with standalone mode flag
-        val shortcutIntent = Intent(this, SubappRuntimeActivity::class.java).apply {
-            action = Intent.ACTION_VIEW
-            data = Uri.parse("appapp://subapp/${subapp.id}")
-            addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT or Intent.FLAG_ACTIVITY_RETAIN_IN_RECENTS)
-        }
-
-        // Build and request pinned shortcut
-        val shortcutId = "appapp_subapp_${subapp.id}"
-        val pinShortcutInfo = ShortcutInfoCompat.Builder(this, shortcutId)
-            .setShortLabel(appName.take(25))
-            .setLongLabel(appName)
-            .setIcon(iconCompat)
-            .setIntent(shortcutIntent)
-            .build()
-
-        val pinned = ShortcutManagerCompat.requestPinShortcut(this, pinShortcutInfo, null)
-        if (pinned) {
-            appendLog("[Deploy] Requested Home Screen shortcut for '$appName'")
-            Toast.makeText(this, getString(R.string.shortcut_requested, appName), Toast.LENGTH_SHORT).show()
-        } else {
-            appendLog("[Deploy Error] Failed to request pinned shortcut.")
-            Toast.makeText(this, R.string.shortcut_not_supported, Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun refreshPinnedShortcut(name: String, iconName: String?) {
-        val shortcutId = "appapp_subapp_${subapp.id}"
-        val iconFile = iconName?.let(workspaceManager::getFile) ?: workspaceManager.getFile("icon.png")
-        val icon = if (iconFile.isFile) runCatching {
-            BitmapFactory.decodeFile(iconFile.absolutePath)?.let { IconCompat.createWithBitmap(it) }
-        }.getOrNull() else null
-        val info = ShortcutInfoCompat.Builder(this, shortcutId)
-            .setShortLabel(name.take(25)).setLongLabel(name)
-            .setIcon(icon ?: renderAppShortcutIcon())
-            .setIntent(Intent(this, SubappRuntimeActivity::class.java).apply {
-                action = Intent.ACTION_VIEW
-                data = Uri.parse("appapp://subapp/${subapp.id}")
-                addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT or Intent.FLAG_ACTIVITY_RETAIN_IN_RECENTS)
-            }).build()
-        ShortcutManagerCompat.updateShortcuts(this, listOf(info))
-    }
-
-    /**
-     * Renders a high-resolution adaptive icon bitmap featuring the App² logo for Home Screen shortcuts.
-     */
-    private fun renderAppShortcutIcon(): IconCompat {
-        val size = 512
-        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
-
-        // 1. Full-bleed background gradient
-        val gradient = LinearGradient(
-            0f, 0f, size.toFloat(), size.toFloat(),
-            Color.parseColor("#0F172A"),
-            Color.parseColor("#1E1B4B"),
-            Shader.TileMode.CLAMP
-        )
-        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            shader = gradient
-        }
-        canvas.drawRect(0f, 0f, size.toFloat(), size.toFloat(), bgPaint)
-
-        // 2. Subtle glowing circular backdrop behind the logo
-        val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#1E293B")
-        }
-        canvas.drawCircle(size / 2f, size / 2f, size * 0.36f, glowPaint)
-
-        // 3. Draw App Logo vector in the center safe area
-        val drawable = ContextCompat.getDrawable(this, R.drawable.ic_app_logo)?.mutate()
-        if (drawable != null) {
-            val iconSize = 240
-            val left = (size - iconSize) / 2
-            val top = (size - iconSize) / 2
-            drawable.setBounds(left, top, left + iconSize, top + iconSize)
-            drawable.draw(canvas)
-        }
-
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            IconCompat.createWithAdaptiveBitmap(bitmap)
-        } else {
-            IconCompat.createWithBitmap(bitmap)
+            appendLog("[Config Error] Failed to save manifest.json")
+            Toast.makeText(this, R.string.library_configure_save_failed, Toast.LENGTH_LONG).show()
         }
     }
 
@@ -833,11 +643,6 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
         val subtitleText = dialog.findViewById<TextView>(R.id.hub_subtitle)
         val btnRun = dialog.findViewById<MaterialButton>(R.id.hub_btn_run)
 
-        val appConfigCard = dialog.findViewById<MaterialCardView>(R.id.hub_app_config_card)
-        val appIconPreview = dialog.findViewById<ImageView>(R.id.hub_app_icon_preview)
-        val appNameText = dialog.findViewById<TextView>(R.id.hub_app_name)
-        val appDescText = dialog.findViewById<TextView>(R.id.hub_app_desc)
-        val btnConfigureApp = dialog.findViewById<MaterialButton>(R.id.hub_btn_configure_app)
 
         val fileCountBadge = dialog.findViewById<TextView>(R.id.hub_file_count_badge)
         val btnNewFile = dialog.findViewById<MaterialButton>(R.id.hub_btn_new_file)
@@ -889,29 +694,6 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
                 simple.endsWith(".md") -> Pair("📝", "Markdown Document")
                 simple.endsWith(".png") || simple.endsWith(".jpg") || simple.endsWith(".svg") || simple.endsWith(".webp") -> Pair("🖼️", "Image Asset")
                 else -> Pair("📄", "Workspace File")
-            }
-        }
-
-        fun refreshAppCard() {
-            val config = loadAppConfig()
-            subtitleText.text = config.name
-            appNameText.text = config.name
-            appDescText.text = config.description
-
-            val iconFile = workspaceManager.getFile("icon.png")
-            if (iconFile.exists() && iconFile.isFile) {
-                try {
-                    val bmp = BitmapFactory.decodeFile(iconFile.absolutePath)
-                    if (bmp != null) {
-                        appIconPreview.setImageBitmap(bmp)
-                    } else {
-                        appIconPreview.setImageResource(R.drawable.ic_app_logo)
-                    }
-                } catch (_: Exception) {
-                    appIconPreview.setImageResource(R.drawable.ic_app_logo)
-                }
-            } else {
-                appIconPreview.setImageResource(R.drawable.ic_app_logo)
             }
         }
 
@@ -998,12 +780,10 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
                     if (isImageFile(file.name)) {
                         showImagePreviewDialog(file.name) {
                             refreshFileList()
-                            refreshAppCard()
                         }
                     } else {
                         showFileEditorDialog(file.name) {
                             refreshFileList()
-                            refreshAppCard()
                         }
                     }
                 }
@@ -1026,9 +806,6 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
             dialog.dismiss()
         }
 
-        // The editor opens directly on project files; identity changes are available from Install.
-        appConfigCard.visibility = View.GONE
-
         // Run
         btnRun.setOnClickListener {
             historyManager.saveSnapshot(workspaceManager, "Run Snapshot")
@@ -1049,7 +826,7 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
                 .setPositiveButton("Create") { _, _ ->
                     val newName = input.text.toString().trim()
                     if (newName.isNotBlank()) {
-                        if (workspaceManager.createFile(newName, "")) {
+                        if (saveWorkspaceChange("Created $newName") { workspaceManager.createFile(newName, "") }) {
                             refreshFileList()
                             Toast.makeText(this, "Created '$newName'", Toast.LENGTH_SHORT).show()
                             showFileEditorDialog(newName) {
@@ -1064,7 +841,6 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
                 .show()
         }
 
-        refreshAppCard()
         refreshFileList()
 
         dialog.show()
@@ -1161,7 +937,7 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
                 .setTitle(R.string.action_delete_file)
                 .setMessage(getString(R.string.delete_file_confirm, fileName))
                 .setPositiveButton(R.string.discard) { _, _ ->
-                    if (workspaceManager.deleteFile(fileName)) {
+                    if (saveWorkspaceChange("Deleted $fileName") { workspaceManager.deleteFile(fileName) }) {
                         if (fileName == "icon.png") {
                             val currentConfig = loadAppConfig()
                             saveAppConfig(currentConfig.copy(iconFileName = null))
@@ -1243,7 +1019,7 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
                 .setTitle(R.string.action_delete_file)
                 .setMessage(getString(R.string.delete_file_confirm, fileName))
                 .setPositiveButton(R.string.discard) { _, _ ->
-                    if (workspaceManager.deleteFile(fileName)) {
+                    if (saveWorkspaceChange("Deleted $fileName") { workspaceManager.deleteFile(fileName) }) {
                         Toast.makeText(this, "Deleted '$fileName'", Toast.LENGTH_SHORT).show()
                         dialog.dismiss()
                         onDismiss()
@@ -1314,7 +1090,16 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
 
         fun saveFile() {
             val content = codeInput.text.toString()
-            workspaceManager.writeFile(fileName, content)
+            if (content == initialContent) return
+            if (historyManager.saveSnapshot(workspaceManager, "Before editing $fileName") == null ||
+                !workspaceManager.writeFile(fileName, content)) {
+                Toast.makeText(this, "Could not save file or version history", Toast.LENGTH_LONG).show()
+                return
+            }
+            if (historyManager.saveSnapshot(workspaceManager, "Edited $fileName") == null) {
+                Toast.makeText(this, "File saved, but version history could not be saved. Try Save again.", Toast.LENGTH_LONG).show()
+                return
+            }
             initialContent = content
             Toast.makeText(this, getString(R.string.file_saved_toast, fileName), Toast.LENGTH_SHORT).show()
         }
@@ -1359,107 +1144,21 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
     /**
      * Opens visual App Configuration dialog for manifest.json and custom app icon.
      */
-    private fun showAppConfigDialog(onConfigSaved: () -> Unit) {
-        val dialog = Dialog(this, com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog)
-        dialog.setContentView(R.layout.dialog_app_config)
-        dialog.window?.setLayout(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT
-        )
-
-        val iconPreview = dialog.findViewById<ImageView>(R.id.config_app_icon_preview)
-        val btnPickIcon = dialog.findViewById<MaterialButton>(R.id.config_btn_pick_icon)
-        val btnResetIcon = dialog.findViewById<MaterialButton>(R.id.config_btn_reset_icon)
-        val inputName = dialog.findViewById<EditText>(R.id.config_input_app_name)
-        val inputDesc = dialog.findViewById<EditText>(R.id.config_input_app_desc)
-        val btnCancel = dialog.findViewById<MaterialButton>(R.id.config_btn_cancel)
-        val btnSaveAndInstall = dialog.findViewById<MaterialButton>(R.id.config_btn_save_and_install)
-
-        val currentConfig = loadAppConfig()
-        val iconFile = workspaceManager.getFile("icon.png")
-        val originalIcon = iconFile.takeIf { it.isFile }?.readBytes()
-        var removeIconOnSave = false
-        inputName.setText(currentConfig.name)
-        inputDesc.setText(currentConfig.description)
-
-        fun updateIconPreview() {
-            if (!removeIconOnSave && iconFile.exists() && iconFile.isFile) {
-                try {
-                    val bmp = BitmapFactory.decodeFile(iconFile.absolutePath)
-                    if (bmp != null) {
-                        iconPreview.setImageBitmap(bmp)
-                    } else {
-                        iconPreview.setImageResource(R.drawable.ic_app_logo)
-                    }
-                } catch (_: Exception) {
-                    iconPreview.setImageResource(R.drawable.ic_app_logo)
-                }
-            } else {
-                iconPreview.setImageResource(R.drawable.ic_app_logo)
-            }
-        }
-
-        updateIconPreview()
-
-        btnPickIcon.setOnClickListener {
-            onIconUpdatedCallback = {
-                removeIconOnSave = false
-                updateIconPreview()
-            }
-            pickIconLauncher.launch("image/*")
-        }
-
-        btnResetIcon.setOnClickListener {
-            removeIconOnSave = true
-            updateIconPreview()
-            Toast.makeText(this, "Reset to default App² logo", Toast.LENGTH_SHORT).show()
-        }
-
-        fun discardPendingIconChanges() {
-            if (originalIcon == null) workspaceManager.deleteFile("icon.png")
-            else runCatching { FileOutputStream(iconFile).use { it.write(originalIcon) } }
-            saveAppConfig(currentConfig)
-        }
-
-        btnCancel.setOnClickListener {
-            discardPendingIconChanges()
-            dialog.dismiss()
-        }
-        dialog.setOnCancelListener { discardPendingIconChanges() }
-
-        btnSaveAndInstall?.setOnClickListener {
-            saveAppConfiguration(inputName, inputDesc, dialog, onConfigSaved, removeIcon = removeIconOnSave)
-        }
-
-        dialog.show()
-    }
-
-    private fun saveAppConfiguration(
-        inputName: EditText,
-        inputDesc: EditText,
-        dialog: Dialog,
-        onConfigSaved: () -> Unit,
-        removeIcon: Boolean
-    ) {
-        val newName = inputName.text.toString().trim().ifBlank { "My App" }
-        val newDesc = inputDesc.text.toString().trim().ifBlank { "On-device app built with App²" }
-        if (removeIcon) workspaceManager.deleteFile("icon.png")
-        val iconExists = workspaceManager.getFile("icon.png").exists()
-
-        val updatedConfig = AppConfigData(
-            name = newName,
-            description = newDesc,
-            iconFileName = if (iconExists) "icon.png" else null
-        )
-        saveAppConfig(updatedConfig)
-        Toast.makeText(this, R.string.config_saved_toast, Toast.LENGTH_SHORT).show()
-        dialog.dismiss()
-        onConfigSaved()
-    }
-
     /**
      * Opens version history snapshot dialog allowing user to revert to previous states.
      */
+    private fun saveWorkspaceChange(label: String, change: () -> Boolean): Boolean {
+        if (historyManager.saveSnapshot(workspaceManager, "Before $label") == null) {
+            Toast.makeText(this, "Could not save version history", Toast.LENGTH_LONG).show()
+            return false
+        }
+        if (!change()) return false
+        if (historyManager.saveSnapshot(workspaceManager, label) == null) {
+            Toast.makeText(this, "Change saved, but version history could not be saved", Toast.LENGTH_LONG).show()
+        }
+        return true
+    }
+
     private fun showHistoryDialog(onRestored: () -> Unit) {
         val dialog = Dialog(this, com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog)
         dialog.setContentView(R.layout.dialog_version_history)
@@ -1494,8 +1193,8 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
                 btnRestore.setOnClickListener {
                     val title = if (isInitial) "Restore Initial Version?" else "Revert to Snapshot?"
                     val message = if (isInitial) {
-                        "Restore this subapp to its initial version (${snap.label})? Your code files will be replaced. Images, including your app icon and any photos, are kept."
-                    } else "Revert workspace to state from ${snap.formattedTime}? Your code files will be replaced. Images are kept."
+                        "Restore this subapp to its initial version (${snap.label})? Text files, including data and settings, will be replaced. Your current version will be saved first. Images, including your app icon and any photos, are kept."
+                    } else "Revert workspace to state from ${snap.formattedTime}? Text files, including data and settings, will be replaced. Your current version will be saved first. Images are kept."
                     MaterialAlertDialogBuilder(this)
                         .setTitle(title)
                         .setMessage(message)
@@ -1881,6 +1580,5 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
     companion object {
         const val EXTRA_SUBAPP_ID = "EXTRA_SUBAPP_ID"
         const val EXTRA_OPEN_SETTINGS = "EXTRA_OPEN_SETTINGS"
-        const val EXTRA_OPEN_APP_CONFIG = "EXTRA_OPEN_APP_CONFIG"
     }
 }
