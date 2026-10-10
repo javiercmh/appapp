@@ -158,6 +158,7 @@ binary file that the `app.local` interceptor can then serve via `<img src="...">
 - **Gradle Validation**: Ensure Gradle files (`build.gradle.kts`, `libs.versions.toml`) sync without syntax or version conflicts.
 - **Persistence Verification**: When modifying storage logic, test by adding items, terminating the process, and verifying that state reloads identically on restart.
 - **History & Snapshots**: Verify that workspace snapshots are taken before "Run" and that snapshot restoration properly updates the editor and runtime.
+- **Example App Device Tests**: `examples/<app>/` is source code in this repository; it is not automatically copied to an installed App² instance. Before reporting a device test, sync the changed app-owned files to that device's `filesDir/workspace/`, compare source and device hashes, then force-stop and relaunch App² so the WebView loads the copied files. Never overwrite `data/`, `app.log`, or other user workspace files just to test code. See `examples/working_hours/AGENTS.md` for the Working Hours sync procedure.
 
 ---
 

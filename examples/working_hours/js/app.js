@@ -32,7 +32,9 @@ function initTabs() {
 // Suppress tab bar when soft keyboard is open
 function initKeyboardHandling() {
   addEventListener('focusin', (e) => {
-    if (e.target.matches('input, textarea')) document.body.classList.add('kb');
+    if (e.target.matches('textarea, input:not([type]), input[type="text"], input[type="search"], input[type="url"], input[type="email"], input[type="tel"], input[type="password"], input[type="number"]')) {
+      document.body.classList.add('kb');
+    }
   });
   addEventListener('focusout', () => document.body.classList.remove('kb'));
 }
