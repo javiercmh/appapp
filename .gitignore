@@ -17,6 +17,11 @@ build/
 .cxx
 local.properties
 
+# Android Studio signed release output and private signing keys
+/app/release/
+*.jks
+*.keystore
+
 # Example app local dev state (regenerated on run, machine-specific)
 examples/**/.dev_preferences.json
 examples/**/app.log
