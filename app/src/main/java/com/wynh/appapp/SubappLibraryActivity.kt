@@ -1,4 +1,4 @@
-package com.example.runtimecompiler
+package com.wynh.appapp
 
 import android.Manifest
 import android.app.Dialog
@@ -8,7 +8,7 @@ import android.widget.TextView
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.google.android.material.button.MaterialButton
-import com.example.runtimecompiler.settings.AppSettingsManager
+import com.wynh.appapp.settings.AppSettingsManager
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -20,17 +20,17 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.google.android.material.shape.ShapeAppearanceModel
-import com.example.runtimecompiler.databinding.ActivitySubappLibraryBinding
-import com.example.runtimecompiler.databinding.ItemSubappBinding
+import com.wynh.appapp.databinding.ActivitySubappLibraryBinding
+import com.wynh.appapp.databinding.ItemSubappBinding
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.appcompat.app.AlertDialog
-import com.example.runtimecompiler.bridge.NativeStorageBridge
-import com.example.runtimecompiler.workspace.SubappRecord
-import com.example.runtimecompiler.workspace.SubappRepository
-import com.example.runtimecompiler.workspace.WorkspaceManager
+import com.wynh.appapp.bridge.NativeStorageBridge
+import com.wynh.appapp.workspace.SubappRecord
+import com.wynh.appapp.workspace.SubappRepository
+import com.wynh.appapp.workspace.WorkspaceManager
 import org.json.JSONObject
 
 class SubappLibraryActivity : AppCompatActivity() {
@@ -271,8 +271,8 @@ class SubappLibraryActivity : AppCompatActivity() {
     private fun importApp(uri: Uri) {
         val record = repository.createStarter()
         val manager = WorkspaceManager(this, workspaceDir = record.workspaceDir)
-        val history = com.example.runtimecompiler.workspace.WorkspaceHistoryManager(this, appDirectory = record.directory)
-        val result = com.example.runtimecompiler.workspace.WorkspacePackageManager.importFromZip(
+        val history = com.wynh.appapp.workspace.WorkspaceHistoryManager(this, appDirectory = record.directory)
+        val result = com.wynh.appapp.workspace.WorkspacePackageManager.importFromZip(
             this, uri, manager, history, savePreImportSnapshot = false
         )
         result.onSuccess {
@@ -288,7 +288,7 @@ class SubappLibraryActivity : AppCompatActivity() {
     }
 
     private fun showImportOptions() {
-        val content = com.example.runtimecompiler.databinding.DialogLibraryImportBinding.inflate(layoutInflater)
+        val content = com.wynh.appapp.databinding.DialogLibraryImportBinding.inflate(layoutInflater)
         val dialog = Dialog(this)
         dialog.setContentView(content.root)
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
@@ -318,7 +318,7 @@ class SubappLibraryActivity : AppCompatActivity() {
         binding.importApp.isEnabled = false
         Toast.makeText(this, R.string.library_github_downloading, Toast.LENGTH_SHORT).show()
         Thread {
-            val result = com.example.runtimecompiler.workspace.GitHubFolderImporter.download(this, url)
+            val result = com.wynh.appapp.workspace.GitHubFolderImporter.download(this, url)
             runOnUiThread {
                 binding.importApp.isEnabled = true
                 result.onSuccess { folder ->

@@ -1,4 +1,4 @@
-package com.example.runtimecompiler.editor
+package com.wynh.appapp.editor
 
 import android.app.Dialog
 import android.content.Context
@@ -9,7 +9,7 @@ import android.media.ExifInterface
 import android.net.Uri
 import android.view.ViewGroup
 import android.widget.Toast
-import com.example.runtimecompiler.R
+import com.wynh.appapp.R
 import com.google.android.material.button.MaterialButton
 import java.io.InputStream
 

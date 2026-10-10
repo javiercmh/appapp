@@ -1,4 +1,4 @@
-package com.example.runtimecompiler
+package com.wynh.appapp
 
 import android.annotation.SuppressLint
 import android.Manifest
@@ -20,9 +20,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.enableEdgeToEdge
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
-import com.example.runtimecompiler.bridge.NativeStorageBridge
-import com.example.runtimecompiler.workspace.SubappRepository
-import com.example.runtimecompiler.workspace.WorkspaceManager
+import com.wynh.appapp.bridge.NativeStorageBridge
+import com.wynh.appapp.workspace.SubappRepository
+import com.wynh.appapp.workspace.WorkspaceManager
 import org.json.JSONObject
 import java.io.FileInputStream
 

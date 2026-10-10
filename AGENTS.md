@@ -12,19 +12,21 @@ This document provides architectural context, coding standards, and operational 
 
 | Package / File | Purpose |
 | :--- | :--- |
-| `com.example.runtimecompiler.SubappLibraryActivity` | Launcher library for opening, editing, installing, importing, and deleting saved subapps. |
-| `com.example.runtimecompiler.MainActivity` | Editor whose tools and WebView remain bound to one subapp ID. |
-| `com.example.runtimecompiler.SubappRuntimeActivity` | Standalone document task launched by each subapp shortcut. |
-| `com.example.runtimecompiler.editor.SyntaxHighlighter` | Fast regex-based syntax highlighter for HTML, CSS, JavaScript, and JSON code in `EditText`. |
-| `com.example.runtimecompiler.editor.SearchHelper` | In-file text search and match navigation helper for `EditText`. |
-| `com.example.runtimecompiler.workspace.SubappRepository` | Owns stable app IDs and migrates the former single workspace into the library. |
-| `com.example.runtimecompiler.workspace.WorkspaceManager` | Manages one app workspace under `filesDir/subapps/<id>/workspace/`. |
-| `com.example.runtimecompiler.workspace.WorkspaceHistoryManager` | Manages snapshots in that app's `workspace_history.json`. |
-| `com.example.runtimecompiler.workspace.WorkspacePackageManager` | Handles selective ZIP export/packaging, Android Sharesheet integration, direct stream export, and secure ZIP extraction with Zip-Slip defense and auto-backup snapshots. |
-| `com.example.runtimecompiler.bridge.NativeStorageBridge` | Main `@JavascriptInterface` exposed to the web runtime as `window.AndroidStorage`, `window.AndroidMemory`, and `window.AndroidNotification`. Manages persistent key-value state, unified file I/O directly in `workspace/`, native system notifications, and `AlarmManager`-backed scheduled notifications. |
-| `com.example.runtimecompiler.bridge.ScheduledNotificationReceiver` | Posts a notification armed earlier via `scheduleNotification`. Runs even when the app process is cold, so it re-creates the notification channel itself. |
-| `com.example.runtimecompiler.bridge.AlarmBootReceiver` | Re-arms persisted scheduled notifications after `BOOT_COMPLETED` / `MY_PACKAGE_REPLACED`, which clear pending alarms. |
-| `com.example.runtimecompiler.templates.DefaultWebApp` | Loads the starter template files dynamically from standalone assets (`app/src/main/assets/starter_template/`). |
+| `com.wynh.appapp.SubappLibraryActivity` | Launcher library for opening, editing, installing, importing, and deleting saved subapps. |
+| `com.wynh.appapp.MainActivity` | Editor whose tools and WebView remain bound to one subapp ID. |
+| `com.wynh.appapp.SubappRuntimeActivity` | Standalone document task launched by each subapp shortcut. |
+| `com.wynh.appapp.editor.SyntaxHighlighter` | Fast regex-based syntax highlighter for HTML, CSS, JavaScript, and JSON code in `EditText`. |
+| `com.wynh.appapp.editor.SearchHelper` | In-file text search and match navigation helper for `EditText`. |
+| `com.wynh.appapp.workspace.SubappRepository` | Owns stable app IDs and migrates the former single workspace into the library. |
+| `com.wynh.appapp.workspace.WorkspaceManager` | Manages one app workspace under `filesDir/subapps/<id>/workspace/`. |
+| `com.wynh.appapp.workspace.WorkspaceHistoryManager` | Manages snapshots in that app's `workspace_history.json`. |
+| `com.wynh.appapp.workspace.WorkspacePackageManager` | Handles selective ZIP export/packaging, Android Sharesheet integration, direct stream export, and secure ZIP extraction with Zip-Slip defense and auto-backup snapshots. |
+| `com.wynh.appapp.bridge.NativeStorageBridge` | Main `@JavascriptInterface` exposed to the web runtime as `window.AndroidStorage`, `window.AndroidMemory`, and `window.AndroidNotification`. Manages persistent key-value state, unified file I/O directly in `workspace/`, native system notifications, and `AlarmManager`-backed scheduled notifications. |
+| `com.wynh.appapp.bridge.ScheduledNotificationReceiver` | Posts a notification armed earlier via `scheduleNotification`. Runs even when the app process is cold, so it re-creates the notification channel itself. |
+| `com.wynh.appapp.bridge.AlarmBootReceiver` | Re-arms persisted scheduled notifications after `BOOT_COMPLETED` / `MY_PACKAGE_REPLACED`, which clear pending alarms. |
+| `com.wynh.appapp.templates.DefaultWebApp` | Loads the starter template files dynamically from standalone assets (`app/src/main/assets/starter_template/`). |
+
+The Kotlin namespace and installed Android application ID are both `com.wynh.appapp`. Use this package for source declarations, ProGuard rules, and ADB package commands such as `pm path`, `run-as`, `force-stop`, and `monkey`.
 
 ---
 
@@ -90,6 +92,18 @@ Each app's `WebView` loads `https://<id>.app.local/index.html`. Requests for tha
    - **Gradle Kotlin DSL** (`*.gradle.kts`).
    - Root project name: `"AppApp"`.
    - Dependency versions must be defined in `gradle/libs.versions.toml` (Gradle Version Catalog).
+   - Release signing reads `APPAPP_RELEASE_STORE_FILE`, `APPAPP_RELEASE_STORE_PASSWORD`,
+     `APPAPP_RELEASE_KEY_ALIAS`, and `APPAPP_RELEASE_KEY_PASSWORD` from Gradle properties.
+     Keep these values and the keystore outside the repository (for example, in
+     `~/.gradle/gradle.properties`); never commit signing secrets or keystore files.
+     Build a signed APK with `./gradlew :app:assembleRelease`; the output is
+     `app/build/outputs/apk/release/app-release.apk`.
+   - To update an existing installation, the release APK must be signed with the same key as
+     that installation. The current AppApp phone installation uses SHA-256 certificate
+     fingerprint `d3a30c1acecc9008f11711c39013353f00fc58b540a26eba95bb3556eb02e89a`.
+     Verify an APK with `apksigner verify --print-certs <apk>` before installing. A newly
+     generated key cannot update an installation signed by the previous key; do not uninstall
+     the app to work around a signing mismatch.
 3. **Android Target / Min SDK**:
    - `compileSdk = 35`, `targetSdk = 35`, `minSdk = 26`.
 4. **Android UI Framework**:
@@ -112,7 +126,7 @@ When adding new bridge methods for the runtime web app:
 4. Ensure methods run safely and handle exceptions gracefully without crashing the UI thread.
 5. If creating a new bridge class, update `app/proguard-rules.pro` to retain `@JavascriptInterface` methods:
    ```proguard
-   -keepclassmembers class com.example.runtimecompiler.bridge.YourNewBridge {
+   -keepclassmembers class com.wynh.appapp.bridge.YourNewBridge {
        @android.webkit.JavascriptInterface <methods>;
    }
    ```
@@ -173,21 +187,24 @@ binary file that the current subapp's origin interceptor can then serve via `<im
 - **External-device data protection is mandatory.** Treat a connected physical device as containing valuable user data. Prefer the emulator for all destructive or data-changing test cases. For a necessary external-device smoke test, use a dedicated test subapp and test-only records, avoid actions that alter the user's existing apps or settings, and confirm the package/device serial before each operation. `adb install -r` updates the APK while retaining app data; never use `adb uninstall`, `pm clear`, clear-storage UI, factory reset, or reinstall without `-r` on the external device. Before launching an update, check whether it will trigger a first-run migration or other storage mutation; run that validation on the emulator unless a verified backup and restore plan is in place. Do not delete/replace subapps, reset workspaces, import over an existing app, or copy test fixtures over its `data/`, `app.log`, history, bridge state, notifications, or alarms. If a test could touch existing data, do it on the emulator. Do not claim external-device data was preserved unless the chosen test path left it untouched (or a verified backup and restore was completed).
 - Confirm AppApp is installed before testing:
   ```sh
-  adb -s <serial> shell pm path com.example.runtimecompiler
+  adb -s <serial> shell pm path com.wynh.appapp
   ```
   Install a debug update with `adb -s <serial> install -r app/build/outputs/apk/debug/app-debug.apk`; `-r` is required to retain app data. If replacement fails due to a signing mismatch, stop and report it—do not uninstall to work around it, especially on an external device.
+  For a release update on a device, use the matching signed APK:
+  `adb -s <serial> install -r app/build/outputs/apk/release/app-release.apk`.
+  Confirm its certificate matches the installed app first; `-r` preserves app data.
 - For a web-app JavaScript/CSS/HTML change, the WebView reads the selected app's `filesDir/subapps/<id>/workspace/`, not the repository or APK assets directly. An initialized workspace can be stale, including after editing the starter template. On the emulator, sync only changed app-owned code/assets into a disposable test subapp's matching workspace path; do not sync over user data. Identify its `<id>` from the library/repository before copying. With a debuggable build, stage a file and copy it to that exact workspace path with `run-as`, then compare hashes:
   ```sh
   adb -s <serial> push path/to/changed-file /data/local/tmp/appapp-test-file
-  adb -s <serial> shell run-as com.example.runtimecompiler cp /data/local/tmp/appapp-test-file files/subapps/<id>/workspace/path/to/changed-file
+  adb -s <serial> shell run-as com.wynh.appapp cp /data/local/tmp/appapp-test-file files/subapps/<id>/workspace/path/to/changed-file
   sha256sum path/to/changed-file
-  adb -s <serial> shell run-as com.example.runtimecompiler sha256sum files/subapps/<id>/workspace/path/to/changed-file
+  adb -s <serial> shell run-as com.wynh.appapp sha256sum files/subapps/<id>/workspace/path/to/changed-file
   ```
   Only use direct sync on an emulator or a dedicated test subapp on an external device; never copy to an unknown ID or a user's app. If `run-as` is unavailable, use the app's editor or rebuild/reinstall; do not work around the app sandbox. For native Android code or manifest changes, build and install the APK rather than copying files into a web workspace.
 - After syncing, restart the app so the WebView reloads the files, then launch it on the explicitly selected serial:
   ```sh
-  adb -s <serial> shell am force-stop com.example.runtimecompiler
-  adb -s <serial> shell monkey -p com.example.runtimecompiler 1
+  adb -s <serial> shell am force-stop com.wynh.appapp
+  adb -s <serial> shell monkey -p com.wynh.appapp 1
   ```
   Verify the behavior in the UI. Use `adb -s <serial> exec-out screencap -p > /tmp/appapp-device.png` when a screenshot helps. Report the emulator/device model and exactly which controls and flows were exercised; do not claim an interaction was tested if the installed app does not expose it.
 

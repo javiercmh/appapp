@@ -1,4 +1,4 @@
-package com.example.runtimecompiler.bridge
+package com.wynh.appapp.bridge
 
 import android.content.BroadcastReceiver
 import android.content.Context
