@@ -36,6 +36,13 @@ import com.wynh.appapp.editor.ImageCropManager
 import android.graphics.Bitmap
 import android.widget.EditText
 import android.widget.ImageView
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.launch
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.wynh.appapp.workspace.SubappBackupController
 import org.json.JSONObject
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -56,6 +63,16 @@ class SubappLibraryActivity : AppCompatActivity() {
     private fun canPromptForNotifications() = Build.VERSION.SDK_INT >= 33 && !notificationPromptRefused
     private fun promptNotificationPermission() {
         if (Build.VERSION.SDK_INT >= 33) notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
+    private val backups by lazy { ViewModelProvider(this)[SubappBackupController::class.java] }
+    private var backupProgress: AlertDialog? = null
+    private val backupExport = registerForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
+        if (uri != null) backups.export(uri)
+    }
+    private val backupRestore = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) MaterialAlertDialogBuilder(this).setTitle(R.string.backup_restore)
+            .setMessage(R.string.backup_restore_confirm).setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.backup_restore) { _, _ -> backups.restore(uri) }.show()
     }
     private var rowsReady = false
     private val displayedRecords = mutableListOf<SubappRecord>()
@@ -91,6 +108,25 @@ class SubappLibraryActivity : AppCompatActivity() {
         repository = SubappRepository(this)
         repository.ensureMigrated()
         showLibrary()
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                backups.status.collect { status ->
+                    if (status.busy) {
+                        if (backupProgress == null) backupProgress = MaterialAlertDialogBuilder(this@SubappLibraryActivity)
+                            .setTitle(status.message).setMessage(R.string.backup_progress).setCancelable(false).show()
+                    } else {
+                        backupProgress?.dismiss(); backupProgress = null
+                        if (status.message.isNotEmpty()) {
+                            refreshRows()
+                            MaterialAlertDialogBuilder(this@SubappLibraryActivity)
+                                .setTitle(if (status.error) R.string.backup_failed else R.string.backup_complete)
+                                .setMessage(status.message).setPositiveButton(android.R.string.ok, null).show()
+                            backups.clearResult()
+                        }
+                    }
+                }
+            }
+        }
         if (savedInstanceState != null) {
             val id = savedInstanceState.getString("config_record_id")
             configuringRecord = id?.let(repository::resolve)
@@ -118,6 +154,12 @@ class SubappLibraryActivity : AppCompatActivity() {
         (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.auth?.setForeground(true)
         if (rowsReady) refreshRows()
         refreshSettingsPermissions?.invoke()
+    }
+
+    override fun onDestroy() {
+        backupProgress?.dismiss()
+        backupProgress = null
+        super.onDestroy()
     }
 
     override fun onPause() {
@@ -294,6 +336,14 @@ class SubappLibraryActivity : AppCompatActivity() {
                 updateHistoryButtons(count)
                 Toast.makeText(this, R.string.settings_history_saved, Toast.LENGTH_SHORT).show()
             }
+        }
+        dialog.findViewById<View>(R.id.settings_backup_export).setOnClickListener {
+            dialog.dismiss()
+            backupExport.launch("app2-subapps-${java.text.SimpleDateFormat("yyyy-MM-dd-HHmmss", java.util.Locale.US).format(java.util.Date())}.zip")
+        }
+        dialog.findViewById<View>(R.id.settings_backup_restore).setOnClickListener {
+            dialog.dismiss()
+            backupRestore.launch(arrayOf("application/zip", "application/x-zip-compressed"))
         }
         dialog.show()
         com.wynh.appapp.ai.AiSettingsController.bind(this, dialog)

@@ -55,8 +55,8 @@ class WorkspaceManager(
     /**
      * Applies a template file map directly to the workspace directory.
      */
-    fun applyTemplate(files: Map<String, String>): Boolean {
-        return try {
+    fun applyTemplate(files: Map<String, String>): Boolean = synchronized(com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(workspaceDir)) {
+        return@synchronized try {
             if (!workspaceDir.exists()) {
                 workspaceDir.mkdirs()
             }
@@ -78,20 +78,20 @@ class WorkspaceManager(
     /**
      * Re-initializes all default workspace template files from DefaultWebApp assets.
      */
-    fun resetWorkspace(): Boolean {
+    fun resetWorkspace(): Boolean = synchronized(com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(workspaceDir)) {
         val starterFiles = DefaultWebApp.getStarterFiles(context)
         val success = applyTemplate(starterFiles)
         if (success) {
             appendToFile("app.log", "[System] App² workspace reset to starter template.\n")
         }
-        return success
+        return@synchronized success
     }
 
     /**
      * Performs a complete factory reset of the workspace directory, removing all files and re-initializing starter files.
      */
-    fun factoryResetWorkspace(): Boolean {
-        return try {
+    fun factoryResetWorkspace(): Boolean = synchronized(com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(workspaceDir)) {
+        return@synchronized try {
             val files = workspaceDir.listFiles() ?: emptyArray()
             for (file in files) {
                 file.deleteRecursively()
@@ -177,8 +177,8 @@ class WorkspaceManager(
     /**
      * Writes text content to a workspace file. Auto-creates parent directories if needed.
      */
-    fun writeFile(fileName: String, content: String): Boolean {
-        return try {
+    fun writeFile(fileName: String, content: String): Boolean = synchronized(com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(workspaceDir)) {
+        return@synchronized try {
             val file = getFile(fileName)
             file.parentFile?.mkdirs()
             FileOutputStream(file).use { output ->
@@ -240,13 +240,13 @@ class WorkspaceManager(
      * Deletes a file from the workspace and cleans up empty parent directories.
      * Protects index.html and manifest.json from accidental deletion.
      */
-    fun deleteFile(fileName: String): Boolean {
+    fun deleteFile(fileName: String): Boolean = synchronized(com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(workspaceDir)) {
         val sanitized = sanitizeRelativePath(fileName)
         if (sanitized == "index.html" || sanitized == "manifest.json") {
             log("[Workspace Warning] Cannot delete protected core file '$sanitized'.")
-            return false
+            return@synchronized false
         }
-        return try {
+        return@synchronized try {
             val file = getFile(sanitized)
             if (file.exists() && file.isFile) {
                 val deleted = file.delete()

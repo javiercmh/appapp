@@ -36,12 +36,12 @@ class AppIdentityManager(private val context: Context, private val record: Subap
         )
     }
 
-    fun save(name: String, description: String, iconChange: IconChange): Boolean {
+    fun save(name: String, description: String, iconChange: IconChange): Boolean = synchronized(com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(record.workspaceDir)) {
         val manifestFile = workspace.getFile("manifest.json")
         val manifestBefore = manifestFile.takeIf(File::isFile)?.readBytes()
         val iconFile = workspace.getFile("icon.png")
         val iconBefore = iconFile.takeIf(File::isFile)?.readBytes()
-        return try {
+        return@synchronized try {
             val json = JSONObject(manifestBefore?.toString(Charsets.UTF_8).orEmpty().ifBlank { "{}" })
             json.put("name", name)
             json.put("description", description)
