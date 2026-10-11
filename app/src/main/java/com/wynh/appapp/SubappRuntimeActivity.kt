@@ -16,6 +16,7 @@ import android.webkit.WebChromeClient.FileChooserParams
 import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.enableEdgeToEdge
 import androidx.core.view.ViewCompat
@@ -31,6 +32,7 @@ class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
     private var speechSession: com.wynh.appapp.speech.SpeechSession? = null
     private var webView: WebView? = null
     private var activeId: String? = null
+    private var historyBackPending = false
     private var didInitialResume = false
     private var chooserCallback: ValueCallback<Array<Uri>>? = null
     private val filePicker = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -43,6 +45,11 @@ class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                handleWebHistoryBack(webView)
+            }
+        })
         NativeStorageBridge.ensureNotificationChannel(this)
         render(intent.data)
     }
@@ -68,6 +75,7 @@ class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
             return
         }
         if (activeId == record.id && webView != null) return
+        historyBackPending = false
         activeId?.let { SubappSessionRegistry.unregister(it, this) }
         speechSession?.close()
         webView?.destroy()
@@ -114,6 +122,7 @@ class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
             }
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
+                installWebHistoryTracking(view)
                 ViewCompat.requestApplyInsets(root)
             }
 
@@ -150,6 +159,27 @@ class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
         catch (_: Exception) { "index.html" }
         web.loadUrl("https://${record.id}.app.local/${main.ifBlank { "index.html" }}")
         NativeStorageBridge.reschedulePersistedAlarms(this, record.id)
+    }
+
+    /** Android WebView does not consistently include History API entries in canGoBack(). */
+    private fun installWebHistoryTracking(view: WebView?) {
+        view?.evaluateJavascript(
+            """(function(){if(window.__app2HistoryTracking)return;window.__app2HistoryTracking=true;window.__app2HistoryDepth=0;var original=history.pushState;history.pushState=function(){var value=original.apply(this,arguments);window.__app2HistoryDepth++;return value;};addEventListener('popstate',function(){window.__app2HistoryDepth=Math.max(0,window.__app2HistoryDepth-1);});})();""",
+            null
+        )
+    }
+
+    private fun handleWebHistoryBack(view: WebView?) {
+        if (view == null || historyBackPending) return
+        historyBackPending = true
+        view.evaluateJavascript(
+            "(function(){if((window.__app2HistoryDepth||0)>0){history.back();return true;}return false;})()"
+        ) { result ->
+            historyBackPending = false
+            if (webView !== view || isFinishing || result == "true") return@evaluateJavascript
+            if (view.canGoBack()) view.goBack()
+            else finish()
+        }
     }
 
     override fun onResume() {

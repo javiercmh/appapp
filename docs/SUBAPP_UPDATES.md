@@ -49,6 +49,15 @@ publisher ID. Locally edited/missing code is listed before replacement. Do not
 use display names to identify an update target. Updates cannot run with unfinished
 or unacknowledged AI requests. Save/acknowledge or cancel them first.
 
+## Android Back and LingoMage
+
+Standalone subapp tasks send Android Back through WebView history when an entry is
+available; the app's `popstate` handler can then close an in-app reader and return
+to its shelf. With no WebView history, Back exits the task normally. LingoMage
+keeps its existing history and `popstate` behavior, and release `1.2.7` must set
+`app2Update.minimumHostVersionCode` to `8` so it requires App² host code `8`
+(version name `1.5.1`).
+
 ## Recovery
 
 The host pauses live subapp screens, serializes bridge file operations, verifies a
