@@ -4,7 +4,6 @@ import android.Manifest
 import android.app.Dialog
 import android.os.Build
 import android.view.ViewGroup
-import android.view.MotionEvent
 import android.graphics.BitmapFactory
 import android.widget.TextView
 import androidx.core.app.NotificationManagerCompat
@@ -38,6 +37,10 @@ import android.graphics.Bitmap
 import android.widget.EditText
 import android.widget.ImageView
 import org.json.JSONObject
+import androidx.recyclerview.widget.RecyclerView
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.ItemTouchHelper
+import com.wynh.appapp.databinding.LibraryHeaderBinding
 
 class SubappLibraryActivity : AppCompatActivity() {
     private lateinit var repository: SubappRepository
@@ -65,12 +68,12 @@ class SubappLibraryActivity : AppCompatActivity() {
     private var configNameInput: EditText? = null
     private var configDescriptionInput: EditText? = null
     private var configIconPreview: ImageView? = null
-    private var reorderView: View? = null
-    private var reorderStartRawY = 0f
-    private var reorderStartTop = 0f
+    private lateinit var header: LibraryHeaderBinding
+    private lateinit var libraryAdapter: LibraryAdapter
+    private lateinit var touchHelper: ItemTouchHelper
     private var reorderOriginal = emptyList<SubappRecord>()
-    private var reorderTouchRawY = 0f
-    private var reorderTargetIndex = -1
+    private var dragCancelled = false
+    private val stableIds = mutableMapOf<String, Long>()
     private val pickConfigIcon = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         val record = configuringRecord
         if (uri != null && record != null) ImageCropManager.openCropper(this, uri) { bitmap ->
@@ -118,6 +121,7 @@ class SubappLibraryActivity : AppCompatActivity() {
     }
 
     override fun onPause() {
+        finishReorder(commit = false)
         (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.auth?.setForeground(false)
         super.onPause()
     }
@@ -142,8 +146,50 @@ class SubappLibraryActivity : AppCompatActivity() {
                 true
             } else false
         }
-        binding.newApp.setOnClickListener { edit(repository.createStarter()) }
-        binding.importApp.setOnClickListener {
+        binding.appList.layoutManager = LinearLayoutManager(this)
+        header = LibraryHeaderBinding.inflate(layoutInflater, binding.appList, false)
+        libraryAdapter = LibraryAdapter()
+        binding.appList.adapter = libraryAdapter
+        binding.appList.onDragCancelled = { dragCancelled = true }
+        touchHelper = ItemTouchHelper(object : ItemTouchHelper.Callback() {
+            override fun getMovementFlags(rv: RecyclerView, holder: RecyclerView.ViewHolder): Int =
+                makeMovementFlags(if (holder is AppHolder && displayedRecords.size > 1) ItemTouchHelper.UP or ItemTouchHelper.DOWN else 0, 0)
+            override fun isLongPressDragEnabled() = false
+            override fun isItemViewSwipeEnabled() = false
+            override fun onMove(rv: RecyclerView, source: RecyclerView.ViewHolder, target: RecyclerView.ViewHolder): Boolean {
+                val from = source.bindingAdapterPosition - 1
+                val to = target.bindingAdapterPosition - 1
+                if (from !in displayedRecords.indices || to !in displayedRecords.indices) return false
+                displayedRecords.add(to, displayedRecords.removeAt(from))
+                libraryAdapter.notifyItemMoved(from + 1, to + 1)
+                return true
+            }
+            override fun clearView(rv: RecyclerView, holder: RecyclerView.ViewHolder) {
+                super.clearView(rv, holder)
+                holder.itemView.translationZ = 0f
+            }
+            override fun chooseDropTarget(selected: RecyclerView.ViewHolder, targets: MutableList<RecyclerView.ViewHolder>, curX: Int, curY: Int): RecyclerView.ViewHolder? {
+                val center = curY + selected.itemView.height / 2f
+                val movingDown = curY > selected.itemView.top
+                return targets.filter { target ->
+                    target is AppHolder && if (movingDown) center > target.itemView.top + target.itemView.height / 2f
+                    else center < target.itemView.top + target.itemView.height / 2f
+                }.minByOrNull { kotlin.math.abs(center - (it.itemView.top + it.itemView.height / 2f)) }
+            }
+            override fun onSwiped(holder: RecyclerView.ViewHolder, direction: Int) = Unit
+            override fun onSelectedChanged(holder: RecyclerView.ViewHolder?, actionState: Int) {
+                super.onSelectedChanged(holder, actionState)
+                if (actionState == ItemTouchHelper.ACTION_STATE_DRAG) {
+                    reorderOriginal = displayedRecords.toList()
+                    dragCancelled = false
+                    holder?.itemView?.translationZ = resources.displayMetrics.density * 12
+                    holder?.itemView?.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+                } else if (actionState == ItemTouchHelper.ACTION_STATE_IDLE) finishReorder(!dragCancelled)
+            }
+        })
+        touchHelper.attachToRecyclerView(binding.appList)
+        header.newApp.setOnClickListener { edit(repository.createStarter()) }
+        header.importApp.setOnClickListener {
             showImportOptions()
         }
         rowsReady = true
@@ -255,17 +301,45 @@ class SubappLibraryActivity : AppCompatActivity() {
     }
 
     private fun refreshRows() {
-        binding.appList.removeAllViews()
+        if (reorderOriginal.isNotEmpty()) return
         val records = repository.list()
         displayedRecords.clear()
         displayedRecords.addAll(records)
-        binding.appCount.text = resources.getQuantityString(R.plurals.library_count, records.size, records.size)
-        binding.emptyState.visibility = if (records.isEmpty()) View.VISIBLE else View.GONE
-        records.forEach { record ->
-            val manager = WorkspaceManager(this, workspaceDir = record.workspaceDir)
+        header.appCount.text = resources.getQuantityString(R.plurals.library_count, records.size, records.size)
+        header.emptyState.visibility = if (records.isEmpty()) View.VISIBLE else View.GONE
+        libraryAdapter.notifyDataSetChanged()
+    }
+
+    private class AppHolder(val row: ItemSubappBinding) : RecyclerView.ViewHolder(row.root)
+    private inner class LibraryAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+        init { setHasStableIds(true) }
+        override fun getItemCount() = displayedRecords.size + 1
+        override fun getItemViewType(position: Int) = if (position == 0) 0 else 1
+        override fun getItemId(position: Int): Long = if (position == 0) Long.MIN_VALUE else
+            stableIds.getOrPut(displayedRecords[position - 1].id) { stableIds.size.toLong() }
+        override fun onCreateViewHolder(parent: ViewGroup, type: Int): RecyclerView.ViewHolder {
+            if (type == 0) return object : RecyclerView.ViewHolder(header.root) {}
+            val row = ItemSubappBinding.inflate(layoutInflater, parent, false)
+            (row.root.layoutParams as ViewGroup.MarginLayoutParams).apply {
+                leftMargin = (20 * resources.displayMetrics.density).toInt()
+                rightMargin = leftMargin
+            }
+            val holder = AppHolder(row)
+            row.appCard.setOnLongClickListener {
+                if (displayedRecords.size < 2 || holder.bindingAdapterPosition == RecyclerView.NO_POSITION) false
+                else { touchHelper.startDrag(holder); true }
+            }
+            ViewCompat.addAccessibilityAction(row.root, getString(R.string.library_move_up)) { _, _ -> moveByAccessibility(holder, -1) }
+            ViewCompat.addAccessibilityAction(row.root, getString(R.string.library_move_down)) { _, _ -> moveByAccessibility(holder, 1) }
+            return holder
+        }
+        override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+            if (holder !is AppHolder) return
+            val record = displayedRecords[position - 1]
+            val row = holder.row
+            val manager = WorkspaceManager(this@SubappLibraryActivity, workspaceDir = record.workspaceDir)
             val manifest = try { JSONObject(manager.readFile("manifest.json")) } catch (_: Exception) { JSONObject() }
             val name = manifest.optString("name").ifBlank { getString(R.string.library_untitled) }
-            val row = ItemSubappBinding.inflate(layoutInflater, binding.appList, false)
             val iconName = manifest.optJSONArray("icons")?.optJSONObject(0)?.optString("src")?.takeIf { it.isNotBlank() } ?: "icon.png"
             val iconFile = manager.getFile(iconName)
             val bitmap = if (iconFile.isFile) runCatching { BitmapFactory.decodeFile(iconFile.absolutePath) }.getOrNull() else null
@@ -279,40 +353,11 @@ class SubappLibraryActivity : AppCompatActivity() {
             row.editApp.contentDescription = getString(R.string.library_edit_app, name)
             row.appCard.contentDescription = getString(R.string.library_open_app, name)
             row.appCard.setOnClickListener { open(record) }
-            val beginReorder = Runnable { startReorder(row.root) }
-            row.appCard.setOnTouchListener { view, event ->
-                if (event.actionMasked == MotionEvent.ACTION_DOWN) {
-                    lastTouchRawY = event.rawY
-                    view.postDelayed(beginReorder, android.view.ViewConfiguration.getLongPressTimeout().toLong())
-                    return@setOnTouchListener false
-                }
-                when (event.actionMasked) {
-                    MotionEvent.ACTION_MOVE -> {
-                        if (reorderView !== row.root) {
-                            val slop = android.view.ViewConfiguration.get(this).scaledTouchSlop
-                            if (kotlin.math.abs(event.rawY - lastTouchRawY) > slop) view.removeCallbacks(beginReorder)
-                            return@setOnTouchListener false
-                        }
-                        reorderTouchRawY = event.rawY
-                        moveReorderingCard()
-                        true
-                    }
-                    MotionEvent.ACTION_UP -> {
-                        view.removeCallbacks(beginReorder)
-                        if (reorderView === row.root) { finishReorder(commit = true); true } else false
-                    }
-                    MotionEvent.ACTION_CANCEL -> {
-                        view.removeCallbacks(beginReorder)
-                        if (reorderView === row.root) { finishReorder(commit = false); true } else false
-                    }
-                    else -> true
-                }
-            }
             row.editApp.setOnClickListener { edit(record) }
             row.installApp.contentDescription = getString(R.string.library_install_app, name)
             row.installApp.setOnClickListener {
-                val requested = AppIdentityManager(this, record).requestInstall()
-                if (!requested) Toast.makeText(this, R.string.shortcut_request_failed, Toast.LENGTH_LONG).show()
+                val requested = AppIdentityManager(this@SubappLibraryActivity, record).requestInstall()
+                if (!requested) Toast.makeText(this@SubappLibraryActivity, R.string.shortcut_request_failed, Toast.LENGTH_LONG).show()
             }
             row.appMenu.contentDescription = getString(R.string.library_menu, name)
             row.appMenu.setOnClickListener { anchor ->
@@ -324,7 +369,7 @@ class SubappLibraryActivity : AppCompatActivity() {
                 }
                 content.findViewById<View>(R.id.update_app).setOnClickListener {
                     popup.dismiss()
-                    com.wynh.appapp.updates.UpdateController(this, record) { refreshRows() }.open()
+                    com.wynh.appapp.updates.UpdateController(this@SubappLibraryActivity, record) { refreshRows() }.open()
                 }
                 content.findViewById<View>(R.id.delete_app).setOnClickListener {
                     popup.dismiss()
@@ -336,98 +381,32 @@ class SubappLibraryActivity : AppCompatActivity() {
                 }
                 popup.showAsDropDown(anchor, -resources.getDimensionPixelSize(R.dimen.library_actions_popup_width) + anchor.width, 0)
             }
-            binding.appList.addView(row.root)
-        }
-        for (i in 0 until binding.appList.childCount) addReorderAccessibility(binding.appList.getChildAt(i))
-    }
-
-    private fun startReorder(card: View): Boolean {
-        if (displayedRecords.size < 2) return false
-        reorderView = card
-        reorderOriginal = displayedRecords.toList()
-        reorderStartRawY = lastTouchRawY
-        reorderStartTop = card.top.toFloat()
-        reorderTouchRawY = reorderStartRawY
-        reorderTargetIndex = binding.appList.indexOfChild(card)
-        card.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
-        card.parent?.requestDisallowInterceptTouchEvent(true)
-        card.elevation = resources.displayMetrics.density * 12
-        card.alpha = 0.94f
-        return true
-    }
-
-    private var lastTouchRawY = 0f
-
-    private fun moveReorderingCard() {
-        val card = reorderView ?: return
-        val desiredTop = reorderStartTop + reorderTouchRawY - reorderStartRawY
-        card.translationY = desiredTop - card.top
-        val center = desiredTop + card.height / 2f
-        val current = binding.appList.indexOfChild(card)
-        val target = (0 until binding.appList.childCount).firstOrNull { index ->
-            index != current && center < binding.appList.getChildAt(index).top + binding.appList.getChildAt(index).height / 2f
-        } ?: (binding.appList.childCount - 1)
-        if (target >= 0) {
-            reorderTargetIndex = target
-            val gap = card.height + (card.layoutParams as? ViewGroup.MarginLayoutParams)?.bottomMargin.orZero()
-            for (index in 0 until binding.appList.childCount) {
-                if (index == current) continue
-                val shift = when {
-                    target > current && index in (current + 1)..target -> -gap.toFloat()
-                    target < current && index in target until current -> gap.toFloat()
-                    else -> 0f
-                }
-                binding.appList.getChildAt(index).animate().translationY(shift).setDuration(120).start()
-            }
-        }
-        val scroll = binding.root.findViewById<androidx.core.widget.NestedScrollView>(R.id.library_scroll)
-        if (scroll != null) {
-            val edge = resources.displayMetrics.density * 72
-            val location = IntArray(2)
-            scroll.getLocationOnScreen(location)
-            when {
-                reorderTouchRawY < location[1] + edge -> scroll.scrollBy(0, -24)
-                reorderTouchRawY > location[1] + scroll.height - edge -> scroll.scrollBy(0, 24)
-            }
         }
     }
 
     private fun finishReorder(commit: Boolean) {
-        val card = reorderView ?: return
-        val from = binding.appList.indexOfChild(card)
-        val target = reorderTargetIndex.coerceIn(0, displayedRecords.lastIndex)
-        for (index in 0 until binding.appList.childCount) {
-            binding.appList.getChildAt(index).animate().cancel()
-            binding.appList.getChildAt(index).translationY = 0f
+        val original = reorderOriginal
+        if (original.isEmpty()) return
+        reorderOriginal = emptyList()
+        if (!commit) {
+            displayedRecords.clear()
+            displayedRecords.addAll(original)
+            binding.appList.post { libraryAdapter.notifyDataSetChanged() }
+            return
         }
-        card.translationY = 0f
-        card.elevation = 0f
-        card.alpha = 1f
-        card.parent?.requestDisallowInterceptTouchEvent(false)
-        reorderView = null
-        if (!commit || from < 0 || target == from) return
-        android.transition.TransitionManager.beginDelayedTransition(binding.appList)
-        binding.appList.removeView(card)
-        binding.appList.addView(card, target)
-        val moved = displayedRecords.removeAt(from)
-        displayedRecords.add(target, moved)
+        if (displayedRecords.map { it.id } == original.map { it.id }) return
         runCatching { repository.reorder(displayedRecords.map { it.id }) }.onFailure {
             displayedRecords.clear()
-            displayedRecords.addAll(reorderOriginal)
-            refreshRows()
+            displayedRecords.addAll(original)
+            binding.appList.post { libraryAdapter.notifyDataSetChanged() }
             Toast.makeText(this, R.string.library_reorder_failed, Toast.LENGTH_SHORT).show()
         }
     }
 
-    private fun Int?.orZero(): Int = this ?: 0
-
-    private fun addReorderAccessibility(card: View) {
-        androidx.core.view.ViewCompat.addAccessibilityAction(card, getString(R.string.library_move_up)) { view, _ -> moveByAccessibility(view, -1) }
-        androidx.core.view.ViewCompat.addAccessibilityAction(card, getString(R.string.library_move_down)) { view, _ -> moveByAccessibility(view, 1) }
-    }
-
-    private fun moveByAccessibility(card: View, delta: Int): Boolean {
-        val from = binding.appList.indexOfChild(card)
+    private fun moveByAccessibility(holder: AppHolder, delta: Int): Boolean {
+        if (reorderOriginal.isNotEmpty()) return false
+        val from = holder.bindingAdapterPosition - 1
+        if (from !in displayedRecords.indices) return false
         val to = (from + delta).coerceIn(0, displayedRecords.lastIndex)
         if (from == to) return false
         val item = displayedRecords.removeAt(from)
@@ -437,7 +416,7 @@ class SubappLibraryActivity : AppCompatActivity() {
             Toast.makeText(this, R.string.library_reorder_failed, Toast.LENGTH_SHORT).show()
             return false
         }
-        refreshRows()
+        libraryAdapter.notifyItemMoved(from + 1, to + 1)
         return true
     }
 
@@ -602,12 +581,12 @@ class SubappLibraryActivity : AppCompatActivity() {
     }
 
     private fun importFromGitHub(url: String) {
-        binding.importApp.isEnabled = false
+        header.importApp.isEnabled = false
         Toast.makeText(this, R.string.library_github_downloading, Toast.LENGTH_SHORT).show()
         Thread {
             val result = com.wynh.appapp.workspace.GitHubFolderImporter.download(this, url)
             runOnUiThread {
-                binding.importApp.isEnabled = true
+                header.importApp.isEnabled = true
                 result.onSuccess { folder ->
                     val record = runCatching { repository.createImportedFrom(folder) }
                     folder.deleteRecursively()
