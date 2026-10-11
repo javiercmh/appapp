@@ -53,6 +53,39 @@ class WorkspaceUpdaterTest {
         assertEquals("local edit", File(root, "workspace/index.html").readText())
     }
 
+    @Test fun restoredManifestVersionOffersLatestPublisherAgain() {
+        val root = workspace()
+        val engine = WorkspaceUpdater(root)
+        val (v12, files12) = packageFiles("1.2")
+        val (v13, files13) = packageFiles("1.3")
+        engine.install(v12, files12, sha1, 3)
+        engine.install(v13, files13, sha2, 3)
+        assertTrue(engine.publisherUnchanged(v13, files13))
+        // History restores the old manifest and text files, not native installation metadata.
+        v12.managed.forEach { path -> write(root, "workspace/$path", File(files12, path).readText()) }
+        val reopened = WorkspaceUpdater(root)
+        assertEquals("1.2", reopened.currentVersion())
+        assertEquals("1.3", reopened.installed()!!.version)
+        assertFalse(reopened.publisherUnchanged(v13, files13))
+        reopened.install(v13, files13, sha2, 3)
+        assertTrue(reopened.publisherUnchanged(v13, files13))
+        assertEquals("user settings", File(root, "workspace/data/settings.json").readText())
+    }
+
+    @Test fun missingOrUnreadableCurrentVersionCannotBeUpToDate() {
+        val root = workspace(); val engine = WorkspaceUpdater(root)
+        val (pkg, files) = packageFiles("1.3")
+        engine.install(pkg, files, sha2, 3)
+        for (manifest in listOf("broken", "{}", "{\"version\":null}", "{\"version\":13}", "{\"version\":\"\"}")) {
+            write(root, "workspace/manifest.json", manifest)
+            assertNull(engine.currentVersion())
+            assertFalse(engine.publisherUnchanged(pkg, files))
+        }
+        File(root, "workspace/manifest.json").delete()
+        assertNull(engine.currentVersion())
+        assertFalse(engine.publisherUnchanged(pkg, files))
+    }
+
     @Test fun editedManagedFilesAreReportedAndMissingSeedsAreCreated() {
         val root = workspace(); File(root, "workspace/data/settings.json").delete()
         val engine = WorkspaceUpdater(root); val (pkg, files) = packageFiles("1")

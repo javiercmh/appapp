@@ -30,7 +30,7 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
             val old = updater.installed()
             if (old != null) {
                 val builder = MaterialAlertDialogBuilder(activity).setTitle("Update app")
-                    .setMessage("Current version: ${old.version}\nRepository: ${old.source.owner}/${old.source.repository}\nBranch: ${old.source.branch}\n\nCheck for the latest publisher update. You can review file changes before installing.\n\nTo restore an earlier version, open Edit → Version history.")
+                    .setMessage("Current version: ${updater.currentVersion() ?: "Unknown"}\nRepository: ${old.source.owner}/${old.source.repository}\nBranch: ${old.source.branch}\n\nCheck for the latest publisher update. You can review file changes before installing.\n\nTo restore an earlier version, open Edit → Version history.")
                     .setPositiveButton("Check GitHub") { _, _ -> check(old.source) }.setNegativeButton("Cancel", null)
                 builder.show()
             } else {
