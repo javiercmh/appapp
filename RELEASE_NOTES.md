@@ -1,3 +1,24 @@
+# App² 1.5.1
+
+## Library and editor improvements
+
+- Create apps from one New app menu with GitHub, ZIP, and Starter demo options.
+- Simplify app cards and give descriptions the full card width and up to four lines.
+- Access Install, Update, Share, Edit, and Delete from each app’s three-dot menu.
+- Open Edit directly to files, with Configure app and History nearby. Run previews the app; Files returns to editing.
+- Share and save ZIP packages from the library. GitHub linking and updates are also managed there.
+- Android Back follows standalone WebView history, so modal readers can return to their shelf and run their existing `popstate` cleanup, including saving position and stopping speech. Apps without WebView history exit normally.
+
+LingoMage 1.2.7 should require App² host version code 8 for this behavior.
+
+## Installation
+
+Download `AppApp-1.5.1.apk` and install it as an update to App². It uses the existing release signing certificate and application ID `com.wynh.appapp`. Existing subapp workspaces are not rewritten.
+
+Version: `1.5.1` (version code `8`).
+
+---
+
 # App² 1.5.0
 
 ## Text to Speech
