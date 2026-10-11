@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <dimen name="library_actions_popup_width">196dp</dimen>
-    <dimen name="library_actions_popup_height">168dp</dimen>
     <dimen name="library_actions_popup_elevation">8dp</dimen>
 </resources>

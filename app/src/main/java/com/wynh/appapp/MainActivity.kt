@@ -1,13 +1,17 @@
 package com.wynh.appapp
 
+import com.wynh.appapp.workspace.AppIdentityManager
+
+import android.graphics.Bitmap
+
+import android.graphics.BitmapFactory
+
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Dialog
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.LinearGradient
@@ -48,7 +52,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
-import androidx.core.content.FileProvider
 import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.Insets
@@ -65,13 +68,11 @@ import com.wynh.appapp.settings.AppSettingsManager
 import com.wynh.appapp.workspace.WorkspaceFile
 import com.wynh.appapp.workspace.WorkspaceHistoryManager
 import com.wynh.appapp.workspace.WorkspaceManager
-import com.wynh.appapp.workspace.WorkspacePackageManager
 import com.wynh.appapp.workspace.WorkspaceSnapshot
 import com.wynh.appapp.workspace.SubappRepository
 import com.wynh.appapp.workspace.SubappRecord
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
-import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import org.json.JSONArray
 import org.json.JSONObject
@@ -103,7 +104,26 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
     private val logBuffer = StringBuilder()
     private val timeFormat = SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault())
 
-    private var pendingExportFiles: Set<String>? = null
+    private var configuringRecord: SubappRecord? = null
+    private var pendingConfigIcon: ByteArray? = null
+    private var resetConfigIcon = false
+    private var configNameDraft = ""
+    private var configDescriptionDraft = ""
+    private var hasConfigDraft = false
+    private var configNameInput: EditText? = null
+    private var configDescriptionInput: EditText? = null
+    private var configIconPreview: ImageView? = null
+    private val pickConfigIcon = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        val record = configuringRecord
+        if (uri != null && record != null) ImageCropManager.openCropper(this, uri) { bitmap ->
+            pendingConfigIcon = bitmapToPng(bitmap)
+            resetConfigIcon = false
+            refreshConfigIconPreview(record)
+        }
+    }
+    private var previewVisible = false
+    private var filesRoot: View? = null
+
 
     /** Last system-bar + cutout insets, republished to the WebView as CSS custom properties. */
     private var lastInsets: Insets = Insets.NONE
@@ -115,23 +135,6 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
      * permanently stuck and will never open a chooser again.
      */
     private var pendingFileChooserCallback: ValueCallback<Array<Uri>>? = null
-
-    private val saveZipLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri: Uri? ->
-        val filesToExport = pendingExportFiles
-        if (uri != null && filesToExport != null) {
-            try {
-                contentResolver.openOutputStream(uri)?.use { os ->
-                    WorkspacePackageManager.exportToOutputStream(workspaceManager, filesToExport, os)
-                }
-                appendLog("[Package] Saved ${filesToExport.size} files to ZIP via Storage Access Framework.")
-                Toast.makeText(this, getString(R.string.export_success, filesToExport.size), Toast.LENGTH_SHORT).show()
-            } catch (e: Exception) {
-                appendLog("[Package Error] Failed to write ZIP: ${e.message}")
-                Toast.makeText(this, "Save failed: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
-        pendingExportFiles = null
-    }
 
     // Backs `<input type="file">` inside the runtime web app.
     private val webFileChooserLauncher =
@@ -303,6 +306,8 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
             }
             // The WebView itself stays edge-to-edge with zero native padding; the subapp owns its
             // own padding and receives the raw insets as CSS custom properties instead.
+            binding.editorContainer.updatePadding(top = insets.top, left = insets.left, right = insets.right,
+                bottom = maxOf(insets.bottom, windowInsets.getInsets(WindowInsetsCompat.Type.ime()).bottom))
             lastInsets = insets
             pushInsetsToWebView()
             windowInsets
@@ -343,6 +348,18 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
         setupWebView()
         setupListeners()
         reloadApp()
+        if (savedInstanceState?.getBoolean("editor_preview") == true || isStandalone) showPreview() else showFiles()
+        if (savedInstanceState != null) {
+            val id = savedInstanceState.getString("config_record_id")
+            configuringRecord = id?.let(subappRepository::resolve)
+            pendingConfigIcon = savedInstanceState.getByteArray("config_icon")
+            resetConfigIcon = savedInstanceState.getBoolean("config_reset_icon")
+            configNameDraft = savedInstanceState.getString("config_name").orEmpty()
+            configDescriptionDraft = savedInstanceState.getString("config_description").orEmpty()
+            hasConfigDraft = savedInstanceState.getBoolean("config_has_draft")
+            configuringRecord?.let(::showConfigure)
+        }
+
         NativeStorageBridge.reschedulePersistedAlarms(this, subapp.id)
         if (intent.getBooleanExtra(EXTRA_OPEN_SETTINGS, false)) {
             binding.root.postDelayed({ if (!isFinishing && !isDestroyed) showSettingsDialog() }, 500)
@@ -352,7 +369,9 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
         // Handle Back button for WebView history
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                if (binding.webView.canGoBack()) {
+                if (previewVisible && !isStandalone) {
+                    showFiles()
+                } else if (previewVisible && binding.webView.canGoBack()) {
                     binding.webView.goBack()
                 } else {
                     isEnabled = false
@@ -517,21 +536,13 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
     private fun setupListeners() {
         // App Editor Hub Dialog
         binding.btnEditCode.setOnClickListener {
-            showAppEditorDialog()
+            showFiles()
         }
 
         binding.btnHistory.setOnClickListener {
             showHistoryDialog {
                 reloadApp()
             }
-        }
-
-        binding.btnUpdateApp.setOnClickListener {
-            com.wynh.appapp.updates.UpdateController(this, subapp).open()
-        }
-
-        binding.btnPackage.setOnClickListener {
-            showPackageDialog()
         }
 
         // Top Bar Refresh Button: Refresh site & clear cache
@@ -637,42 +648,29 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
 
 
     /**
-     * Opens the revamped App Editor Workspace Hub dialog (Full screen dimensions matching parent).
+     * Displays the editor files screen.
      */
-    private fun showAppEditorDialog() {
-        val dialog = Dialog(this, R.style.Theme_AppApp_FullScreenDialog)
-        dialog.setContentView(R.layout.dialog_workspace_hub)
-        dialog.window?.setLayout(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT
-        )
-
-        val rootContainer = dialog.findViewById<LinearLayout>(R.id.hub_root_container)
-        val btnClose = dialog.findViewById<ImageButton>(R.id.hub_btn_close)
-        val subtitleText = dialog.findViewById<TextView>(R.id.hub_subtitle)
-        val btnRun = dialog.findViewById<MaterialButton>(R.id.hub_btn_run)
-
-
-        val fileCountBadge = dialog.findViewById<TextView>(R.id.hub_file_count_badge)
-        val btnNewFile = dialog.findViewById<MaterialButton>(R.id.hub_btn_new_file)
-        val filesContainer = dialog.findViewById<LinearLayout>(R.id.hub_files_container)
-
-        // Handle insets for Edge-to-Edge dialog
-        dialog.window?.decorView?.let { decor ->
-            ViewCompat.setOnApplyWindowInsetsListener(decor) { _, insets ->
-                val statusBarInset = insets.getInsets(
-                    WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
-                )
-                val imeInset = insets.getInsets(WindowInsetsCompat.Type.ime())
-                rootContainer.updatePadding(
-                    top = statusBarInset.top,
-                    bottom = maxOf(statusBarInset.bottom, imeInset.bottom),
-                    left = statusBarInset.left,
-                    right = statusBarInset.right
-                )
-                insets
-            }
+    private fun showFiles() {
+        filesRoot?.let { binding.editorContainer.removeView(it) }
+        val root = layoutInflater.inflate(R.layout.dialog_workspace_hub, binding.editorContainer, false)
+        filesRoot = root
+        binding.editorContainer.addView(root)
+        val btnClose = root.findViewById<ImageButton>(R.id.hub_btn_close)
+        val subtitleText = root.findViewById<TextView>(R.id.hub_subtitle)
+        val btnRun = root.findViewById<MaterialButton>(R.id.hub_btn_run)
+        val fileCountBadge = root.findViewById<TextView>(R.id.hub_file_count_badge)
+        val btnNewFile = root.findViewById<MaterialButton>(R.id.hub_btn_new_file)
+        val filesContainer = root.findViewById<LinearLayout>(R.id.hub_files_container)
+        subtitleText.text = loadAppConfig().name
+        root.findViewById<View>(R.id.hub_configure).setOnClickListener { showConfigure(subapp) }
+        root.findViewById<View>(R.id.hub_history).setOnClickListener {
+            showHistoryDialog { reloadApp(); showFiles() }
         }
+        previewVisible = false
+        binding.webView.visibility = View.GONE
+        binding.editorContainer.visibility = View.VISIBLE
+        binding.appBarLayout.visibility = View.GONE
+        ViewCompat.requestApplyInsets(binding.root)
 
         fun formatFileSize(bytes: Long): String {
             return when {
@@ -812,7 +810,7 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
 
         // Close Hub
         btnClose.setOnClickListener {
-            dialog.dismiss()
+            finish()
         }
 
         // Run
@@ -820,7 +818,7 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
             historyManager.saveSnapshot(workspaceManager, "Run Snapshot")
             reloadApp()
             Toast.makeText(this, getString(R.string.app_reloaded), Toast.LENGTH_SHORT).show()
-            dialog.dismiss()
+            showPreview()
         }
 
         // New File Creation
@@ -852,7 +850,118 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
 
         refreshFileList()
 
+
+    }
+
+    private fun showConfigure(record: SubappRecord) {
+        val restoringDraft = hasConfigDraft
+        configuringRecord = record
+        val content = layoutInflater.inflate(R.layout.dialog_app_config, null)
+        val dialog = Dialog(this)
+        dialog.setContentView(content)
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        val identity = AppIdentityManager(this, record)
+        val existing = identity.load()
+        val name = content.findViewById<EditText>(R.id.config_input_app_name)
+        val description = content.findViewById<EditText>(R.id.config_input_app_desc)
+        val iconPreview = content.findViewById<ImageView>(R.id.config_app_icon_preview)
+        configNameInput = name
+        configDescriptionInput = description
+        configIconPreview = iconPreview
+        name.setText(if (restoringDraft) configNameDraft else existing.name)
+        description.setText(if (restoringDraft) configDescriptionDraft else existing.description)
+        hasConfigDraft = true
+        refreshConfigIconPreview(record)
+        content.findViewById<MaterialButton>(R.id.config_btn_pick_icon).setOnClickListener { pickConfigIcon.launch("image/*") }
+        content.findViewById<MaterialButton>(R.id.config_btn_reset_icon).setOnClickListener {
+            pendingConfigIcon = null
+            resetConfigIcon = true
+            refreshConfigIconPreview(record)
+        }
+        content.findViewById<MaterialButton>(R.id.config_btn_cancel).setOnClickListener {
+            clearConfigDraft()
+            dialog.dismiss()
+        }
+        content.findViewById<MaterialButton>(R.id.config_btn_save).setOnClickListener {
+            val newName = name.text.toString().trim()
+            if (newName.isBlank()) {
+                name.error = getString(R.string.library_name_required)
+                return@setOnClickListener
+            }
+            name.error = null
+            val iconChange = when {
+                resetConfigIcon -> AppIdentityManager.IconChange.Reset
+                pendingConfigIcon != null -> AppIdentityManager.IconChange.Replace(pendingConfigIcon!!)
+                else -> AppIdentityManager.IconChange.Keep
+            }
+            if (identity.save(newName, description.text.toString().trim(), iconChange)) {
+                identity.refreshPinnedShortcut()
+                clearConfigDraft()
+                dialog.dismiss()
+                binding.toolbar.title = identity.load().name
+                showFiles()
+                Toast.makeText(this, R.string.config_saved_toast, Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, R.string.library_configure_save_failed, Toast.LENGTH_LONG).show()
+            }
+        }
+        dialog.setOnCancelListener { clearConfigDraft() }
+        dialog.setOnDismissListener { if (configuringRecord != null) clearConfigDraft() }
         dialog.show()
+        dialog.window?.setLayout(
+            minOf((resources.displayMetrics.widthPixels * 0.94).toInt(), (resources.displayMetrics.density * 520).toInt()),
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+        dialog.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+    }
+
+    private fun refreshConfigIconPreview(record: SubappRecord) {
+        val preview = configIconPreview ?: return
+        val bitmap = when {
+            resetConfigIcon -> null
+            pendingConfigIcon != null -> BitmapFactory.decodeByteArray(pendingConfigIcon, 0, pendingConfigIcon!!.size)
+            else -> AppIdentityManager(this, record).load().iconPath?.let { path ->
+                val file = WorkspaceManager(this, workspaceDir = record.workspaceDir).getFile(path)
+                file.takeIf { it.isFile }?.let { BitmapFactory.decodeFile(it.absolutePath) }
+            }
+        }
+        if (bitmap == null) preview.setImageResource(R.mipmap.ic_launcher_round) else preview.setImageBitmap(bitmap)
+    }
+
+    private fun clearConfigDraft() {
+        configuringRecord = null
+        pendingConfigIcon = null
+        resetConfigIcon = false
+        configNameDraft = ""
+        configDescriptionDraft = ""
+        hasConfigDraft = false
+        configNameInput = null
+        configDescriptionInput = null
+        configIconPreview = null
+    }
+
+    private fun bitmapToPng(bitmap: Bitmap): ByteArray = java.io.ByteArrayOutputStream().use { out ->
+        bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+        out.toByteArray()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        configuringRecord?.let { outState.putString("config_record_id", it.id) }
+        outState.putByteArray("config_icon", pendingConfigIcon)
+        outState.putBoolean("config_reset_icon", resetConfigIcon)
+        outState.putString("config_name", configNameInput?.text?.toString() ?: configNameDraft)
+        outState.putString("config_description", configDescriptionInput?.text?.toString() ?: configDescriptionDraft)
+        outState.putBoolean("config_has_draft", configuringRecord != null)
+        outState.putBoolean("editor_preview", previewVisible)
+        super.onSaveInstanceState(outState)
+    }
+
+    private fun showPreview() {
+        previewVisible = true
+        binding.webView.visibility = View.VISIBLE
+        binding.editorContainer.visibility = View.GONE
+        binding.appBarLayout.visibility = if (intent.getBooleanExtra("EXTRA_STANDALONE_MODE", false)) View.GONE else View.VISIBLE
+        ViewCompat.requestApplyInsets(binding.root)
     }
 
     private fun isImageFile(name: String): Boolean {
@@ -1221,169 +1330,6 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
 
                 container.addView(itemView)
             }
-        }
-
-        btnClose.setOnClickListener {
-            dialog.dismiss()
-        }
-
-        dialog.show()
-    }
-
-    /**
-     * Opens modal dialog for selective ZIP export and sharing.
-     */
-    private fun showPackageDialog() {
-        val dialog = Dialog(this, com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog)
-        dialog.setContentView(R.layout.dialog_package)
-        dialog.window?.setLayout(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT
-        )
-
-        val filesContainer = dialog.findViewById<LinearLayout>(R.id.package_files_container)
-        val nameInput = dialog.findViewById<EditText>(R.id.package_name_input)
-        val masterCheckbox = dialog.findViewById<MaterialCheckBox>(R.id.package_master_checkbox)
-        val masterCheckboxRow = dialog.findViewById<LinearLayout>(R.id.package_master_checkbox_row)
-        val btnShareZip = dialog.findViewById<MaterialButton>(R.id.package_btn_share_zip)
-        val btnSaveZip = dialog.findViewById<MaterialButton>(R.id.package_btn_save_zip)
-        val btnClose = dialog.findViewById<MaterialButton>(R.id.package_btn_close)
-
-        // Attempt to prefill package name from manifest.json
-        val defaultPackageName = try {
-            val config = loadAppConfig()
-            config.name.lowercase().replace(Regex("[^a-z0-9_-]"), "_")
-        } catch (_: Exception) {
-            "my_app"
-        }
-        nameInput.setText(defaultPackageName)
-
-        val workspaceFiles = workspaceManager.listFiles()
-        val selectedFiles = workspaceFiles.map { it.name }.toMutableSet()
-        val checkboxMap = mutableMapOf<String, MaterialCheckBox>()
-
-        fun updateMasterCheckboxState() {
-            masterCheckbox.checkedState = when {
-                workspaceFiles.isEmpty() || selectedFiles.isEmpty() -> MaterialCheckBox.STATE_UNCHECKED
-                selectedFiles.size == workspaceFiles.size -> MaterialCheckBox.STATE_CHECKED
-                else -> MaterialCheckBox.STATE_INDETERMINATE
-            }
-        }
-
-        fun formatFileSize(bytes: Long): String {
-            return when {
-                bytes < 1024 -> "$bytes B"
-                bytes < 1024 * 1024 -> String.format(Locale.getDefault(), "%.1f KB", bytes / 1024.0)
-                else -> String.format(Locale.getDefault(), "%.1f MB", bytes / (1024.0 * 1024.0))
-            }
-        }
-
-        fun getFileEmoji(name: String): String {
-            val lower = name.lowercase()
-            return when {
-                lower.endsWith(".html") || lower.endsWith(".htm") -> "🌐"
-                lower.endsWith(".css") -> "🎨"
-                lower.endsWith(".js") || lower.endsWith(".mjs") -> "⚡"
-                lower.endsWith(".json") -> "📦"
-                else -> "📄"
-            }
-        }
-
-        filesContainer.removeAllViews()
-        val inflater = LayoutInflater.from(this)
-
-        for (file in workspaceFiles) {
-            val itemView = inflater.inflate(R.layout.item_export_file_checkbox, filesContainer, false)
-            val iconView = itemView.findViewById<TextView>(R.id.export_item_icon)
-            val nameView = itemView.findViewById<TextView>(R.id.export_item_name)
-            val sizeView = itemView.findViewById<TextView>(R.id.export_item_size)
-            val checkBox = itemView.findViewById<MaterialCheckBox>(R.id.export_item_checkbox)
-
-            iconView.text = getFileEmoji(file.name)
-            nameView.text = file.name
-            sizeView.text = formatFileSize(file.size)
-            checkBox.isChecked = true
-            checkboxMap[file.name] = checkBox
-
-            val toggleAction = {
-                val newState = !checkBox.isChecked
-                checkBox.isChecked = newState
-                if (newState) selectedFiles.add(file.name) else selectedFiles.remove(file.name)
-                updateMasterCheckboxState()
-            }
-
-            itemView.setOnClickListener { toggleAction() }
-            checkBox.setOnClickListener {
-                if (checkBox.isChecked) selectedFiles.add(file.name) else selectedFiles.remove(file.name)
-                updateMasterCheckboxState()
-            }
-
-            filesContainer.addView(itemView)
-        }
-
-        val toggleMaster = {
-            val shouldSelectAll = selectedFiles.size < workspaceFiles.size
-            selectedFiles.clear()
-            if (shouldSelectAll) {
-                for (file in workspaceFiles) {
-                    selectedFiles.add(file.name)
-                    checkboxMap[file.name]?.isChecked = true
-                }
-            } else {
-                for (cb in checkboxMap.values) {
-                    cb.isChecked = false
-                }
-            }
-            updateMasterCheckboxState()
-        }
-
-        masterCheckbox.setOnClickListener { toggleMaster() }
-        masterCheckboxRow.setOnClickListener { toggleMaster() }
-
-        updateMasterCheckboxState()
-
-        btnShareZip.setOnClickListener {
-            if (selectedFiles.isEmpty()) {
-                Toast.makeText(this, R.string.export_no_files_selected, Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-
-            val rawName = nameInput.text?.toString() ?: ""
-            val customPackageName = WorkspacePackageManager.sanitizePackageName(rawName, "my_app")
-
-            try {
-                val zipFile = WorkspacePackageManager.exportToZipFile(this, workspaceManager, selectedFiles, customPackageName)
-                val contentUri = FileProvider.getUriForFile(
-                    this,
-                    "${packageName}.fileprovider",
-                    zipFile
-                )
-
-                val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                    type = "application/zip"
-                    putExtra(Intent.EXTRA_STREAM, contentUri)
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                }
-
-                startActivity(Intent.createChooser(shareIntent, getString(R.string.action_share_zip)))
-                appendLog("[Package] Exported ${selectedFiles.size} files to '$customPackageName.zip' and triggered Sharesheet.")
-            } catch (e: Exception) {
-                appendLog("[Package Error] Export failed: ${e.message}")
-                Toast.makeText(this, "Export failed: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
-
-        btnSaveZip.setOnClickListener {
-            if (selectedFiles.isEmpty()) {
-                Toast.makeText(this, R.string.export_no_files_selected, Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-
-            val rawName = nameInput.text?.toString() ?: ""
-            val customPackageName = WorkspacePackageManager.sanitizePackageName(rawName, "my_app")
-
-            pendingExportFiles = selectedFiles.toSet()
-            saveZipLauncher.launch("$customPackageName.zip")
         }
 
         btnClose.setOnClickListener {
