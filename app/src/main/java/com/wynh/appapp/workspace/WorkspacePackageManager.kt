@@ -110,9 +110,9 @@ object WorkspacePackageManager {
         workspaceManager: WorkspaceManager,
         historyManager: WorkspaceHistoryManager,
         savePreImportSnapshot: Boolean = true
-    ): Result<List<String>> {
+    ): Result<List<String>> = synchronized(com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(workspaceManager.workspaceDir)) {
         var staging: File? = null
-        return try {
+        return@synchronized try {
             // 1. Capture pre-import snapshot
             if (savePreImportSnapshot) historyManager.saveSnapshot(workspaceManager, "Pre-Import Backup")
 
@@ -139,7 +139,7 @@ object WorkspacePackageManager {
                     val entryName = entry.name
                     // Skip hidden metadata files created by macOS/OS archivers (e.g. __MACOSX, .DS_Store)
                     if (!entryName.startsWith("__MACOSX") && !entryName.contains(".DS_Store")) {
-                        val destinationFile = File(tempExtractDir, entryName)
+                        val destinationFile = checkedZipDestination(tempExtractDir, entryName.removeSuffix("/"))
 
                         // Zip-Slip Path Traversal Protection
                         if (!destinationFile.canonicalPath.startsWith(tempExtractDir.canonicalPath + File.separator)) {
@@ -173,7 +173,7 @@ object WorkspacePackageManager {
 
             if (importedFileNames.isEmpty()) {
                 tempExtractDir.deleteRecursively()
-                return Result.failure(Exception("The selected ZIP file contains no readable project files."))
+                return@synchronized Result.failure(Exception("The selected ZIP file contains no readable project files."))
             }
 
             require(File(tempExtractDir, "index.html").isFile) { "ZIP must contain index.html at its root" }

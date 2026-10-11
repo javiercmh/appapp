@@ -243,12 +243,12 @@ class WorkspaceHistoryManager(
      * Reverts all workspace files to the contents in the specified snapshot.
      */
     @Synchronized
-    fun restoreSnapshot(snapshotId: String, workspaceManager: WorkspaceManager): Boolean {
-        return try {
+    fun restoreSnapshot(snapshotId: String, workspaceManager: WorkspaceManager): Boolean = synchronized(com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(workspaceManager.workspaceDir)) {
+        return@synchronized try {
             val snapshots = getSnapshots()
             val target = snapshots.find { it.id == snapshotId } ?: run {
                 log("[History Error] Snapshot '$snapshotId' not found.")
-                return false
+                return@synchronized false
             }
 
             check(saveSnapshot(workspaceManager, "Before restoring ${target.formattedTime}") != null) {

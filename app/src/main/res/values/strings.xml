@@ -144,4 +144,12 @@
     <string name="library_name_label">App name</string>
     <string name="library_name_required">Enter an app name</string>
     <string name="action_update_app">Update app</string>
+    <string name="backup_title">Subapp backup</string>
+    <string name="backup_export">Back up all subapps</string>
+    <string name="backup_restore">Restore subapp backup</string>
+    <string name="backup_description">Save all subapp files, data and images in one ZIP. Restore adds new copies. App² settings, history, native state, reminders, AI credentials and browser storage are excluded.</string>
+    <string name="backup_restore_confirm">Restore all subapps in this backup as new copies? Existing apps and their data will be kept.</string>
+    <string name="backup_progress">Please keep App² open while files are copied and verified.</string>
+    <string name="backup_failed">Backup operation failed</string>
+    <string name="backup_complete">Backup operation complete</string>
 </resources>

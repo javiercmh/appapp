@@ -20,27 +20,25 @@ class SubappRepository(private val context: Context) {
     private val index = File(root, "index.json")
     private val migrationMarker = File(root, "migration_complete")
 
-    @Synchronized
-    fun ensureMigrated(): List<SubappRecord> {
+    fun ensureMigrated(): List<SubappRecord> = synchronized(operationLock) {
         root.mkdirs()
+        recoverBackupImport()
         if (!migrationMarker.exists()) migrateLegacyWorkspace()
         migrationMarker.takeIf { it.isFile }?.readText()?.let(::cleanupLegacyStorage)
-        return list()
+        return@synchronized list()
     }
 
-    @Synchronized
-    fun list(): List<SubappRecord> {
+    fun list(): List<SubappRecord> = synchronized(operationLock) {
         root.mkdirs()
         val ids = try {
             val array = JSONArray(index.takeIf { it.exists() }?.readText() ?: "[]")
             (0 until array.length()).mapNotNull { array.optString(it).takeIf(::validId) }
         } catch (_: Exception) { emptyList() }
-        return ids.distinct().mapNotNull(::resolve)
+        return@synchronized ids.distinct().mapNotNull(::resolve)
     }
 
     /** Persists a caller-provided permutation of the currently installed apps. */
-    @Synchronized
-    fun reorder(ids: List<String>) {
+    fun reorder(ids: List<String>) = synchronized(operationLock) {
         val currentIds = list().map { it.id }
         require(ids.size == currentIds.size && ids.toSet() == currentIds.toSet()) {
             "App order must contain every installed app exactly once"
@@ -55,8 +53,7 @@ class SubappRepository(private val context: Context) {
         return if (File(dir, "workspace/index.html").isFile) SubappRecord(id, dir) else null
     }
 
-    @Synchronized
-    fun createStarter(): SubappRecord {
+    fun createStarter(): SubappRecord = synchronized(operationLock) {
         val id = UUID.randomUUID().toString()
         val dir = File(root, id)
         val workspace = WorkspaceManager(context, workspaceDir = File(dir, "workspace"))
@@ -64,11 +61,10 @@ class SubappRepository(private val context: Context) {
         register(id)
         WorkspaceHistoryManager(context, appDirectory = dir)
             .captureInitialVersion(workspace, "Starter Template")
-        return SubappRecord(id, dir)
+        return@synchronized SubappRecord(id, dir)
     }
 
-    @Synchronized
-    fun createImportedFrom(sourceWorkspace: File): SubappRecord {
+    fun createImportedFrom(sourceWorkspace: File): SubappRecord = synchronized(operationLock) {
         val id = UUID.randomUUID().toString()
         val dir = File(root, id)
         val destination = File(dir, "workspace")
@@ -86,14 +82,13 @@ class SubappRepository(private val context: Context) {
         val importedWorkspace = WorkspaceManager(context, workspaceDir = destination)
         WorkspaceHistoryManager(context, appDirectory = dir)
             .captureInitialVersion(importedWorkspace, "Imported App")
-        return SubappRecord(id, dir)
+        return@synchronized SubappRecord(id, dir)
     }
 
-    @Synchronized
-    fun delete(id: String): Boolean {
-        if (!validId(id)) return false
+    fun delete(id: String): Boolean = synchronized(operationLock) {
+        if (!validId(id)) return@synchronized false
         (context.applicationContext as? com.wynh.appapp.ai.AppAiApplication)?.ai?.cancelApp(id)
-        val record = resolve(id) ?: return false
+        val record = resolve(id) ?: return@synchronized false
         val deleted = record.directory.deleteRecursively()
         if (deleted) {
             context.getSharedPreferences("runtime_app_state_$id", Context.MODE_PRIVATE).edit().clear().commit()
@@ -101,7 +96,77 @@ class SubappRepository(private val context: Context) {
             context.getSharedPreferences("runtime_notifications_$id", Context.MODE_PRIVATE).edit().clear().commit()
             writeIndex(list().map { it.id }.filterNot { it == id })
         }
-        return deleted
+        return@synchronized deleted
+    }
+
+    companion object {
+        val operationLock = Any()
+    }
+
+    /** Captures all workspaces with a fixed library and every workspace write lock held. */
+    fun stageBackup(destination: File): List<File> = synchronized(operationLock) {
+        val records = list()
+        fun capture(index: Int): List<File> {
+            if (index < records.size) return synchronized(com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(records[index].workspaceDir)) {
+                capture(index + 1)
+            }
+            val bytes = records.sumOf { record -> record.workspaceDir.walkTopDown().filter { it.isFile }.sumOf { it.length() } }
+            require(destination.usableSpace > bytes + 20L * 1024 * 1024) { "Insufficient storage to stage backup" }
+            return records.mapIndexed { number, record ->
+                File(destination, "app-$number").also { record.workspaceDir.copyRecursively(it, overwrite = false) }
+            }
+        }
+        capture(0)
+    }
+
+    /** Publishes all imported copies with one atomic index change. */
+    fun importBackup(workspaces: List<File>): List<SubappRecord> = synchronized(operationLock) {
+        recoverBackupImport()
+        val current = list().map { it.id }
+        val ids = workspaces.map { UUID.randomUUID().toString() }
+        val staging = File(root, "backup-import-staging")
+        check(!staging.exists() || staging.deleteRecursively()) { "Could not clean import staging" }
+        check(staging.mkdirs())
+        try {
+            workspaces.forEachIndexed { index, workspace ->
+                val directory = File(staging, ids[index])
+                workspace.copyRecursively(File(directory, "workspace"))
+                val manager = WorkspaceManager(context, workspaceDir = File(directory, "workspace"))
+                check(WorkspaceHistoryManager(context, appDirectory = directory).captureInitialVersion(manager, "Subapp Backup")) {
+                    "Could not save initial version"
+                }
+            }
+            val journal = File(root, "backup-import-journal.json")
+            val atomic = android.util.AtomicFile(journal)
+            val stream = atomic.startWrite()
+            try { stream.write(JSONArray(ids).toString().toByteArray()); atomic.finishWrite(stream) }
+            catch (e: Exception) { atomic.failWrite(stream); throw e }
+            ids.forEach { id -> check(File(staging, id).renameTo(File(root, id))) { "Could not publish restored app" } }
+            writeIndex(current + ids)
+            // The index is the commit point; cleanup cannot turn success into a rollback.
+            journal.delete()
+            ids.map { SubappRecord(it, File(root, it)) }
+        } catch (e: Exception) {
+            recoverBackupImport()
+            throw e
+        } finally { staging.deleteRecursively() }
+    }
+
+    private fun recoverBackupImport() {
+        val journal = File(root, "backup-import-journal.json")
+        val atomic = android.util.AtomicFile(journal)
+        if (journal.exists() || File(root, "backup-import-journal.json.bak").exists()) {
+            val array = JSONArray(atomic.openRead().bufferedReader().use { it.readText() })
+            val registered = JSONArray(index.takeIf { it.isFile }?.readText() ?: "[]")
+            val retained = (0 until registered.length()).map { registered.getString(it) }.toSet()
+            for (number in 0 until array.length()) {
+                val id = array.getString(number)
+                require(validId(id)) { "Invalid backup recovery identity" }
+                if (id !in retained) check(!File(root, id).exists() || File(root, id).deleteRecursively()) { "Could not recover backup import" }
+            }
+            atomic.delete()
+        }
+        File(root, "backup-import-staging").let { check(!it.exists() || it.deleteRecursively()) { "Could not clean backup staging" } }
     }
 
     private fun migrateLegacyWorkspace() {

@@ -124,6 +124,61 @@ class LibraryReorderDeviceTest {
         } finally { assertTrue(directory.setWritable(true, true)) }
     }
 
+    @Test fun settingsExportAndRestoreUseDocumentContracts() = fixture { repository, _, scenario ->
+        val context = instrumentation.targetContext
+        val before = repository.list().map { it.id }
+        val file = java.io.File(context.cacheDir, "exports/library-ui-test.zip")
+        file.parentFile!!.mkdirs()
+        file.writeBytes(byteArrayOf())
+        val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        fun picker(action: String) = instrumentation.addMonitor(android.content.IntentFilter(action).apply { addCategory(Intent.CATEGORY_OPENABLE); addDataType("*/*") },
+            android.app.Instrumentation.ActivityResult(android.app.Activity.RESULT_OK, Intent().setData(uri)), true)
+        fun settings() {
+            scenario.onActivity { activity -> activity.findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.library_toolbar).menu.performIdentifierAction(R.id.action_settings, 0) }
+            instrumentation.waitForIdleSync()
+        }
+        fun completion() {
+            val deadline = SystemClock.uptimeMillis() + 15_000
+            while (true) {
+                try {
+                    androidx.test.espresso.Espresso.onView(androidx.test.espresso.matcher.ViewMatchers.withText(R.string.backup_complete)).inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog())
+                        .check(androidx.test.espresso.assertion.ViewAssertions.matches(androidx.test.espresso.matcher.ViewMatchers.isDisplayed()))
+                    break
+                } catch (error: androidx.test.espresso.NoMatchingViewException) {
+                    if (SystemClock.uptimeMillis() > deadline) throw error
+                    SystemClock.sleep(100)
+                }
+            }
+            androidx.test.espresso.Espresso.onView(androidx.test.espresso.matcher.ViewMatchers.withId(android.R.id.button1)).inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog())
+                .perform(androidx.test.espresso.action.ViewActions.click())
+        }
+        val export = picker(Intent.ACTION_CREATE_DOCUMENT)
+        try {
+            settings()
+            androidx.test.espresso.Espresso.onView(androidx.test.espresso.matcher.ViewMatchers.withId(R.id.settings_backup_export)).inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog())
+                .perform(androidx.test.espresso.action.ViewActions.click())
+            completion()
+            assertEquals(1, export.hits)
+            assertTrue(file.length() > 0)
+        } finally { instrumentation.removeMonitor(export) }
+        val restore = picker(Intent.ACTION_OPEN_DOCUMENT)
+        try {
+            settings()
+            androidx.test.espresso.Espresso.onView(androidx.test.espresso.matcher.ViewMatchers.withId(R.id.settings_backup_restore)).inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog())
+                .perform(androidx.test.espresso.action.ViewActions.click())
+            androidx.test.espresso.Espresso.onView(androidx.test.espresso.matcher.ViewMatchers.withId(android.R.id.button1)).inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog())
+                .perform(androidx.test.espresso.action.ViewActions.click())
+            completion()
+            assertEquals(1, restore.hits)
+            assertEquals(before.size * 2, repository.list().size)
+            assertEquals(before, repository.list().take(before.size).map { it.id })
+        } finally {
+            instrumentation.removeMonitor(restore)
+            repository.list().filter { it.id !in before }.forEach { repository.delete(it.id) }
+            file.delete()
+        }
+    }
+
     @Test fun accessibilityMoveDownUsesSamePersistedOrder() = fixture { repository, records, scenario ->
         scenario.onActivity { activity ->
             val card = activity.findViewById<RecyclerView>(R.id.app_list).findViewHolderForAdapterPosition(1)!!.itemView
