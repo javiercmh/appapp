@@ -1,6 +1,7 @@
 package com.wynh.appapp.updates
 
 import com.google.gson.Gson
+import com.google.gson.JsonParser
 import java.io.File
 
 /** Native metadata stays beside the workspace, outside packages and web bridge access. */
@@ -17,11 +18,16 @@ class WorkspaceUpdater(private val directory: File) {
 
     fun installed(): InstalledUpdate? = if (state.isFile) gson.fromJson(state.readText(), InstalledUpdate::class.java) else null
 
+    fun currentVersion(): String? = runCatching {
+        val value = JsonParser.parseString(File(workspace, "manifest.json").readText()).asJsonObject.get("version")
+        if (value?.isJsonPrimitive == true && value.asJsonPrimitive.isString) value.asString.takeIf { it.isNotBlank() } else null
+    }.getOrNull()
+
     /** Compares publisher content, independently of local edits and unrelated repository commits. */
     fun publisherUnchanged(pkg: UpdatePackage, files: File): Boolean {
         val old = installed() ?: return false
         return old.appId == pkg.appId && old.source == pkg.source &&
-            old.version == pkg.version && old.seeds == pkg.seeds &&
+            currentVersion() == pkg.version && old.version == pkg.version && old.seeds == pkg.seeds &&
             old.hashes == pkg.managed.associateWith { digest(File(files, it)) }
     }
 
