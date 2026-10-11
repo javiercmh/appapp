@@ -28,6 +28,7 @@ import java.io.FileInputStream
 
 /** Standalone document task bound to the app ID encoded in its launch URI. */
 class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
+    private var speechSession: com.wynh.appapp.speech.SpeechSession? = null
     private var webView: WebView? = null
     private var activeId: String? = null
     private var didInitialResume = false
@@ -56,6 +57,7 @@ class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
         val id = uri?.lastPathSegment
         val record = id?.let { SubappRepository(this).resolve(it) }
         if (record == null) {
+            speechSession?.close(); speechSession = null
             webView?.destroy(); webView = null
             setContentView(TextView(this).apply {
                 text = "App no longer available"
@@ -67,13 +69,15 @@ class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
         }
         if (activeId == record.id && webView != null) return
         activeId?.let { SubappSessionRegistry.unregister(it, this) }
+        speechSession?.close()
         webView?.destroy()
         activeId = record.id
         val manager = WorkspaceManager(this, workspaceDir = record.workspaceDir)
         updateTaskAppearance(manager)
         SubappSessionRegistry.register(record.id, this)
         val root = FrameLayout(this)
-        val web = WebView(this)
+        val web = com.wynh.appapp.speech.SpeechWebView(this)
+        speechSession = com.wynh.appapp.speech.SpeechSession(this, web, record.id).also { it.install() }
         webView = web
         root.addView(web, FrameLayout.LayoutParams(-1, -1))
         setContentView(root)
@@ -104,6 +108,10 @@ class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
         }
         com.wynh.appapp.updates.UpdateWebMessageBridge(this, web, record).install()
         web.webViewClient = object : WebViewClient() {
+            override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                speechSession?.pageChanged()
+                super.onPageStarted(view, url, favicon)
+            }
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
                 ViewCompat.requestApplyInsets(root)
@@ -145,6 +153,7 @@ class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
     }
 
     override fun onResume() {
+        speechSession?.resume()
         super.onResume()
         (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.auth?.setForeground(true)
         if (didInitialResume) {
@@ -159,6 +168,7 @@ class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
     }
 
     override fun onPause() {
+        speechSession?.pause()
         (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.auth?.setForeground(false)
         super.onPause()
     }
@@ -174,12 +184,14 @@ class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
     }
 
     override fun pauseForUpdate() {
+        speechSession?.pause()
         webView?.onPause()
         webView?.pauseTimers()
         webView?.visibility = android.view.View.INVISIBLE
     }
 
     override fun resumeAfterUpdate() {
+        speechSession?.resume()
         webView?.resumeTimers()
         webView?.onResume()
         webView?.visibility = android.view.View.VISIBLE
@@ -187,6 +199,7 @@ class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
     }
 
     override fun onDestroy() {
+        speechSession?.close()
         if (isFinishing) (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.cancelTask(taskId)
         activeId?.let { SubappSessionRegistry.unregister(it, this) }
         chooserCallback?.onReceiveValue(null); chooserCallback = null

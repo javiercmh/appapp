@@ -1,0 +1,28 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+const source = fs.readFileSync('app/src/main/assets/starter_template/js/bridge.js', 'utf8');
+const load = suffix => import(`data:text/javascript;base64,${Buffer.from(source + '\n//' + suffix).toString('base64')}`);
+globalThis.window = {AndroidStorage: {}};
+let {speech} = await load('browser');
+assert.equal(speech.available, false);
+await assert.rejects(speech.speak({text:'Bonjour',language:'fr-FR'}), {code:'unavailable'});
+const requests = [];
+window.AppSpeech = {postMessage: raw => requests.push(JSON.parse(raw))};
+({speech} = await load('native'));
+const respond = value => window.AppSpeech.onmessage({data: JSON.stringify(value)});
+const playing = speech.speak({text:'Bonjour',language:'fr-FR'});
+assert.equal(requests[0].options.language, 'fr-FR');
+respond({id:requests[0].id,value:{status:'completed'}});
+assert.deepEqual(await playing, {status:'completed'});
+const cancelled = speech.speak({text:'Hallo',language:'de'});
+respond({id:requests[1].id,value:{status:'cancelled'}});
+assert.deepEqual(await cancelled, {status:'cancelled'});
+const failure = speech.speak({text:'x',language:'xx'});
+respond({id:requests[2].id,error:{code:'language',message:'Unsupported language'}});
+await assert.rejects(failure, {code:'language', message:'Unsupported language'});
+const voices = speech.voices();
+respond({id:requests[3].id,value:{voices:[{id:'voice',language:'fr-FR',requiresNetwork:true}]}});
+assert.equal((await voices).voices[0].requiresNetwork,true);
+const stop = speech.stop(); respond({id:requests[4].id,value:true}); assert.equal(await stop,true);
+respond({id:requests[0].id,value:{status:'completed'}}); // Late callback is ignored.
+console.log('Speech wrapper tests passed.');
