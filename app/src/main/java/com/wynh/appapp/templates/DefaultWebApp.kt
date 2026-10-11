@@ -19,6 +19,7 @@ object DefaultWebApp {
         "js/store.js",
         "js/ui.js",
         "js/ai-demo.js",
+        "js/speech-demo.js",
         "manifest.json",
         "AGENTS.md",
         "PACKAGING.md",

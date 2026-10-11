@@ -15,6 +15,7 @@ workspace directly. The user taps **▶ Run** to reload. Keep everything vanilla
 | `index.html` | Markup and the shell. Entrypoint referencing `css/style.css` and `js/app.js`. |
 | `css/style.css` | All styling. One `--accent` custom property drives the theme colour. |
 | `js/app.js` | Entry point. Boots the app, wires modules, handles tab navigation. |
+| `js/speech-demo.js` | Multilingual pronunciation buttons using native speech. |
 | `js/ai-demo.js` | Fixed-prompt AI demo, recovery and save-before-acknowledgement workflow. |
 | `data/ai-demo.json` | Pending request metadata and latest saved response. |
 | `js/bridge.js` | **The only file that touches the native bridge.** |
@@ -128,7 +129,7 @@ the same host scheduler; background scheduling is unavailable in a plain browser
    `hasNotificationPermission()` on `focus` as a fallback. Never treat the return value as the answer.
 3. **`readFile` returns `""` for both "missing" and "empty".** Pair it with `fileExists` when the
    difference matters.
-4. **Bridge calls are synchronous and block the JS thread.** Keep payloads small. Before saving a
+4. **Storage and notification bridge calls are synchronous and block the JS thread.** AI, speech, and update wrapper methods are asynchronous. Keep payloads small. Before saving a
    photo, downscale it through a `<canvas>` (max ~1280px, `toDataURL('image/jpeg', 0.82)`) — a raw
    camera photo is several megabytes and will jank the UI. Writes over ~6 MB are rejected outright.
 5. **`writeFile` is text only.** Images and other binaries must go through `writeFileBase64`, or the
@@ -320,3 +321,56 @@ silently. Finish/save/acknowledge or cancel AI requests before updating. App² 1
 recovery journals live beside the workspace; ordinary history is not a full backup.
 See the App² repository's `docs/SUBAPP_UPDATES.md` for publisher metadata, recovery,
 version history, deterministic packaging and the phone deployment checklist.
+
+
+## Text to Speech
+
+Import `speech` from `js/bridge.js`. `speech.available` reports a supported native channel,
+not engine readiness. Browser previews reject calls with `unavailable`.
+
+- `await speech.voices()` returns `{voices: [{id, name, language, requiresNetwork}]}` from
+  Android's configured TTS engine. Discover voice IDs; do not hardcode them. Online voices
+  may transmit text through the configured engine and require connectivity.
+- `await speech.speak({text, language, voiceId?, rate?, pitch?})` requires a BCP 47 language
+  such as `fr-FR`, `de-DE`, or `ja-JP`. No language detection is performed. An explicit voice
+  must match the requested language and script. Regional fallback within that language is allowed.
+  Rate and pitch default to 1 and accept finite values from 0.5 to 2.
+- The speak Promise resolves with `{status: "completed"}` after playback or
+  `{status: "cancelled"}` after replacement/Stop. New playback replaces previous playback.
+- `await speech.stop()` resolves to `true`, including when idle.
+- Errors reject with `.code` and `.message`: `unavailable`, `invalid_request`, `language`,
+  `missing_data`, `voice`, `network`, `synthesis`, `cancelled`, or command `timeout`.
+  Missing data must be installed through Android TTS settings; do not retry automatically.
+  Empty text and text beyond Android's engine input limit are rejected.
+
+The native selection menu includes **Speak**. Mark pronunciation language with inherited HTML
+`lang`, e.g. `<span lang="ja-JP">こんにちは</span>`. Missing/conflicting annotations are rejected.
+This also works for selected text in inputs and textareas, excluding password fields.
+A native **Stop** control appears during playback. Speech stops on backgrounding, page reload,
+navigation, workspace replacement, or closure; it is not persisted or resumed.
+The channel accepts only the owning subapp HTTPS origin and main frame. No AI account is needed.
+Store any subapp voice preferences in plain JSON under `data/`. The Starter Demo includes
+`js/speech-demo.js`; existing apps adopt the API or language markup explicitly.
+
+
+### Pronunciation example
+
+Use this in a JavaScript module under `js/`:
+
+```js
+import { speech } from './bridge.js';
+if (!speech.available) throw new Error('Open this app in App² to hear pronunciation.');
+try {
+  const result = await speech.speak({text: 'Bonjour', language: 'fr-FR', rate: 0.8});
+  // result.status is "completed" or "cancelled".
+} catch (error) {
+  // Show error.message; require a deliberate retry.
+  console.error(error.code, error.message);
+}
+```
+
+For multilingual selection, annotate each passage independently:
+`<span lang="fr-FR">Bonjour</span>` and `<span lang="ja-JP">こんにちは</span>`.
+The nearest inherited `lang` wins, so an English document language does not describe a
+French word unless that word overrides it. Keep text selectable in CSS.
+Existing workspaces are not rewritten; adopt the current wrapper explicitly to add speech buttons.
