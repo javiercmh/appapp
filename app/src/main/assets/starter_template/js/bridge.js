@@ -311,3 +311,40 @@ export const updates = {
     });
   }
 };
+
+// Native speech; the language always comes from the subapp.
+const SPEECH = window.AppSpeech || null;
+const speechRequests = new Map();
+if (SPEECH) SPEECH.onmessage = event => {
+  let message;
+  try { message = JSON.parse(event.data); } catch { return; }
+  const pending = speechRequests.get(message.id);
+  if (!pending) return;
+  speechRequests.delete(message.id);
+  clearTimeout(pending.timer);
+  if (message.error) {
+    const error = new Error(message.error.message);
+    error.code = message.error.code;
+    pending.reject(error);
+  } else pending.resolve(message.value);
+};
+function speechCommand(action, options) {
+  if (!SPEECH) return Promise.reject(Object.assign(new Error('Speech requires a supported App² host.'), {code: 'unavailable'}));
+  const id = `speech-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return new Promise((resolve, reject) => {
+    // Playback finishes through the native utterance callback, not a command timeout.
+    const timer = action === 'speak' ? null : setTimeout(() => {
+      speechRequests.delete(id);
+      reject(Object.assign(new Error('Speech command timed out.'), {code: 'timeout'}));
+    }, 15000);
+    speechRequests.set(id, {resolve, reject, timer});
+    try { SPEECH.postMessage(JSON.stringify({id, action, options})); }
+    catch (error) { clearTimeout(timer); speechRequests.delete(id); reject(error); }
+  });
+}
+export const speech = {
+  available: Boolean(SPEECH),
+  voices: () => speechCommand('voices'),
+  speak: options => speechCommand('speak', options),
+  stop: () => speechCommand('stop')
+};

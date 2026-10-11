@@ -17,6 +17,7 @@
 - **Launch from your home screen** with a shortcut that opens the app in its own screen.
 - **Save real files** for notes, settings, photos, and other data. Each app has its own workspace.
 - **Use Android features** including notifications, scheduled reminders, and photo selection.
+- **Read text aloud** using Android text-to-speech. Subapps can pronounce words in different languages or let you select text and tap Speak.
 - **Add AI features** through a shared ChatGPT connection in library Settings → AI. Apps can choose models and reasoning levels, generate text, and cancel requests.
 - **Keep and share your apps** with workspace snapshots, ZIP import/export, and Android sharing.
 
@@ -26,7 +27,7 @@
 2. Tap an app to run it, or **Edit** to change its files.
 3. Choose **Install** to add a home-screen shortcut.
 
-The Starter Demo includes working examples of file storage, photos, notifications, and AI, plus a guide to building your own app. App² runs on **Android 8.0 or newer**.
+The Starter Demo includes working examples of file storage, photos, notifications, text-to-speech, and AI, plus a guide to building your own app. App² runs on **Android 8.0 or newer**.
 
 ## For developers
 
@@ -34,6 +35,7 @@ Subapps use standard HTML, CSS, and JavaScript, with a native bridge for Android
 
 - [Subapp packaging and bridge reference](app/src/main/assets/starter_template/PACKAGING.md)
 - [AI integration guide](docs/AI.md)
+- [Text to Speech guide](docs/TEXT_TO_SPEECH.md)
 - [Starter Demo source](app/src/main/assets/starter_template/)
 - [Host architecture and development guidelines](AGENTS.md)
 

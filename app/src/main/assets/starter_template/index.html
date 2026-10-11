@@ -37,6 +37,16 @@
 
     <div id="feed" class="feed"></div>
 
+    <div class="card">
+      <h2>Native pronunciation</h2>
+      <p><span lang="es-CL">Hola</span> · <span lang="de-DE">Guten Tag</span> · <span lang="ja-JP">こんにちは</span></p>
+      <div class="row">
+        <button class="btn btn-ghost" data-speech-language="es-CL" data-speech-text="Hola">Spanish</button>
+        <button class="btn btn-ghost" data-speech-language="de-DE" data-speech-text="Guten Tag">German</button>
+        <button class="btn btn-ghost" data-speech-language="ja-JP" data-speech-text="こんにちは">Japanese</button>
+      </div>
+      <p id="speech-status" class="muted" aria-live="polite"></p>
+    </div>
     <div class="card" id="ai-example">
       <h2>AI example</h2>
       <p id="ai-description" class="muted">Ask ChatGPT a fixed sample question using App²’s native AI bridge.</p>
@@ -143,6 +153,22 @@ await ai.acknowledge(id);</code></pre>
     </div>
 
     <div class="card">
+      <h2>Text to Speech</h2>
+      <p class="muted">Select a word or sentence and choose <strong>Speak</strong>, or add a pronunciation button. App² uses Android’s configured speech engine; no AI connection is needed.</p>
+      <pre class="code-sample">import { speech } from './bridge.js';
+await speech.speak({
+  text: 'Hola',
+  language: 'es-CL',
+  rate: 0.8
+});
+await speech.stop();</pre>
+      <p class="muted">Supply a language for every request. For selected text, annotate each passage: <code>&lt;span lang="es-CL"&gt;Hola&lt;/span&gt;</code>. App² inherits the nearest <code>lang</code> and rejects selections with missing or conflicting languages.</p>
+      <p class="muted"><code>speech.voices()</code> discovers voice IDs, languages, and whether each voice requires a network connection. <code>speech.available</code> reports the native channel; browser previews cannot play speech.</p>
+      <p class="muted">The Speak promise finishes when playback completes or is cancelled. New speech replaces previous speech; Stop, backgrounding, and reload end playback. Show errors and retry only after a user action. Installed voice data determines available languages.</p>
+      <p class="muted">Try the pronunciation buttons in the Demo tab. Read the <strong>Text to Speech</strong> section in <code>PACKAGING.md</code> for voice options, failure codes, and lifecycle rules.</p>
+    </div>
+
+    <div class="card">
       <h2>Your app's files</h2>
       <div id="file-list" class="file-groups"></div>
       <p id="storage-line" class="muted"></p>
@@ -190,5 +216,6 @@ await ai.acknowledge(id);</code></pre>
   </nav>
 
   <script type="module" src="js/app.js"></script>
+  <script type="module" src="js/speech-demo.js"></script>
 </body>
 </html>
