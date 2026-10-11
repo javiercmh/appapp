@@ -7,10 +7,8 @@
     <androidx.core.widget.NestedScrollView android:layout_width="match_parent" android:layout_height="wrap_content" android:fillViewport="true">
         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="20dp">
             <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
-                <ImageView android:layout_width="28dp" android:layout_height="28dp" android:contentDescription="@null" android:src="@drawable/ic_download" app:tint="@color/accent_blue" />
-                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="12dp" android:orientation="vertical">
-                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/library_import" android:textSize="18sp" android:textStyle="bold" android:textColor="@color/on_surface" android:accessibilityHeading="true" />
-                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:text="@string/library_import_subtitle" android:textSize="12sp" android:textColor="@color/on_surface_muted" />
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/library_new" android:textSize="18sp" android:textStyle="bold" android:textColor="@color/on_surface" android:accessibilityHeading="true" />
                 </LinearLayout>
                 <com.google.android.material.button.MaterialButton android:id="@+id/import_close" style="@style/Widget.Material3.Button.TextButton" android:layout_width="48dp" android:layout_height="48dp" android:minWidth="0dp" android:padding="12dp" android:contentDescription="@string/close" app:icon="@drawable/ic_close" app:iconPadding="0dp" app:iconTint="@color/on_surface_muted" />
             </LinearLayout>
@@ -25,6 +23,10 @@
             <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/library_import_zip" android:textSize="14sp" android:textStyle="bold" android:textColor="@color/on_surface" />
             <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="@string/library_import_zip_desc" android:textSize="12sp" android:textColor="@color/on_surface_muted" />
             <com.google.android.material.button.MaterialButton android:id="@+id/import_zip" style="@style/Widget.Material3.Button.TonalButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp" android:layout_marginTop="10dp" android:text="@string/library_import_choose_zip" android:textAllCaps="false" android:textColor="@color/on_surface" app:backgroundTint="@color/surface_elevated" app:icon="@drawable/ic_archive" app:iconTint="@color/accent_blue" app:cornerRadius="12dp" />
+            <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginVertical="20dp" android:background="@color/border_color" />
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/library_starter_demo" android:textSize="14sp" android:textStyle="bold" android:textColor="@color/on_surface" />
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="@string/library_starter_demo_desc" android:textSize="12sp" android:textColor="@color/on_surface_muted" />
+            <com.google.android.material.button.MaterialButton android:id="@+id/create_starter" style="@style/Widget.Material3.Button.TonalButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp" android:layout_marginTop="10dp" android:text="@string/library_start_template" android:textAllCaps="false" android:textColor="@color/on_surface" app:backgroundTint="@color/surface_elevated" app:icon="@drawable/ic_code" app:iconTint="@color/accent_blue" app:cornerRadius="12dp" />
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 </com.google.android.material.card.MaterialCardView>

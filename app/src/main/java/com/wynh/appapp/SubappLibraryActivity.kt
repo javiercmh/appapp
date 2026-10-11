@@ -1,5 +1,17 @@
 package com.wynh.appapp
 
+import java.util.Locale
+
+import androidx.core.content.FileProvider
+
+import com.google.android.material.checkbox.MaterialCheckBox
+
+import android.view.LayoutInflater
+
+import android.widget.LinearLayout
+
+import com.wynh.appapp.workspace.WorkspacePackageManager
+
 import android.Manifest
 import android.app.Dialog
 import android.os.Build
@@ -74,31 +86,197 @@ class SubappLibraryActivity : AppCompatActivity() {
             .setMessage(R.string.backup_restore_confirm).setNegativeButton(R.string.cancel, null)
             .setPositiveButton(R.string.backup_restore) { _, _ -> backups.restore(uri) }.show()
     }
+    private var pendingExportFiles: Set<String>? = null
+    private var pendingExportId: String? = null
+    private val saveZipLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri: Uri? ->
+        val filesToExport = pendingExportFiles
+        val record = pendingExportId?.let(repository::resolve)
+        if (uri != null && filesToExport != null && record != null) {
+            try {
+                (contentResolver.openOutputStream(uri) ?: error("Cannot open destination")).use { os ->
+                    WorkspacePackageManager.exportToOutputStream(WorkspaceManager(this, workspaceDir = record.workspaceDir), filesToExport, os)
+                }
+                android.util.Log.d("AppApp", "[Package] Saved ${filesToExport.size} files to ZIP via Storage Access Framework.")
+                Toast.makeText(this, getString(R.string.export_success, filesToExport.size), Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                android.util.Log.d("AppApp", "[Package Error] Failed to write ZIP: ${e.message}")
+                Toast.makeText(this, "Save failed: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+        pendingExportFiles = null
+        pendingExportId = null
+    }
+
+    private fun showPackageDialog(record: SubappRecord) {
+        val workspaceManager = WorkspaceManager(this, workspaceDir = record.workspaceDir)
+        val dialog = Dialog(this, com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog)
+        dialog.setContentView(R.layout.dialog_package)
+        dialog.window?.setLayout(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+
+        val filesContainer = dialog.findViewById<LinearLayout>(R.id.package_files_container)
+        val nameInput = dialog.findViewById<EditText>(R.id.package_name_input)
+        val masterCheckbox = dialog.findViewById<MaterialCheckBox>(R.id.package_master_checkbox)
+        val masterCheckboxRow = dialog.findViewById<LinearLayout>(R.id.package_master_checkbox_row)
+        val btnShareZip = dialog.findViewById<MaterialButton>(R.id.package_btn_share_zip)
+        val btnSaveZip = dialog.findViewById<MaterialButton>(R.id.package_btn_save_zip)
+        val btnClose = dialog.findViewById<MaterialButton>(R.id.package_btn_close)
+
+        // Attempt to prefill package name from manifest.json
+        val defaultPackageName = try {
+            val config = AppIdentityManager(this, record).load()
+            config.name.lowercase().replace(Regex("[^a-z0-9_-]"), "_")
+        } catch (_: Exception) {
+            "my_app"
+        }
+        nameInput.setText(defaultPackageName)
+
+        val workspaceFiles = workspaceManager.listFiles()
+        val selectedFiles = workspaceFiles.map { it.name }.toMutableSet()
+        val checkboxMap = mutableMapOf<String, MaterialCheckBox>()
+
+        fun updateMasterCheckboxState() {
+            masterCheckbox.checkedState = when {
+                workspaceFiles.isEmpty() || selectedFiles.isEmpty() -> MaterialCheckBox.STATE_UNCHECKED
+                selectedFiles.size == workspaceFiles.size -> MaterialCheckBox.STATE_CHECKED
+                else -> MaterialCheckBox.STATE_INDETERMINATE
+            }
+        }
+
+        fun formatFileSize(bytes: Long): String {
+            return when {
+                bytes < 1024 -> "$bytes B"
+                bytes < 1024 * 1024 -> String.format(Locale.getDefault(), "%.1f KB", bytes / 1024.0)
+                else -> String.format(Locale.getDefault(), "%.1f MB", bytes / (1024.0 * 1024.0))
+            }
+        }
+
+        fun getFileEmoji(name: String): String {
+            val lower = name.lowercase()
+            return when {
+                lower.endsWith(".html") || lower.endsWith(".htm") -> "🌐"
+                lower.endsWith(".css") -> "🎨"
+                lower.endsWith(".js") || lower.endsWith(".mjs") -> "⚡"
+                lower.endsWith(".json") -> "📦"
+                else -> "📄"
+            }
+        }
+
+        filesContainer.removeAllViews()
+        val inflater = LayoutInflater.from(this)
+
+        for (file in workspaceFiles) {
+            val itemView = inflater.inflate(R.layout.item_export_file_checkbox, filesContainer, false)
+            val iconView = itemView.findViewById<TextView>(R.id.export_item_icon)
+            val nameView = itemView.findViewById<TextView>(R.id.export_item_name)
+            val sizeView = itemView.findViewById<TextView>(R.id.export_item_size)
+            val checkBox = itemView.findViewById<MaterialCheckBox>(R.id.export_item_checkbox)
+
+            iconView.text = getFileEmoji(file.name)
+            nameView.text = file.name
+            sizeView.text = formatFileSize(file.size)
+            checkBox.isChecked = true
+            checkboxMap[file.name] = checkBox
+
+            val toggleAction = {
+                val newState = !checkBox.isChecked
+                checkBox.isChecked = newState
+                if (newState) selectedFiles.add(file.name) else selectedFiles.remove(file.name)
+                updateMasterCheckboxState()
+            }
+
+            itemView.setOnClickListener { toggleAction() }
+            checkBox.setOnClickListener {
+                if (checkBox.isChecked) selectedFiles.add(file.name) else selectedFiles.remove(file.name)
+                updateMasterCheckboxState()
+            }
+
+            filesContainer.addView(itemView)
+        }
+
+        val toggleMaster = {
+            val shouldSelectAll = selectedFiles.size < workspaceFiles.size
+            selectedFiles.clear()
+            if (shouldSelectAll) {
+                for (file in workspaceFiles) {
+                    selectedFiles.add(file.name)
+                    checkboxMap[file.name]?.isChecked = true
+                }
+            } else {
+                for (cb in checkboxMap.values) {
+                    cb.isChecked = false
+                }
+            }
+            updateMasterCheckboxState()
+        }
+
+        masterCheckbox.setOnClickListener { toggleMaster() }
+        masterCheckboxRow.setOnClickListener { toggleMaster() }
+
+        updateMasterCheckboxState()
+
+        btnShareZip.setOnClickListener {
+            if (selectedFiles.isEmpty()) {
+                Toast.makeText(this, R.string.export_no_files_selected, Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            val rawName = nameInput.text?.toString() ?: ""
+            val customPackageName = WorkspacePackageManager.sanitizePackageName(rawName, "my_app")
+
+            try {
+                val zipFile = WorkspacePackageManager.exportToZipFile(this, workspaceManager, selectedFiles, customPackageName)
+                val contentUri = FileProvider.getUriForFile(
+                    this,
+                    "${packageName}.fileprovider",
+                    zipFile
+                )
+
+                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = "application/zip"
+                    putExtra(Intent.EXTRA_STREAM, contentUri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+
+                startActivity(Intent.createChooser(shareIntent, getString(R.string.action_share_zip)))
+                android.util.Log.d("AppApp", "[Package] Exported ${selectedFiles.size} files to '$customPackageName.zip' and triggered Sharesheet.")
+            } catch (e: Exception) {
+                android.util.Log.d("AppApp", "[Package Error] Export failed: ${e.message}")
+                Toast.makeText(this, "Export failed: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        btnSaveZip.setOnClickListener {
+            if (selectedFiles.isEmpty()) {
+                Toast.makeText(this, R.string.export_no_files_selected, Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            val rawName = nameInput.text?.toString() ?: ""
+            val customPackageName = WorkspacePackageManager.sanitizePackageName(rawName, "my_app")
+
+            pendingExportFiles = selectedFiles.toSet()
+            pendingExportId = record.id
+            saveZipLauncher.launch("$customPackageName.zip")
+        }
+
+        btnClose.setOnClickListener {
+            dialog.dismiss()
+        }
+
+        dialog.show()
+    }
+
     private var rowsReady = false
     private val displayedRecords = mutableListOf<SubappRecord>()
-    private var configuringRecord: SubappRecord? = null
-    private var pendingConfigIcon: ByteArray? = null
-    private var resetConfigIcon = false
-    private var configNameDraft = ""
-    private var configDescriptionDraft = ""
-    private var hasConfigDraft = false
-    private var configNameInput: EditText? = null
-    private var configDescriptionInput: EditText? = null
-    private var configIconPreview: ImageView? = null
     private lateinit var header: LibraryHeaderBinding
     private lateinit var libraryAdapter: LibraryAdapter
     private lateinit var touchHelper: ItemTouchHelper
     private var reorderOriginal = emptyList<SubappRecord>()
     private var dragCancelled = false
     private val stableIds = mutableMapOf<String, Long>()
-    private val pickConfigIcon = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        val record = configuringRecord
-        if (uri != null && record != null) ImageCropManager.openCropper(this, uri) { bitmap ->
-            pendingConfigIcon = bitmapToPng(bitmap)
-            resetConfigIcon = false
-            refreshConfigIconPreview(record)
-        }
-    }
     private val importLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) importApp(uri)
     }
@@ -107,6 +285,8 @@ class SubappLibraryActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         repository = SubappRepository(this)
         repository.ensureMigrated()
+        pendingExportId = savedInstanceState?.getString("export_app_id")
+        pendingExportFiles = savedInstanceState?.getStringArrayList("export_files")?.toSet()
         showLibrary()
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -127,25 +307,11 @@ class SubappLibraryActivity : AppCompatActivity() {
                 }
             }
         }
-        if (savedInstanceState != null) {
-            val id = savedInstanceState.getString("config_record_id")
-            configuringRecord = id?.let(repository::resolve)
-            pendingConfigIcon = savedInstanceState.getByteArray("config_icon")
-            resetConfigIcon = savedInstanceState.getBoolean("config_reset_icon")
-            configNameDraft = savedInstanceState.getString("config_name").orEmpty()
-            configDescriptionDraft = savedInstanceState.getString("config_description").orEmpty()
-            hasConfigDraft = savedInstanceState.getBoolean("config_has_draft")
-            configuringRecord?.let(::showConfigure)
-        }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
-        configuringRecord?.let { outState.putString("config_record_id", it.id) }
-        outState.putByteArray("config_icon", pendingConfigIcon)
-        outState.putBoolean("config_reset_icon", resetConfigIcon)
-        outState.putString("config_name", configNameInput?.text?.toString() ?: configNameDraft)
-        outState.putString("config_description", configDescriptionInput?.text?.toString() ?: configDescriptionDraft)
-        outState.putBoolean("config_has_draft", configuringRecord != null)
+        outState.putString("export_app_id", pendingExportId)
+        pendingExportFiles?.let { outState.putStringArrayList("export_files", ArrayList(it)) }
         super.onSaveInstanceState(outState)
     }
 
@@ -230,10 +396,7 @@ class SubappLibraryActivity : AppCompatActivity() {
             }
         })
         touchHelper.attachToRecyclerView(binding.appList)
-        header.newApp.setOnClickListener { edit(repository.createStarter()) }
-        header.importApp.setOnClickListener {
-            showImportOptions()
-        }
+        header.newApp.setOnClickListener { showNewAppMenu() }
         rowsReady = true
         refreshRows()
     }
@@ -400,19 +563,12 @@ class SubappLibraryActivity : AppCompatActivity() {
             else row.appIcon.setImageResource(R.mipmap.ic_launcher_round)
             row.appName.text = name
             row.appDescription.text = manifest.optString("description").ifBlank { getString(R.string.library_app_fallback) }
-            row.editApp.contentDescription = getString(R.string.library_edit_app, name)
             row.appCard.contentDescription = getString(R.string.library_open_app, name)
             row.appCard.setOnClickListener { open(record) }
-            row.editApp.setOnClickListener { edit(record) }
-            row.installApp.contentDescription = getString(R.string.library_install_app, name)
-            row.installApp.setOnClickListener {
-                val requested = AppIdentityManager(this@SubappLibraryActivity, record).requestInstall()
-                if (!requested) Toast.makeText(this@SubappLibraryActivity, R.string.shortcut_request_failed, Toast.LENGTH_LONG).show()
-            }
             row.appMenu.contentDescription = getString(R.string.library_menu, name)
             row.appMenu.setOnClickListener { anchor ->
                 val content = layoutInflater.inflate(R.layout.popup_library_actions, null)
-                val popup = PopupWindow(content, resources.getDimensionPixelSize(R.dimen.library_actions_popup_width), resources.getDimensionPixelSize(R.dimen.library_actions_popup_height), true).apply {
+                val popup = PopupWindow(content, resources.getDimensionPixelSize(R.dimen.library_actions_popup_width), ViewGroup.LayoutParams.WRAP_CONTENT, true).apply {
                     elevation = resources.getDimension(R.dimen.library_actions_popup_elevation)
                     setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
                     isOutsideTouchable = true
@@ -425,10 +581,13 @@ class SubappLibraryActivity : AppCompatActivity() {
                     popup.dismiss()
                     confirmDelete(record, name)
                 }
-                content.findViewById<View>(R.id.configure_app).setOnClickListener {
+                content.findViewById<View>(R.id.install_app).setOnClickListener {
                     popup.dismiss()
-                    showConfigure(record)
+                    if (!AppIdentityManager(this@SubappLibraryActivity, record).requestInstall())
+                        Toast.makeText(this@SubappLibraryActivity, R.string.shortcut_request_failed, Toast.LENGTH_LONG).show()
                 }
+                content.findViewById<View>(R.id.share_app).setOnClickListener { popup.dismiss(); showPackageDialog(record) }
+                content.findViewById<View>(R.id.edit_app).setOnClickListener { popup.dismiss(); edit(record) }
                 popup.showAsDropDown(anchor, -resources.getDimensionPixelSize(R.dimen.library_actions_popup_width) + anchor.width, 0)
             }
         }
@@ -482,97 +641,6 @@ class SubappLibraryActivity : AppCompatActivity() {
         startActivity(Intent(this, MainActivity::class.java).putExtra(MainActivity.EXTRA_SUBAPP_ID, record.id))
     }
 
-    private fun showConfigure(record: SubappRecord) {
-        val restoringDraft = hasConfigDraft
-        configuringRecord = record
-        val content = layoutInflater.inflate(R.layout.dialog_app_config, null)
-        val dialog = Dialog(this)
-        dialog.setContentView(content)
-        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-        val identity = AppIdentityManager(this, record)
-        val existing = identity.load()
-        val name = content.findViewById<EditText>(R.id.config_input_app_name)
-        val description = content.findViewById<EditText>(R.id.config_input_app_desc)
-        val iconPreview = content.findViewById<ImageView>(R.id.config_app_icon_preview)
-        configNameInput = name
-        configDescriptionInput = description
-        configIconPreview = iconPreview
-        name.setText(if (restoringDraft) configNameDraft else existing.name)
-        description.setText(if (restoringDraft) configDescriptionDraft else existing.description)
-        hasConfigDraft = true
-        refreshConfigIconPreview(record)
-        content.findViewById<MaterialButton>(R.id.config_btn_pick_icon).setOnClickListener { pickConfigIcon.launch("image/*") }
-        content.findViewById<MaterialButton>(R.id.config_btn_reset_icon).setOnClickListener {
-            pendingConfigIcon = null
-            resetConfigIcon = true
-            refreshConfigIconPreview(record)
-        }
-        content.findViewById<MaterialButton>(R.id.config_btn_cancel).setOnClickListener {
-            clearConfigDraft()
-            dialog.dismiss()
-        }
-        content.findViewById<MaterialButton>(R.id.config_btn_save).setOnClickListener {
-            val newName = name.text.toString().trim()
-            if (newName.isBlank()) {
-                name.error = getString(R.string.library_name_required)
-                return@setOnClickListener
-            }
-            name.error = null
-            val iconChange = when {
-                resetConfigIcon -> AppIdentityManager.IconChange.Reset
-                pendingConfigIcon != null -> AppIdentityManager.IconChange.Replace(pendingConfigIcon!!)
-                else -> AppIdentityManager.IconChange.Keep
-            }
-            if (identity.save(newName, description.text.toString().trim(), iconChange)) {
-                identity.refreshPinnedShortcut()
-                clearConfigDraft()
-                dialog.dismiss()
-                refreshRows()
-                Toast.makeText(this, R.string.config_saved_toast, Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(this, R.string.library_configure_save_failed, Toast.LENGTH_LONG).show()
-            }
-        }
-        dialog.setOnCancelListener { clearConfigDraft() }
-        dialog.setOnDismissListener { if (configuringRecord != null) clearConfigDraft() }
-        dialog.show()
-        dialog.window?.setLayout(
-            minOf((resources.displayMetrics.widthPixels * 0.94).toInt(), (resources.displayMetrics.density * 520).toInt()),
-            ViewGroup.LayoutParams.WRAP_CONTENT
-        )
-        dialog.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
-    }
-
-    private fun refreshConfigIconPreview(record: SubappRecord) {
-        val preview = configIconPreview ?: return
-        val bitmap = when {
-            resetConfigIcon -> null
-            pendingConfigIcon != null -> BitmapFactory.decodeByteArray(pendingConfigIcon, 0, pendingConfigIcon!!.size)
-            else -> AppIdentityManager(this, record).load().iconPath?.let { path ->
-                val file = WorkspaceManager(this, workspaceDir = record.workspaceDir).getFile(path)
-                file.takeIf { it.isFile }?.let { BitmapFactory.decodeFile(it.absolutePath) }
-            }
-        }
-        if (bitmap == null) preview.setImageResource(R.mipmap.ic_launcher_round) else preview.setImageBitmap(bitmap)
-    }
-
-    private fun clearConfigDraft() {
-        configuringRecord = null
-        pendingConfigIcon = null
-        resetConfigIcon = false
-        configNameDraft = ""
-        configDescriptionDraft = ""
-        hasConfigDraft = false
-        configNameInput = null
-        configDescriptionInput = null
-        configIconPreview = null
-    }
-
-    private fun bitmapToPng(bitmap: Bitmap): ByteArray = java.io.ByteArrayOutputStream().use { out ->
-        bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
-        out.toByteArray()
-    }
-
     private fun confirmDelete(record: SubappRecord, name: String) {
         AlertDialog.Builder(this).setTitle("Delete $name?")
             .setMessage("Its files, data, and history will be removed. App² will disable its shortcut.")
@@ -603,11 +671,15 @@ class SubappLibraryActivity : AppCompatActivity() {
             .onFailure { repository.delete(record.id); Toast.makeText(this, "Import failed: ${it.message}", Toast.LENGTH_LONG).show() }
     }
 
-    private fun showImportOptions() {
+    private fun showNewAppMenu() {
         val content = com.wynh.appapp.databinding.DialogLibraryImportBinding.inflate(layoutInflater)
         val dialog = Dialog(this)
         dialog.setContentView(content.root)
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        content.createStarter.setOnClickListener {
+            dialog.dismiss()
+            edit(repository.createStarter())
+        }
         content.importClose.setOnClickListener { dialog.dismiss() }
         content.importZip.setOnClickListener {
             dialog.dismiss()
@@ -631,12 +703,12 @@ class SubappLibraryActivity : AppCompatActivity() {
     }
 
     private fun importFromGitHub(url: String) {
-        header.importApp.isEnabled = false
+        header.newApp.isEnabled = false
         Toast.makeText(this, R.string.library_github_downloading, Toast.LENGTH_SHORT).show()
         Thread {
             val result = com.wynh.appapp.workspace.GitHubFolderImporter.download(this, url)
             runOnUiThread {
-                header.importApp.isEnabled = true
+                header.newApp.isEnabled = true
                 result.onSuccess { folder ->
                     val record = runCatching { repository.createImportedFrom(folder) }
                     folder.deleteRecursively()

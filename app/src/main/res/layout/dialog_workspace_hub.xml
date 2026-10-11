@@ -103,6 +103,8 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
+            <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="16dp" app:cardCornerRadius="16dp"><com.google.android.material.button.MaterialButton android:id="@+id/hub_configure" style="@style/Widget.Material3.Button.TextButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:text="@string/library_configure" app:icon="@drawable/ic_tune"/></com.google.android.material.card.MaterialCardView>
+            <com.google.android.material.button.MaterialButton android:id="@+id/hub_history" style="@style/Widget.Material3.Button.TextButton" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/action_history" app:icon="@drawable/ic_history"/>
             <!-- Project Files & Directory Section -->
             <LinearLayout
                 android:layout_width="match_parent"

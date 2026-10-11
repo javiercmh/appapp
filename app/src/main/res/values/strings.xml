@@ -110,7 +110,6 @@
     <string name="library_new">New app</string>
     <string name="library_import">Import</string>
     <string name="library_import_zip">ZIP file</string>
-    <string name="library_import_subtitle">Add an app to your library</string>
     <string name="library_import_zip_desc">Choose an app archive from your device.</string>
     <string name="library_import_choose_zip">Choose ZIP file</string>
     <string name="library_import_github_action">Import from GitHub</string>
@@ -122,10 +121,9 @@
     <string name="library_github_downloading">Downloading app from GitHub…</string>
     <string name="library_imported_app">Imported %1$s</string>
     <string name="library_open">Open</string>
-    <string name="library_tap_to_open">Tap card to open</string>
     <string name="library_configure">Configure app</string>
     <string name="library_install">Add to home screen</string>
-    <string name="library_delete">Delete app</string>
+    <string name="library_delete">Delete</string>
     <string name="library_install_app">Install %1$s</string>
     <string name="library_edit">Edit</string>
     <string name="library_menu">More options for %1$s</string>
@@ -143,7 +141,7 @@
     <string name="settings_history_saved">History limit updated for all apps</string>
     <string name="library_name_label">App name</string>
     <string name="library_name_required">Enter an app name</string>
-    <string name="action_update_app">Update app</string>
+    <string name="action_update_app">Update</string>
     <string name="backup_title">Subapp backup</string>
     <string name="backup_export">Back up all subapps</string>
     <string name="backup_restore">Restore subapp backup</string>
@@ -152,4 +150,9 @@
     <string name="backup_progress">Please keep App² open while files are copied and verified.</string>
     <string name="backup_failed">Backup operation failed</string>
     <string name="backup_complete">Backup operation complete</string>
+    <string name="library_start_template">Start from template</string>
+    <string name="library_share">Share</string>
+    <string name="editor_files">Files</string>
+    <string name="library_starter_demo">Starter demo</string>
+    <string name="library_starter_demo_desc">Create an editable demo showcasing App² features.</string>
 </resources>
