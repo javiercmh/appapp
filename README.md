@@ -69,3 +69,11 @@ Use an app's library menu → **Update app** to review an update from its public
 GitHub repository. Updates replace declared app code and preserve user records.
 The editor has a separate update button; Share & Package App only exports/shares.
 Library ZIP import creates another app. See [the update and deployment guide](docs/SUBAPP_UPDATES.md).
+
+## Back up all subapps
+
+In the library, open **Settings → Subapp backup → Back up all subapps** and choose a ZIP destination. App² captures every registered workspace, including nested data files, code, manifests, images and logs, and verifies the saved archive before reporting the app count. Finish/save or cancel active AI requests before starting. Keep the verified ZIP outside the phone before tests that could affect app data; the single export replaces manually exporting each app.
+
+**Restore subapp backup** validates the complete archive and adds independent copies with fresh IDs in backup order. Existing apps remain untouched. Each restored copy receives an initial history snapshot and can be linked to its publisher through the existing Update flow. Install launcher shortcuts again if needed.
+
+The backup includes workspace files only: global App² settings, native bridge key-value state, reminders, history, publisher installation metadata, ChatGPT credentials and WebView cookies/localStorage/IndexedDB are excluded. Store subapp data in `data/` as documented above. ZIPs are limited to 2 GB of workspace content, 512 MB per file and fewer than 100,000 files; insufficient temporary storage produces an error instead of a successful backup. This multi-app format is separate from the existing single-app ZIP import/export.
