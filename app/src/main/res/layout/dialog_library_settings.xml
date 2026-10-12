@@ -76,7 +76,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="AI"
+                        android:text="AI · Provider connections"
                         android:textColor="@color/on_surface_muted"
                         android:textSize="12sp"
                         android:textStyle="bold" />
@@ -142,6 +142,75 @@
                         android:layout_marginTop="12dp"
                         android:minHeight="48dp"
                         android:text="Connect ChatGPT" />
+                    <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginVertical="16dp" android:background="@color/border_color" />
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+                        <ImageView
+                            android:layout_width="44dp"
+                            android:layout_height="44dp"
+                            android:background="@drawable/bg_ai_provider_icon"
+                            android:padding="9dp"
+                            android:src="@drawable/ic_openrouter"
+                            android:importantForAccessibility="no"
+                            app:tint="@color/on_surface" />
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginStart="12dp"
+                            android:orientation="vertical">
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="OpenRouter"
+                                android:textColor="@color/on_surface"
+                                android:textSize="17sp"
+                                android:textStyle="bold" />
+                            <TextView
+                                android:id="@+id/settings_tv_openrouter_connection"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:text="Not connected"
+                                android:textColor="@color/on_surface_muted"
+                                android:textSize="12sp"
+                                android:accessibilityLiveRegion="polite" />
+                        </LinearLayout>
+                        <ImageButton
+                            android:id="@+id/settings_btn_openrouter_more"
+                            android:layout_width="48dp"
+                            android:layout_height="48dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:contentDescription="OpenRouter connection options"
+                            android:src="@drawable/ic_more_vertical"
+                            app:tint="@color/on_surface_muted" />
+                    </LinearLayout>
+                    <TextView android:id="@+id/settings_tv_openrouter_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="Not connected" android:textColor="@color/on_surface_muted" android:textSize="13sp" android:accessibilityLiveRegion="polite" />
+                    <com.google.android.material.button.MaterialButton android:id="@+id/settings_btn_openrouter_key" style="@style/Widget.Material3.Button" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:minHeight="48dp" android:text="Add OpenRouter key" />
+                    <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/settings_switch_openrouter_paid" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp" android:text="Allow paid OpenRouter models" android:textColor="@color/on_surface" />
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Free models have rate and daily limits and may be unavailable. Paid models use your OpenRouter credits. Prices are checked before generation." android:textColor="@color/on_surface_muted" android:textSize="12sp" />
+                    <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginVertical="16dp" android:background="@color/border_color" />
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Available to subapps" android:textColor="@color/on_surface" android:textSize="17sp" android:textStyle="bold" />
+                    <TextView android:id="@+id/settings_tv_ai_exposure" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:textColor="@color/on_surface_muted" android:textSize="13sp" android:accessibilityLiveRegion="polite" />
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/settings_input_ai_exposure"
+                        style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:hint="Provider">
+                        <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                            android:id="@+id/settings_dropdown_ai_exposure"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="none"
+                            android:importantForAutofill="no"
+                            android:minHeight="48dp"
+                            android:textColor="@color/on_surface" />
+                    </com.google.android.material.textfield.TextInputLayout>
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 

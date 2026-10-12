@@ -7,8 +7,11 @@ import android.webkit.WebView
 import androidx.core.content.ContextCompat
 import androidx.webkit.WebMessageCompat
 import androidx.webkit.WebViewCompat
-import com.google.gson.JsonObject
 import com.wynh.appapp.ai.auth.AuthRepository
+import com.wynh.appapp.ai.auth.EncryptedApiKeyStore
+import com.wynh.appapp.ai.network.OpenRouterInferenceRepository
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.withContext
 import com.wynh.appapp.ai.auth.EncryptedCredentialStore
 import com.wynh.appapp.ai.auth.IdTokenValidator
 import com.wynh.appapp.ai.auth.OpenAiOAuthApi
@@ -28,44 +31,95 @@ import java.util.UUID
 import java.lang.ref.WeakReference
 import java.util.concurrent.ConcurrentHashMap
 
-data class AiRequestResult(val id: String, val text: String? = null, val error: String? = null, val errorCode: String? = null, val done: Boolean = false)
-private data class AiRequestOwner(val appId: String, val taskId: Int, val job: Job)
-
-/** Process-wide ChatGPT identity, catalog and native request owner. */
+/** Process-wide provider routing, connection and native request owner. */
 class AppAiManager(context: Context) {
     private val app = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val http = HttpGateway()
     val auth = AuthRepository(EncryptedCredentialStore(app), OpenAiOAuthApi(http), IdTokenValidator(), scope)
     val inference = OpenAiInferenceRepository(http, auth)
+    private val preferences = app.getSharedPreferences("appapp_ai", Context.MODE_PRIVATE)
+    private val keyStore = EncryptedApiKeyStore(app)
+    @Volatile private var openRouterKey: String? = null
+    var openRouterMessage: String? = null
+        private set
+    var openRouterRestoring = true
+        private set
+    val openRouterConnected: Boolean get() = openRouterKey != null
+    val allowPaidModels: Boolean get() = preferences.getBoolean("openrouter_allow_paid", false)
+    val openRouter = OpenRouterInferenceRepository(http, { openRouterKey }, { allowPaidModels })
+    val registry = AiProviderRegistry(listOf(
+        AiProvider("chatgpt", "ChatGPT", inference) { auth.state.value.let { state -> state.accounts.firstOrNull { it.clientId == state.activeClientId }?.canInfer == true } },
+        AiProvider("openrouter", "OpenRouter", openRouter) { openRouterConnected }
+    ), preferences.getString("exposure", "chatgpt")?.takeIf { it in AiProviderRegistry.modes } ?: "chatgpt")
+    val exposure: String get() = registry.exposure
     private val requestLock = Mutex()
-    private val requests = ConcurrentHashMap<String, AiRequestResult>()
-    private val jobs = ConcurrentHashMap<String, AiRequestOwner>()
+    private val ledger = AiRequestLedger()
+    private val requests = ledger.results
+    private val jobs = ledger.owners
     private val webViews = ConcurrentHashMap<String, MutableList<Pair<WeakReference<WebView>, String>>>()
 
     init {
+        scope.launch { auth.state.collect { broadcastConnection() } }
         scope.launch {
-            auth.state.collect { state ->
-                val connected = state.accounts.any { it.canInfer }
-                val message = """{"event":"connection","data":{"providerId":"chatgpt","connected":$connected}}"""
-                webViews.forEach { (_, views) ->
-                    synchronized(views) {
-                        views.removeAll { ref ->
-                            val view = ref.first.get() ?: return@removeAll true
-                            runCatching { WebViewCompat.postWebMessage(view, WebMessageCompat(message), Uri.parse(ref.second)) }
-                            false
-                        }
-                    }
-                }
-            }
+            try { openRouterKey = withContext(Dispatchers.IO) { keyStore.read() } }
+            catch (e: Exception) { openRouterMessage = e.message }
+            finally { openRouterRestoring = false; broadcastConnection() }
         }
+    }
+
+    private fun connectionMessage(provider: ExposedProvider): String =
+        com.google.gson.Gson().toJson(mapOf("event" to "connection", "data" to mapOf("providerId" to provider.id, "connected" to provider.connected)))
+
+    private fun broadcastConnection(provider: ExposedProvider = registry.exposed()) {
+        val message = connectionMessage(provider)
+        webViews.forEach { (_, views) -> synchronized(views) {
+            views.removeAll { ref ->
+                val view = ref.first.get() ?: return@removeAll true
+                event(view, ref.second, message)
+                false
+            }
+        } }
+    }
+
+    fun setExposure(value: String) {
+        if (value == exposure) return
+        val previous = registry.exposed()
+        registry.setExposure(value)
+        preferences.edit().putString("exposure", value).apply()
+        broadcastConnection(previous.copy(connected = false))
+        broadcastConnection()
+    }
+
+    fun setAllowPaid(value: Boolean) {
+        preferences.edit().putBoolean("openrouter_allow_paid", value).apply()
+        broadcastConnection()
+    }
+
+    suspend fun saveOpenRouterKey(value: String) {
+        val candidate = value.trim()
+        if (candidate.isBlank() || candidate.length > 8192 || candidate.any { it.code !in 33..126 })
+            throw com.wynh.appapp.ai.network.ApiFailure(com.wynh.appapp.ai.network.ApiFailure.Kind.INVALID_REQUEST, "Enter a valid OpenRouter API key.")
+        openRouter.verifyKey(candidate)
+        withContext(Dispatchers.IO) { keyStore.write(candidate) }
+        cancelProvider("openrouter")
+        openRouterKey = candidate
+        openRouterMessage = "Key verified. Available to subapps according to your exposure setting."
+        broadcastConnection()
+    }
+
+    suspend fun removeOpenRouterKey() {
+        withContext(Dispatchers.IO) { keyStore.reset() }
+        cancelProvider("openrouter")
+        openRouterKey = null
+        openRouterMessage = "Saved key removed. It has not been revoked at OpenRouter."
+        broadcastConnection()
     }
 
     fun observe(appId: String, webView: WebView, origin: String) {
         val views = webViews.getOrPut(appId) { mutableListOf() }
         synchronized(views) { views.add(WeakReference(webView) to origin) }
-        val connected = auth.state.value.accounts.any { it.canInfer }
-        event(webView, origin, """{"event":"connection","data":{"providerId":"chatgpt","connected":$connected}}""")
+        event(webView, origin, connectionMessage(registry.exposed()))
     }
 
     fun event(webView: WebView, origin: String, message: String) {
@@ -80,42 +134,37 @@ class AppAiManager(context: Context) {
 
     suspend fun nextAuthorizationUrl(): String = withTimeout(600_000) { auth.browserRequests.receive() }
 
-    fun start(appId: String, taskId: Int, model: String, instructions: String, input: String, effort: String?): String {
+    fun start(appId: String, taskId: Int, providerId: String, model: String, instructions: String, input: String, effort: String?): String {
+        val route = registry.route(providerId, model)
         val id = UUID.randomUUID().toString()
-        synchronized(requests) {
-            if (hasRequest(appId)) {
-                requests[id] = AiRequestResult(id, error = "A request is already running or awaiting acknowledgement.", done = true)
-                jobs[id] = AiRequestOwner(appId, taskId, Job())
-                return id
-            }
-            requests[id] = AiRequestResult(id)
-            jobs[id] = AiRequestOwner(appId, taskId, Job())
-        }
+        try { ledger.begin(id, AiRequestOwner(appId, taskId, route.provider.id, Job())) }
+        catch (_: IllegalStateException) { throw com.wynh.appapp.ai.network.ApiFailure(com.wynh.appapp.ai.network.ApiFailure.Kind.INVALID_REQUEST, "A request is already running or awaiting acknowledgement.") }
         try {
             ContextCompat.startForegroundService(app, Intent(app, AiRequestService::class.java)
                 .putExtra(AiRequestService.EXTRA_TASK_ID, taskId))
         } catch (e: Exception) {
-            requests[id] = AiRequestResult(id, error = "Background request service could not start (${e.javaClass.simpleName}).", errorCode = "background_service", done = true)
-            jobs[id] = AiRequestOwner(appId, taskId, Job())
+            ledger.finish(AiRequestResult(id, error = "Background request service could not start (${e.javaClass.simpleName}).", errorCode = "background_service", done = true))
+            (jobs[id]?.job as? kotlinx.coroutines.CompletableJob)?.complete()
             return id
         }
         val job = scope.launch(Dispatchers.IO, start = kotlinx.coroutines.CoroutineStart.LAZY) {
-            requestLock.withLock {
+            try { requestLock.withLock {
                 try {
-                    val result = inference.generate(model, instructions, input, effort)
-                    requests[id] = AiRequestResult(id, text = result, done = true)
+                    val result = route.provider.inference.generate(route.model, instructions, input, effort)
+                    ledger.finish(AiRequestResult(id, text = result, done = true))
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     val code = when (e) {
                         is com.wynh.appapp.ai.network.ApiFailure -> e.kind.name.lowercase()
                         is com.wynh.appapp.ai.auth.AuthFailure -> "authentication"
                         else -> "service"
                     }
-                    requests[id] = AiRequestResult(id, error = e.message ?: "The request failed.", errorCode = code, done = true)
+                    ledger.finish(AiRequestResult(id, error = e.message ?: "The request failed.", errorCode = code, done = true))
                 }
-                AiRequestService.requestFinished(app)
-            }
+            } } finally { AiRequestService.requestFinished(app) }
         }
-        jobs[id] = AiRequestOwner(appId, taskId, job)
+        ledger.bind(id, job)
         job.start()
         return id
     }
@@ -123,26 +172,31 @@ class AppAiManager(context: Context) {
     fun result(id: String): AiRequestResult? = requests[id]
     fun owner(id: String): Int? = jobs[id]?.taskId
     fun ownedByApp(id: String, appId: String): Boolean = jobs[id]?.appId == appId
-    fun hasRequest(appId: String): Boolean = requests.keys.any { id -> ownedByApp(id, appId) }
-    fun activeRequestCount(): Int = jobs.values.count { it.job.isActive }
+    fun hasRequest(appId: String): Boolean = ledger.hasRequest(appId)
+    fun activeRequestCount(): Int = ledger.activeRequestCount()
     fun cancel(id: String) {
-        jobs.remove(id)?.job?.cancel()
-        requests.remove(id)
+        ledger.cancel(id)
+        AiRequestService.requestFinished(app)
     }
-    fun acknowledge(id: String) { requests.remove(id); jobs.remove(id) }
+    fun acknowledge(id: String) { ledger.acknowledge(id) }
     fun cancelTask(taskId: Int) {
         jobs.filterValues { it.taskId == taskId }.keys.toList().forEach(::cancel)
     }
     fun cancelAll() { jobs.keys.toList().forEach(::cancel) }
     fun cancelApp(appId: String) { jobs.filterValues { it.appId == appId }.keys.toList().forEach(::cancel) }
+    fun cancelProvider(providerId: String) {
+        ledger.cancelProvider(providerId)
+        AiRequestService.requestFinished(app)
+    }
     suspend fun signOut(): String {
-        cancelAll()
+        cancelProvider("chatgpt")
         inference.clearCatalog()
         return auth.signOut()
     }
 
+    suspend fun exposedModels(providerId: String) = registry.models(providerId)
     suspend fun models() = inference.models()
-    suspend fun check(model: String) = inference.check(model)
+    suspend fun check(model: String) = requestLock.withLock { inference.check(model) }
 
     fun close() { scope.cancel() }
 }

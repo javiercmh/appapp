@@ -102,7 +102,8 @@ object AiSettingsController {
                 .setMessage("This clears AppApp’s saved ChatGPT accounts and tokens from this device. It does not revoke access at ChatGPT.")
                 .setNegativeButton("Cancel", null)
                 .setPositiveButton("Reset credentials") { _, _ -> activity.lifecycleScope.launch {
-                    ai.cancelAll()
+                    ai.cancelProvider("chatgpt")
+                    ai.inference.clearCatalog()
                     feedback = runCatching { ai.auth.resetLocalCredentials() }
                         .fold({ "Saved credentials removed. You can connect again." }, { it.message })
                     render()
@@ -134,6 +135,7 @@ object AiSettingsController {
                 show()
             }
         }
+        bindOpenRouter(activity, dialog)
         render()
         activity.lifecycleScope.launch {
             while (dialog.isShowing) {
@@ -142,4 +144,130 @@ object AiSettingsController {
             }
         }
     }
+
+    private fun bindOpenRouter(activity: ComponentActivity, dialog: Dialog) {
+        val ai = (activity.application as AppAiApplication).ai
+        val status = dialog.findViewById<TextView>(R.id.settings_tv_openrouter_status)
+        val keyButton = dialog.findViewById<MaterialButton>(R.id.settings_btn_openrouter_key)
+        val connection = dialog.findViewById<TextView>(R.id.settings_tv_openrouter_connection)
+        val more = dialog.findViewById<ImageButton>(R.id.settings_btn_openrouter_more)
+        val paid = dialog.findViewById<com.google.android.material.materialswitch.MaterialSwitch>(R.id.settings_switch_openrouter_paid)
+        val exposureInput = dialog.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.settings_input_ai_exposure)
+        val exposureDropdown = dialog.findViewById<com.google.android.material.textfield.MaterialAutoCompleteTextView>(R.id.settings_dropdown_ai_exposure)
+        val exposureStatus = dialog.findViewById<TextView>(R.id.settings_tv_ai_exposure)
+        var exposureChoices = emptyList<ExposedProvider>()
+        var busy = false
+        var feedback: String? = null
+        fun render() {
+            keyButton.text = if (ai.openRouterConnected) "Replace OpenRouter key" else "Add OpenRouter key"
+            keyButton.isEnabled = !busy && !ai.openRouterRestoring
+            more.isEnabled = !busy && !ai.openRouterRestoring
+            connection.text = when {
+                busy || ai.openRouterRestoring -> "Connecting…"
+                ai.openRouterConnected -> "Connected"
+                else -> "Not connected"
+            }
+            connection.setTextColor(ContextCompat.getColor(activity,
+                if (ai.openRouterConnected && !busy) R.color.accent_green else R.color.on_surface_muted))
+            paid.isEnabled = !busy && !ai.openRouterRestoring
+            status.text = feedback ?: ai.openRouterMessage ?: when {
+                ai.openRouterRestoring -> "Restoring connection…"
+                ai.openRouterConnected -> "Available to subapps according to your exposure setting."
+                else -> "Add a key from your OpenRouter account."
+            }
+            val choices = ai.registry.selectableExposures()
+            if (choices != exposureChoices) {
+                exposureDropdown.dismissDropDown()
+                exposureChoices = choices
+                exposureDropdown.setSimpleItems(choices.map { it.name }.toTypedArray())
+            }
+            exposureInput.isEnabled = choices.isNotEmpty()
+            val current = ai.registry.exposed()
+            val selected = when {
+                choices.isEmpty() -> "No providers connected"
+                ai.exposure == "combined" && choices.none { it.id == "combined" } -> "Combined (one provider connected)"
+                !current.connected -> "${current.name} (not connected)"
+                ai.exposure == "combined" -> "Combined"
+                else -> current.name
+            }
+            if (exposureDropdown.text.toString() != selected) exposureDropdown.setText(selected, false)
+            exposureStatus.text = when {
+                choices.isEmpty() -> "Connect a provider above to make AI available to subapps."
+                !ai.registry.exposed().connected -> "Not connected. Set up the selected provider above."
+                ai.exposure == "combined" -> "Subapps see one model list from connected providers. Each model is labeled by source."
+                else -> "Subapps see only ${ai.registry.exposed().name}. Other connections stay saved."
+            }
+        }
+        fun runOperation(message: String, operation: suspend () -> String) {
+            busy = true; feedback = message; render()
+            activity.lifecycleScope.launch {
+                try { feedback = operation() }
+                catch (e: Exception) { feedback = e.message ?: "OpenRouter operation failed." }
+                finally { busy = false; render() }
+            }
+        }
+        keyButton.setOnClickListener {
+            val field = com.google.android.material.textfield.TextInputEditText(activity).apply {
+                inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+                importantForAutofill = android.view.View.IMPORTANT_FOR_AUTOFILL_NO
+                imeOptions = android.view.inputmethod.EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING
+                isSingleLine = true
+            }
+            val input = com.google.android.material.textfield.TextInputLayout(activity).apply {
+                hint = "OpenRouter API key"
+                val pad = (20 * resources.displayMetrics.density).toInt()
+                setPadding(pad, 0, pad, 0)
+                addView(field)
+            }
+            val entry = MaterialAlertDialogBuilder(activity).setTitle(keyButton.text)
+                .setMessage("Stored securely on this device. Verification does not generate text or spend inference credits.")
+                .setView(input).setNeutralButton("Get a key", null)
+                .setNegativeButton("Cancel", null).setPositiveButton("Verify and save", null).create()
+            entry.setOnShowListener {
+                entry.getButton(androidx.appcompat.app.AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+                    try {
+                        activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://openrouter.ai/settings/keys")))
+                    } catch (_: android.content.ActivityNotFoundException) {
+                        input.error = "Install a browser to open OpenRouter."
+                    }
+                }
+                entry.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                    val candidate = field.text?.toString().orEmpty()
+                    field.text?.clear()
+                    entry.dismiss()
+                    runOperation("Verifying key…") { ai.saveOpenRouterKey(candidate); "Key verified and saved." }
+                }
+            }
+            entry.show()
+        }
+        paid.isChecked = ai.allowPaidModels
+        paid.setOnCheckedChangeListener { _, enabled ->
+            ai.setAllowPaid(enabled)
+            feedback = if (enabled) "Paid models enabled. Generation can spend OpenRouter credits." else "Only explicitly free models are available."
+            render()
+        }
+        exposureDropdown.setOnItemClickListener { _, _, index, _ ->
+            val selected = exposureChoices.getOrNull(index) ?: return@setOnItemClickListener
+            if (ai.registry.selectableExposures().none { it.id == selected.id }) { render(); return@setOnItemClickListener }
+            ai.setExposure(selected.id)
+            render()
+        }
+        more.setOnClickListener {
+            PopupMenu(activity, more).apply {
+                menu.add("Remove saved key")
+                setOnMenuItemClickListener {
+                    MaterialAlertDialogBuilder(activity).setTitle("Remove saved OpenRouter key?")
+                        .setMessage("Cancels unfinished OpenRouter requests. Completed results remain available for saving. The key is not revoked at OpenRouter.")
+                        .setNegativeButton("Cancel", null).setPositiveButton("Remove") { _, _ ->
+                            runOperation("Removing key…") { ai.removeOpenRouterKey(); "Saved key removed." }
+                        }.show()
+                    true
+                }
+                show()
+            }
+        }
+        render()
+        activity.lifecycleScope.launch { while (dialog.isShowing) { delay(500); render() } }
+    }
+
 }

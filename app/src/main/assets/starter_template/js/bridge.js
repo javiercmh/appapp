@@ -112,9 +112,10 @@ export const ai = {
   // Channel presence only; discover connection separately via providers().
   available: !!AI || !!DEV?.mockAi,
   developmentMock: !AI && !!DEV?.mockAi,
-  // -> {providers:[{id,name,connected}]} without account identifiers.
+  // -> {providers:[{id,name,connected}]}: the host exposes ChatGPT, OpenRouter or Combined.
+  // Discover and pass the exposed ID; defaults below remain ChatGPT. No credentials.
   providers: () => aiCall('providers'),
-  // -> {models:[{id,name,reasoningLevels}]} in account-specific server order.
+  // -> {models:[{id,name,reasoningLevels}]}. IDs are opaque; Combined names include source.
   models: (providerId = 'chatgpt') => aiCall('models', { providerId }),
   // -> request ID. Omit reasoningEffort for provider default; use advertised levels.
   start: async ({ providerId = 'chatgpt', model, instructions = '', input, reasoningEffort } = {}) => {

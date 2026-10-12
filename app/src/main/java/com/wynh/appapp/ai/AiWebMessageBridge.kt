@@ -1,6 +1,5 @@
 package com.wynh.appapp.ai
 
-import android.app.Activity
 import android.webkit.WebView
 import androidx.webkit.JavaScriptReplyProxy
 import androidx.webkit.WebMessageCompat
@@ -9,7 +8,6 @@ import androidx.webkit.WebViewFeature
 import androidx.lifecycle.lifecycleScope
 import androidx.activity.ComponentActivity
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.delay
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 
@@ -29,7 +27,12 @@ class AiWebMessageBridge(
         manager.observe(appId, webView, origin)
         WebViewCompat.addWebMessageListener(webView, listenerName, setOf(origin)) { _, message, source, isMainFrame, reply ->
             if (!AiOriginPolicy.allows(source.toString(), isMainFrame, origin)) return@addWebMessageListener
-            handle(message, reply)
+            try { handle(message, reply) }
+            catch (_: Exception) {
+                val id = runCatching { JsonParser.parseString(message.data).asJsonObject.get("id") }
+                    .getOrNull()?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString
+                if (id != null) fail(reply, id, "invalid_request", "Invalid AI command.")
+            }
         }
         return true
     }
@@ -39,27 +42,28 @@ class AiWebMessageBridge(
         val id = request.get("id")?.asString ?: return
         val action = request.get("action")?.asString ?: return
         when (action) {
-            "providers" -> respond(reply, id, "result", """{"providers":[{"id":"chatgpt","name":"ChatGPT","connected":${manager.auth.state.value.accounts.any { it.canInfer }}}]}""")
+            "providers" -> respond(reply, id, "result", com.google.gson.Gson().toJson(mapOf("providers" to listOf(manager.registry.exposed()))))
             "models" -> activity.runOnUiThread { activity.lifecycleScope.launch { 
-                if (request.get("providerId")?.asString?.let { it != "chatgpt" } == true) { respond(reply, id, "error", quote("Unsupported provider.")); return@launch }
-                try { val models = manager.models(); respond(reply, id, "result", """{"models":${models.joinToString(prefix="[", postfix="]") { m -> """{"id":${quote(m.slug)},"name":${quote(m.displayName)},"reasoningLevels":${m.reasoningLevels.joinToString(prefix="[",postfix="]",transform=::quote)}}""" }}}""") }
-                catch (e: Exception) { fail(reply, id, "models", e.message ?: "Could not load models.") }
+                try { val models = manager.exposedModels(request.get("providerId")?.asString ?: "chatgpt"); respond(reply, id, "result", """{"models":${models.joinToString(prefix="[", postfix="]") { m -> """{"id":${quote(m.slug)},"name":${quote(m.displayName)},"reasoningLevels":${m.reasoningLevels.joinToString(prefix="[",postfix="]",transform=::quote)}}""" }}}""") }
+                catch (e: Exception) { fail(reply, id, (e as? com.wynh.appapp.ai.network.ApiFailure)?.kind?.name?.lowercase() ?: "models", e.message ?: "Could not load models.") }
             } }
             "start" -> {
                 if (manager.hasRequest(appId)) { fail(reply, id, "request_in_progress", "A request is already running or awaiting acknowledgement."); return }
                 val data = request.getAsJsonObject("data") ?: JsonObject()
-                if (data.get("providerId")?.asString != "chatgpt") { fail(reply, id, "provider", "Unsupported provider."); return }
+                val providerId = data.get("providerId")?.asString ?: "chatgpt"
                 val model = data.get("model")?.asString ?: ""
                 val instructions = data.get("instructions")?.asString ?: ""
                 val input = data.get("input")?.asString ?: ""
-                if (model.isBlank() || input.length > 100_000 || instructions.length > 100_000) { fail(reply, id, "invalid_request", "Invalid request."); return }
-                val reqId = manager.start(appId, taskId, model, instructions, input, data.get("reasoningEffort")?.asString)
+                if (model.isBlank() || model.length > 8192 || providerId.length > 32 || input.length > 100_000 || instructions.length > 100_000) { fail(reply, id, "invalid_request", "Invalid request."); return }
+                val reqId = try { manager.start(appId, taskId, providerId, model, instructions, input, data.get("reasoningEffort")?.takeUnless { it.isJsonNull }?.asString) }
+                catch (e: com.wynh.appapp.ai.network.ApiFailure) { fail(reply, id, e.kind.name.lowercase(), e.userMessage); return }
                 respond(reply, id, "result", quote(reqId))
                 manager.event(webView, origin, """{"event":"status","id":${quote(reqId)},"data":{"status":"running"}}""")
                 activity.lifecycleScope.launch {
                     while (true) {
                         val result = manager.result(reqId)
-                        if (result?.done == true) {
+                        if (result == null) break
+                        if (result.done) {
                             val event = if (result.error != null) "error" else "complete"
                             val payload = if (result.error != null) errorJson(result.errorCode ?: "service", result.error) else quote(result.text ?: "")
                             manager.event(webView, origin, """{"event":"$event","id":${quote(reqId)},"data":$payload}""")
@@ -82,11 +86,13 @@ class AiWebMessageBridge(
                 val requestId = request.get("requestId")?.asString ?: ""
                 val result = manager.result(requestId)
                 if (result != null && manager.ownedByApp(requestId, appId)) {
+                    if (action == "acknowledge" && !result.done) { fail(reply, id, "invalid_request", "Only completed requests can be acknowledged."); return }
                     if (action == "cancel") manager.cancel(requestId) else manager.acknowledge(requestId)
                     respond(reply, id, "result", "true")
                 } else fail(reply, id, "not_found", "Request not found.")
             }
             "openSettings" -> respond(reply, id, "error", quote("Manage the AI connection in AppApp Settings."))
+            else -> fail(reply, id, "invalid_request", "Unsupported AI command.")
         }
     }
 

@@ -1,3 +1,26 @@
+# App² 1.6.0
+
+## AI providers
+
+- Connect OpenRouter with an encrypted API key alongside existing ChatGPT accounts.
+- Choose ChatGPT, OpenRouter, or Combined in Settings → AI. The dropdown offers connected providers; Combined presents their models together with source labels.
+- Free OpenRouter models are available by default, including the Free Models Router. Paid models require an explicit Settings opt-in.
+- Add or replace a key from the main button, get a key from its dialog, and remove a saved key through the three-dot menu.
+- Keep credentials native, preserve pending results across exposure changes, and route every request to its selected provider and model.
+- Update the Starter Demo to discover the exposed provider. LingoMage 1.2.14 applies the same discovery to reader help and clears unavailable model selections.
+
+## Installation
+
+Download `AppApp-1.6.0.apk` and install it as an update to App². The package uses the existing release signing certificate and application ID `com.wynh.appapp`. Existing subapp workspaces and ChatGPT credentials are preserved. Update LingoMage separately through its normal update flow.
+
+Version: `1.6.0` (version code `10`).
+
+## Verification
+
+51 JVM tests passed, alongside starter and LingoMage regression checks, focused emulator tests, and signed debug/release builds. The free-model fix was installed on SM-S921B after verified full-library backups; library names and user data matched before and after. Live model quality was not evaluated.
+
+---
+
 # App² 1.5.2
 
 ## Translation and text selection

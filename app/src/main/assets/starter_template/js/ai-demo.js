@@ -4,12 +4,13 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Dependency injection keeps the example testable without a native host or live inference.
 export function createAiDemoSession({ ai, load, save, changed = () => {}, pause = sleep }) {
-  const state = { available: ai.available, connected: false, models: [], loading: false,
+  const state = { available: ai.available, providerId: '', connected: false, models: [], loading: false,
     pending: null, latest: null, retry: false, message: '', storageError: false };
   let polling = false;
   let completion = null;
   let cancelling = false;
   let saving = false;
+  let refreshAgain = false;
   const emit = () => changed(state);
   const persist = () => save({ pending: state.pending, latest: state.latest });
   try {
@@ -81,7 +82,7 @@ export function createAiDemoSession({ ai, load, save, changed = () => {}, pause 
   }
 
   async function refresh() {
-    if (state.loading) return;
+    if (state.loading) { refreshAgain = true; return; }
     if (!state.available) {
       if (!state.storageError) state.message = 'AI is unavailable in browser previews. Open this demo in App².';
       emit(); return;
@@ -90,16 +91,19 @@ export function createAiDemoSession({ ai, load, save, changed = () => {}, pause 
     emit();
     try {
       const { providers } = await ai.providers();
-      state.connected = providers.some((p) => p.id === 'chatgpt' && p.connected);
-      state.models = state.connected ? (await ai.models('chatgpt')).models : [];
+      const provider = providers.find((p) => p.connected);
+      state.providerId = provider?.id || '';
+      state.connected = !!provider;
+      state.models = provider ? (await ai.models(provider.id)).models : [];
       if (!state.pending && !state.storageError) state.message = state.connected
-        ? (ai.developmentMock ? 'Ready. Development mock is offline and uses no ChatGPT plan usage.' : 'Ready. Generating an example uses your ChatGPT plan usage.')
-        : 'Connect ChatGPT in the App² library → Settings → AI, then return here.';
+        ? (ai.developmentMock ? 'Ready. Development mock is offline and uses no provider quota.' : 'Ready. Generating an example uses your selected provider’s quota or credits.')
+        : 'Connect the selected provider in the App² library → Settings → AI, then return here.';
     } catch (error) {
       state.connected = false;
       state.models = [];
       if (!state.storageError) state.message = `Could not load AI models: ${error.message}`;
     } finally { state.loading = false; emit(); }
+    if (refreshAgain) { refreshAgain = false; await refresh(); return; }
     await resume();
   }
 
@@ -110,11 +114,11 @@ export function createAiDemoSession({ ai, load, save, changed = () => {}, pause 
     state.loading = true;
     state.message = 'Starting example…'; emit();
     try {
-      const request = { providerId: 'chatgpt', model: model.id,
+      const request = { providerId: state.providerId, model: model.id,
         instructions: 'Keep the answer concise and use plain language.', input: AI_SAMPLE_PROMPT };
       if (effort) request.reasoningEffort = effort;
       const id = await ai.start(request);
-      state.pending = { id, providerId: 'chatgpt', model: model.id, modelName: model.name,
+      state.pending = { id, providerId: state.providerId, model: model.id, modelName: model.name,
         reasoningEffort: effort || null, prompt: AI_SAMPLE_PROMPT, createdAt: new Date().toISOString() };
       try { persist(); } catch {
         await ai.cancel(id).catch(() => {});
@@ -123,6 +127,7 @@ export function createAiDemoSession({ ai, load, save, changed = () => {}, pause 
       }
     } catch (error) { state.message = error.message; }
     finally { state.loading = false; emit(); }
+    if (refreshAgain) { refreshAgain = false; await refresh(); }
     await resume();
   }
 
@@ -157,6 +162,7 @@ export function initAiDemo(bridge, store) {
     $('ai-usage').textContent = 'Development mock: fixed responses, no credentials and no ChatGPT plan usage.';
   }
   let catalog = '';
+  let catalogProvider = '';
   function renderReasoning() {
     const model = session.state.models.find((m) => m.id === modelSelect.value);
     effortSelect.replaceChildren(new Option('Provider default', ''));
@@ -167,14 +173,16 @@ export function initAiDemo(bridge, store) {
   session = createAiDemoSession({ ai: bridge.ai, load: store.loadAiDemo, save: store.saveAiDemo,
     changed: (state) => {
       $('ai-status').textContent = state.message;
-      const nextCatalog = JSON.stringify(state.models);
+      const nextCatalog = JSON.stringify({ providerId: state.providerId, models: state.models });
       if (nextCatalog !== catalog) {
         const selected = modelSelect.value;
         const effort = effortSelect.value;
         modelSelect.replaceChildren(...(state.models.length
           ? state.models.map((m) => new Option(m.name, m.id))
-          : [new Option(state.available ? 'Connect ChatGPT to see models' : 'Unavailable in browser preview', '')]));
-        if (state.models.some((m) => m.id === selected)) modelSelect.value = selected;
+          : [new Option(state.available ? 'Connect a provider to see models' : 'Unavailable in browser preview', '')]));
+        if (catalogProvider && catalogProvider !== state.providerId) modelSelect.selectedIndex = -1;
+        else if (state.models.some((m) => m.id === selected)) modelSelect.value = selected;
+        catalogProvider = state.providerId;
         catalog = nextCatalog;
         // Initialization emits before the session variable has been assigned.
         const model = state.models.find((m) => m.id === modelSelect.value);
@@ -186,7 +194,7 @@ export function initAiDemo(bridge, store) {
       const busy = !!state.pending || state.loading;
       modelSelect.disabled = busy || !state.connected;
       effortSelect.disabled = busy;
-      $('ai-generate').disabled = busy || !state.connected || !state.models.length || state.storageError;
+      $('ai-generate').disabled = busy || !state.connected || !state.models.length || !modelSelect.value || state.storageError;
       $('ai-cancel').hidden = !state.pending || state.retry;
       $('ai-retry-save').hidden = !state.retry;
       $('ai-response-box').hidden = !state.latest;
@@ -194,7 +202,7 @@ export function initAiDemo(bridge, store) {
       $('ai-response-meta').textContent = state.latest
         ? `${state.latest.modelName} · Reasoning: ${state.latest.reasoningEffort || 'provider default'}` : '';
     } });
-  modelSelect.onchange = renderReasoning;
+  modelSelect.onchange = () => { renderReasoning(); $('ai-generate').disabled = !!session.state.pending || session.state.loading || !session.state.connected || !modelSelect.value || session.state.storageError; };
   $('ai-generate').onclick = () => session.generate(modelSelect.value, effortSelect.value);
   $('ai-cancel').onclick = () => session.cancel();
   $('ai-retry-save').onclick = () => session.retrySaving();
