@@ -31,9 +31,19 @@ class WorkspaceUpdater(private val directory: File) {
             old.hashes == pkg.managed.associateWith { digest(File(files, it)) }
     }
 
-    fun preview(pkg: UpdatePackage, files: File): UpdatePreview {
+    /** Describes how the package's publisher identity or GitHub source differs from the installed one, or null when they agree. */
+    fun identityMismatch(pkg: UpdatePackage): String? {
+        val old = installed() ?: return null
+        return buildList {
+            if (old.appId != pkg.appId) add("Publisher ID: installed ${old.appId}, publisher now declares ${pkg.appId}")
+            if (old.source != pkg.source) add("Source: installed ${old.source.display}, package declares ${pkg.source.display}")
+        }.takeIf { it.isNotEmpty() }?.joinToString("\n")
+    }
+
+    /** A mismatch is rejected unless [acceptMismatch] records the user's explicit confirmation of it. */
+    fun preview(pkg: UpdatePackage, files: File, acceptMismatch: Boolean = false): UpdatePreview {
         val old = installed()
-        require(old == null || (old.appId == pkg.appId && old.source == pkg.source)) { "Publisher identity or GitHub source does not match this installation" }
+        require(acceptMismatch || identityMismatch(pkg) == null) { "Publisher identity or GitHub source does not match this installation" }
         val added = pkg.managed.filter { !File(workspace, it).exists() }
         val changed = pkg.managed.filter { File(workspace, it).isFile && digest(File(workspace, it)) != digest(File(files, it)) }
         val removed = old?.hashes?.keys.orEmpty().filter { it !in pkg.managed && it !in pkg.seeds }
@@ -49,7 +59,7 @@ class WorkspaceUpdater(private val directory: File) {
         }
     }
 
-    fun install(pkg: UpdatePackage, files: File, commit: String, hostVersion: Long, reviewed: Map<String, String?>? = null) = synchronized(WorkspaceLocks.forWorkspace(workspace)) {
+    fun install(pkg: UpdatePackage, files: File, commit: String, hostVersion: Long, reviewed: Map<String, String?>? = null, acceptMismatch: Boolean = false) = synchronized(WorkspaceLocks.forWorkspace(workspace)) {
         require(pkg.minimumHostVersion <= hostVersion) { "Update App² before installing this package" }
         require(commit.matches(Regex("[a-f0-9]{40}"))) { "Invalid commit" }
         val checked = UpdatePackage.parse(File(files, "manifest.json").readText())
@@ -57,7 +67,7 @@ class WorkspaceUpdater(private val directory: File) {
         (pkg.managed + pkg.seeds).forEach { require(File(files, safePath(it)).isFile) { "Missing package file: $it" } }
         recover()
         require(reviewed == null || reviewed == reviewedFiles(pkg)) { "App code changed since review; check the update again" }
-        val preview = preview(pkg, files)
+        val preview = preview(pkg, files, acceptMismatch)
         val hashes = pkg.managed.associateWith { digest(File(files, it)) }
         prepareBackup()
         workspace.copyRecursively(next, overwrite = false)
