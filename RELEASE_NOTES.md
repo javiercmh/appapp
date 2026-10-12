@@ -1,3 +1,23 @@
+# App² 1.6.1
+
+## App updates
+
+- Review app update lists the newest publisher commit subjects, so you can see what is coming before installing.
+- The review no longer lists individual files or counts. It still warns about locally edited code that will be replaced.
+- A changed publisher ID or GitHub source no longer blocks an update. The review shows the installed and declared values side by side, and the update applies only after you choose Accept and update.
+
+## Installation
+
+Download `AppApp-1.6.1.apk` and install it as an update to App². The package uses the existing release signing certificate and application ID `com.wynh.appapp`. Existing subapp workspaces and AI credentials are preserved.
+
+Version: `1.6.1` (version code `11`).
+
+## Verification
+
+JVM tests passed, including a new test for accepting a changed publisher identity. The signed release was installed on SM-S921B after a verified full-library backup; the library listed the same apps afterwards.
+
+---
+
 # App² 1.6.0
 
 ## AI providers
