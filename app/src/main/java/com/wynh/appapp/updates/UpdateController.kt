@@ -64,9 +64,10 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
                 val value = download
                 val (preview, reviewed, unchanged) = withContext(Dispatchers.IO) {
                     synchronized(WorkspaceLocks.forWorkspace(record.workspaceDir)) {
-                        Triple(updater.preview(value.pkg, value.directory), updater.reviewedFiles(value.pkg), updater.publisherUnchanged(value.pkg, value.directory))
+                        Triple(updater.preview(value.pkg, value.directory, acceptMismatch = true), updater.reviewedFiles(value.pkg), updater.publisherUnchanged(value.pkg, value.directory))
                     }
                 }
+                val mismatch = updater.identityMismatch(value.pkg)
                 val subjects = runCatching { withContext(Dispatchers.IO) { GitHubUpdateDownloader(activity.cacheDir).recentSubjects(source, updater.installed()?.commit) } }.getOrDefault(emptyList())
                 progress.dismiss()
                 if (unchanged) {
@@ -78,14 +79,15 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
                 }
                 val text = buildString {
                     append("Version: ${value.pkg.version}\n${source.display}\n\n${preview.added.size} added · ${preview.changed.size} changed · ${preview.removed.size} removed\n")
+                    if (mismatch != null) append("\n⚠ This publisher does not match the installed app:\n$mismatch\nOnly continue if you trust this repository. Updating adopts the new identity.\n")
                     if (subjects.isNotEmpty()) append("\nLatest commits:\n${subjects.joinToString("\n") { "• $it" }}\n")
                     append("\nUser records and unowned files are preserved.\n")
                     if (preview.edited.isNotEmpty()) append("\n${preview.edited.size} locally edited or missing code files will be replaced by publisher files.\n")
                     append("\nThe current and updated versions will be saved in Edit → Version history. A recovery backup will also be created.")
                 }
                 MaterialAlertDialogBuilder(activity).setTitle("Review app update").setMessage(text)
-                    .setPositiveButton(if (preview.adoption) "Link and update" else "Update") { _, _ ->
-                        applyUpdate("GitHub update ${value.pkg.version} · ${value.commit.take(12)}") { updater.install(value.pkg, value.directory, value.commit, hostVersion, reviewed) }
+                    .setPositiveButton(if (mismatch != null) "Accept and update" else if (preview.adoption) "Link and update" else "Update") { _, _ ->
+                        applyUpdate("GitHub update ${value.pkg.version} · ${value.commit.take(12)}") { updater.install(value.pkg, value.directory, value.commit, hostVersion, reviewed, acceptMismatch = mismatch != null) }
                         value.directory.deleteRecursively()
                     }.setNegativeButton("Cancel", null)
                     .setOnDismissListener { value.directory.deleteRecursively() }.show()

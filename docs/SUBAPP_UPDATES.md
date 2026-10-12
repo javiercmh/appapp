@@ -31,7 +31,7 @@ The repository must be anonymously readable from the phone; SSH access on the
 development computer alone does not grant phone access. Every package must manage `index.html` and `manifest.json`. File paths must be
 relative, unique, without hidden components or traversal, and cannot overlap as
 files/directories. Update limits: 256 files, 8 MiB per asset, 256 KiB manifest and 32 MiB
-per download. The host rejects redirects and identity/source changes. Library ZIP installation
+per download. The host rejects redirects. A changed publisher ID or source is shown in the review dialog as a warning and applies only after the user chooses Accept and update. Library ZIP installation
 also rejects traversal, duplicate paths, missing root index.html and archives over
 1024 entries, 8 MiB per file or 32 MiB expanded total.
 
