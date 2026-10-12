@@ -8,6 +8,27 @@ import java.net.URLEncoder
 
 class GitHubUpdateDownloader(private val cache: File, private val connect: (URL) -> HttpURLConnection = { it.openConnection() as HttpURLConnection }) {
     data class Download(val pkg: UpdatePackage, val commit: String, val directory: File)
+    /** Subject lines of the newest commits, stopping at [since] (the installed commit) when it is found. Best effort. */
+    fun recentSubjects(source: GitHubSource, since: String?, limit: Int = 8): List<String> {
+        val repo = "${source.owner}/${source.repository}"
+        val branch = URLEncoder.encode(source.branch, "UTF-8").replace("+", "%20")
+        val connection = connect(URL("https://api.github.com/repos/$repo/commits?sha=$branch&per_page=30"))
+        connection.connectTimeout = 15_000; connection.readTimeout = 20_000
+        connection.instanceFollowRedirects = false
+        connection.setRequestProperty("User-Agent", "AppApp-Updater")
+        try {
+            require(connection.responseCode in 200..299) { "GitHub request failed (${connection.responseCode})" }
+            val text = connection.inputStream.use { it.readBytes() }.toString(Charsets.UTF_8)
+            val subjects = mutableListOf<String>()
+            for (item in JsonParser.parseString(text).asJsonArray) {
+                val commit = item.asJsonObject
+                if (commit.get("sha").asString == since) break
+                subjects.add(commit.getAsJsonObject("commit").get("message").asString.lineSequence().first().trim().take(120))
+            }
+            return subjects.filter { it.isNotEmpty() }.take(limit)
+        } finally { connection.disconnect() }
+    }
+
     fun download(source: GitHubSource, hostVersion: Long): Download {
         var bytes = 0L
         fun get(url: String, limit: Int): ByteArray {

@@ -67,6 +67,7 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
                         Triple(updater.preview(value.pkg, value.directory), updater.reviewedFiles(value.pkg), updater.publisherUnchanged(value.pkg, value.directory))
                     }
                 }
+                val subjects = runCatching { withContext(Dispatchers.IO) { GitHubUpdateDownloader(activity.cacheDir).recentSubjects(source, updater.installed()?.commit) } }.getOrDefault(emptyList())
                 progress.dismiss()
                 if (unchanged) {
                     MaterialAlertDialogBuilder(activity).setTitle("App is up to date")
@@ -77,6 +78,7 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
                 }
                 val text = buildString {
                     append("Version: ${value.pkg.version}\n${source.display}\n\n${preview.added.size} added · ${preview.changed.size} changed · ${preview.removed.size} removed\n")
+                    if (subjects.isNotEmpty()) append("\nLatest commits:\n${subjects.joinToString("\n") { "• $it" }}\n")
                     if (preview.adoption) append("\nLink publisher identity: ${value.pkg.appId}\n")
                     append("\nUser records and unowned files are preserved.\n")
                     fun section(label: String, files: List<String>) { if (files.isNotEmpty()) append("\n$label:\n${files.joinToString("\n")}\n") }
