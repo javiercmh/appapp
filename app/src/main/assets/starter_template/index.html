@@ -49,7 +49,7 @@
     </div>
     <div class="card" id="ai-example">
       <h2>AI example</h2>
-      <p id="ai-description" class="muted">Ask ChatGPT a fixed sample question using App²’s native AI bridge.</p>
+      <p id="ai-description" class="muted">Ask your selected AI provider a fixed sample question using App²’s native AI bridge.</p>
       <blockquote class="ai-prompt">Write one short sentence explaining what a subapp is.</blockquote>
       <label class="ai-label" for="ai-model">Model</label>
       <select id="ai-model" class="field" disabled></select>
@@ -58,7 +58,7 @@
         <select id="ai-reasoning" class="field"><option value="">Provider default</option></select>
       </div>
       <p id="ai-status" class="muted" role="status">Checking AI availability…</p>
-      <p id="ai-usage" class="muted">Generate only when you are ready: this uses your ChatGPT plan usage. Manage the connection in the App² library → Settings → AI.</p>
+      <p id="ai-usage" class="muted">Generate only when you are ready: this uses your provider quota or credits. Manage the connection in the App² library → Settings → AI.</p>
       <button id="ai-generate" class="btn btn-primary btn-block" disabled>Generate example</button>
       <button id="ai-cancel" class="btn btn-ghost btn-block" hidden>Cancel generation</button>
       <button id="ai-retry-save" class="btn btn-ghost btn-block" hidden>Retry saving</button>
@@ -127,17 +127,20 @@
     <div class="card">
       <h2>AI from a subapp</h2>
       <ol class="steps">
-        <li>Connect ChatGPT in the App² library’s <strong>Settings → AI</strong>.</li>
-        <li>Discover providers and models through <code>ai.providers()</code> and <code>ai.models('chatgpt')</code>.</li>
+        <li>Connect an AI provider in the App² library’s <strong>Settings → AI</strong>.</li>
+        <li>Discover providers and models through <code>ai.providers()</code> and <code>ai.models(provider.id)</code>.</li>
         <li>Choose a model and one of its supported reasoning levels. Provider default omits the effort setting.</li>
         <li>Call <code>ai.start()</code>, then wait for the completed text.</li>
         <li>Save the text and request ID to <code>data/ai-demo.json</code> before acknowledging the request.</li>
       </ol>
       <pre class="console ai-code"><code>import { ai, writeFile } from './bridge.js';
 
-const { models } = await ai.models('chatgpt');
+const { providers } = await ai.providers();
+const provider = providers.find(p =&gt; p.connected);
+if (!provider) throw new Error('Connect a provider in App² Settings → AI.');
+const { models } = await ai.models(provider.id);
 const id = await ai.start({
-  providerId: 'chatgpt',
+  providerId: provider.id,
   model: models[0].id,
   instructions: 'Keep the answer concise.',
   input: 'Write one short sentence explaining what a subapp is.'

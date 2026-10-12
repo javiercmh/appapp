@@ -22,7 +22,7 @@ This document provides architectural context, coding standards, and operational 
 | `com.wynh.appapp.workspace.WorkspaceHistoryManager` | Manages snapshots in that app's `workspace_history.json`. |
 | `com.wynh.appapp.workspace.WorkspacePackageManager` | Handles selective ZIP export/packaging, Android Sharesheet integration, direct stream export, and secure ZIP extraction with Zip-Slip defense and auto-backup snapshots. |
 | `com.wynh.appapp.bridge.NativeStorageBridge` | Main `@JavascriptInterface` exposed to the web runtime as `window.AndroidStorage`, `window.AndroidMemory`, and `window.AndroidNotification`. Manages persistent key-value state, unified file I/O directly in `workspace/`, native system notifications, and `AlarmManager`-backed scheduled notifications. |
-| `com.wynh.appapp.ai` | App-owned AI provider settings, encrypted ChatGPT credentials, native model/inference requests, background request service and the origin-restricted asynchronous web message API. |
+| `com.wynh.appapp.ai` | App-owned AI provider settings, encrypted ChatGPT credentials and OpenRouter API key, native model/inference requests, background request service and the origin-restricted asynchronous web message API. |
 | `com.wynh.appapp.bridge.ScheduledNotificationReceiver` | Posts a notification armed earlier via `scheduleNotification`. Runs even when the app process is cold, so it re-creates the notification channel itself. |
 | `com.wynh.appapp.bridge.AlarmBootReceiver` | Re-arms persisted scheduled notifications after `BOOT_COMPLETED` / `MY_PACKAGE_REPLACED`, which clear pending alarms. |
 | `com.wynh.appapp.templates.DefaultWebApp` | Loads the starter template files dynamically from standalone assets (`app/src/main/assets/starter_template/`). |
@@ -54,14 +54,14 @@ the library.
 
 The starter template ships its own `AGENTS.md` (describing the app itself) and `PACKAGING.md` (documenting the runtime from the web app's point of view: bridge API, platform limits, packaging rules). **When the JavaScript bridge changes, update them accordingly.**
 
-The library’s Settings → AI section exclusively owns AI provider setup. ChatGPT is currently the only provider. Subapps can
+The library’s Settings → AI section exclusively owns AI provider setup. ChatGPT and OpenRouter connections are independent. Settings selects which provider subapps see: ChatGPT (the default), OpenRouter, or Combined. Subapps can
 use the origin-limited `window.AppAI` asynchronous channel through `js/bridge.js`; credentials and
 request headers remain native and are never written into a subapp workspace.
 
 The starter wrapper exports `ai.providers()`, `ai.models(providerId)`, `ai.start({ providerId, model,
 instructions, input, reasoningEffort })`, `ai.result(id)`, `ai.wait(id)`, `ai.cancel(id)` and
 `ai.acknowledge(id)`. It dispatches `app2:ai:connection` and `app2:ai:status` events. Native inference
-uses ChatGPT Responses streaming and returns text only after a completed response. Results remain
+uses ChatGPT Responses streaming or OpenRouter non-streaming Chat Completions and returns text only after a completed response. Results remain
 available for retrying a subapp save until acknowledgement or task closure.
 
 ### File-Based Persistence Standard (JSON in `data/`)
@@ -301,21 +301,27 @@ binary file that the current subapp's origin interceptor can then serve via `<im
 
 ## Subapp AI guide
 
-Connect ChatGPT exclusively through the **library → Settings → AI**. Editors and subapps have no account controls. All local subapps may use the connected provider. Live generation consumes ChatGPT plan usage; browser previews have `ai.available === false` and do not make AI requests unless a development mock is explicitly supplied.
+Manage provider connections exclusively through **library → Settings → AI**. ChatGPT uses OAuth; OpenRouter uses one native encrypted API key. Editors and subapps have no credential controls. **Available to subapps** exposes exactly one provider: `chatgpt`, `openrouter`, or `combined` (App² AI). Combined is connected when at least one source is connected and lists ChatGPT models first, then OpenRouter models, with source labels. Model IDs are opaque, stable and unique within the exposed provider; do not parse them or hardcode model IDs. Explicit calls to hidden providers fail with `provider`.
+
+The native exposure dropdown lists connected providers; Combined is selectable when both are connected. With no connection it is disabled. An unavailable saved exposure is retained without silently switching providers; a previously selected Combined exposure can still use its remaining connected source.
+
+OpenRouter defaults to explicitly free text models; paid models require native opt-in. Missing or unknown prompt/completion prices are excluded from free mode. Optional pricing fields, including per-request fees, must be zero when supplied; their omission is valid. Pricing is refreshed before generation. The catalog includes OpenRouter’s Free Models Router (`openrouter/free`), which chooses an available free model, as well as individual free models. Free models still have quotas and availability limits. ChatGPT consumes plan usage; OpenRouter consumes quota or credits. There is no automatic model/provider fallback or inference retry. OpenRouter advertises an empty `reasoningLevels` list in this version. Connection/exposure changes dispatch `app2:ai:connection`; rediscover the exposed provider and clear unavailable model/reasoning choices. Already-started requests retain their original route and can be retrieved and acknowledged after an exposure change. Disconnecting a source cancels only its unfinished requests; terminal results remain available for saving.
+
+Browser previews have `ai.available === false` and make no AI requests unless a development mock is explicitly supplied. The wrapper keeps `chatgpt` as its omitted-provider default for compatibility; apps using host exposure must discover and explicitly pass the exposed provider ID.
 
 Import `ai` from `js/bridge.js`. `ai.available` means the native channel exists, **not** that an account is connected. All methods below return Promises:
 
 | Method | Resolved value |
 | --- | --- |
-| `ai.providers()` | `{providers: [{id: "chatgpt", name: "ChatGPT", connected: true}]}` (connection may be false) |
-| `ai.models("chatgpt")` | `{models: [{id: "provider-model-id", name: "Display name", reasoningLevels: ["low", "medium", "high"]}]}` |
+| `ai.providers()` | `{providers: [{id, name, connected}]}` (one host-selected provider; connection may be false) |
+| `ai.models(providerId)` | `{models: [{id: "provider-model-id", name: "Display name", reasoningLevels: ["low", "medium", "high"]}]}` |
 | `ai.start({providerId, model, instructions, input, reasoningEffort?})` | Request ID string |
 | `ai.result(id)` | Pending: `{id, done: false, value: null}`; success: `{id, done: true, value: "completed text"}` |
 | `ai.wait(id)` | Completed text string; only for IDs started by this page instance |
 | `ai.cancel(id)` | `true`; cancels and releases the request |
 | `ai.acknowledge(id)` | `true`; releases a terminal result after saving or handling failure |
 
-Model lists are account-specific and preserve server order. Treat IDs as provider-specific; use the returned list rather than hardcoding models. `reasoningLevels` may be empty. Omit `reasoningEffort` for the provider default; explicit efforts must come from the selected model's list. The examples' model IDs and capabilities above are illustrative.
+Model lists preserve each source’s server order, with ChatGPT before OpenRouter in Combined mode. Treat IDs as provider-specific; use the returned list rather than hardcoding models. `reasoningLevels` may be empty. Omit `reasoningEffort` for the provider default; explicit efforts must come from the selected model's list. The examples' model IDs and capabilities above are illustrative.
 
 Native command failures reject with `Error`, usually with `.code` and `.message`. A cached terminal failure from `ai.result()` may instead have `{id, done: true, error: {code, message}}` (its `value` is not response text). Handle both forms. Results created in the current page may contain additional wrapper internals; persist your own metadata, not the result object. Common failure codes include `authentication`, `permission`, `usage_limit`, `network`, `service`, `invalid_response`, `models`, `invalid_request`, `provider`, `request_in_progress` and `not_found`. An unavailable browser or command timeout may reject without a code. Show failures and require a deliberate new Generate action; never automatically retry inference.
 
@@ -326,11 +332,11 @@ import { ai, writeFile } from './bridge.js';
 export async function generateExample() {
   if (!ai.available) throw new Error('Open this app in App².');
   const { providers } = await ai.providers();
-  if (!providers.some(p => p.id === 'chatgpt' && p.connected))
-    throw new Error('Connect ChatGPT in the library Settings → AI.');
-  const { models } = await ai.models('chatgpt');
+  const provider = providers.find(p => p.connected);
+  if (!provider) throw new Error('Connect the selected provider in library Settings → AI.');
+  const { models } = await ai.models(provider.id);
   if (!models.length) throw new Error('No models available.');
-  const id = await ai.start({providerId: 'chatgpt', model: models[0].id,
+  const id = await ai.start({providerId: provider.id, model: models[0].id,
     instructions: 'Use plain language.',
     input: 'Write one short sentence explaining what a subapp is.'});
   // Persist id immediately for recovery in a production workflow.

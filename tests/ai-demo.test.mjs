@@ -58,3 +58,12 @@ test('UI preserves model order, defaults reasoning, locks pending controls and r
  finish({id:'ui-id',done:true,value:'<script>plain text</script>'});await generation;assert.equal(elements.get('ai-response').textContent,'<script>plain text</script>');assert.equal(elements.get('ai-cancel').hidden,true);assert.equal(elements.get('ai-generate').disabled,false);
  delete globalThis.document;delete globalThis.Option;delete globalThis.addEventListener;
 });
+test('exposed OpenRouter and Combined IDs pass through without provider-specific parsing', async () => {
+ for (const providerId of ['openrouter', 'combined']) {
+  const x=setup({providers:async()=>({providers:[{id:providerId,connected:true}]}),models:async id=>{assert.equal(id,providerId);return {models};}});
+  await x.session.refresh();await x.session.generate('first','');
+  assert.equal(x.calls.find(c=>c[0]==='start')[1].providerId,providerId);
+  assert.equal(x.disk().latest.providerId,providerId);
+  assert.equal(x.disk().latest.text,'A subapp is a small app.');
+ }
+});

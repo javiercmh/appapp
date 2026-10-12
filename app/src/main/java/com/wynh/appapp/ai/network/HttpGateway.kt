@@ -3,6 +3,8 @@ package com.wynh.appapp.ai.network
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.ensureActive
+import kotlin.coroutines.coroutineContext
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.OkHttpClient
@@ -14,7 +16,7 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 class ApiFailure(val kind: Kind, val userMessage: String, val serviceCode: String? = null) : Exception(userMessage) {
-    enum class Kind { AUTHENTICATION, PERMISSION, USAGE_LIMIT, NETWORK, INVALID_RESPONSE, SERVICE }
+    enum class Kind { AUTHENTICATION, PERMISSION, USAGE_LIMIT, NETWORK, INVALID_RESPONSE, SERVICE, INVALID_REQUEST, PROVIDER }
 }
 
 class HttpGateway(val client: OkHttpClient = OkHttpClient.Builder()
@@ -22,8 +24,8 @@ class HttpGateway(val client: OkHttpClient = OkHttpClient.Builder()
     .callTimeout(180, TimeUnit.SECONDS).retryOnConnectionFailure(false)
     .followRedirects(false).followSslRedirects(false).build()) {
 
-    suspend fun json(request: Request): JsonObject = request(request) { response ->
-        val text = boundedBody(response)
+    suspend fun json(request: Request, maxBytes: Long = 1_048_576, errors: (Int, String?) -> ApiFailure = ::errorFor): JsonObject = request(request, errors) { response ->
+        val text = boundedBody(response, maxBytes)
         try { JsonParser.parseString(text).asJsonObject } catch (_: Exception) { throw malformed() }
     }
 
@@ -51,39 +53,42 @@ class HttpGateway(val client: OkHttpClient = OkHttpClient.Builder()
 
     suspend fun empty(request: Request) { request(request) { Unit } }
 
-    private suspend fun <T> request(request: Request, consume: (Response) -> T): T = suspendCancellableCoroutine { continuation ->
-        val call = client.newCall(request)
-        continuation.invokeOnCancellation { call.cancel() }
-        call.enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                if (continuation.isActive) continuation.resumeWithException(connectionFailure(e, request.url.host))
-            }
-            override fun onResponse(call: Call, response: Response) {
-                response.use {
-                    try {
-                        if (!it.isSuccessful) {
-                            val code = runCatching {
-                                val error = JsonParser.parseString(boundedBody(it)).asJsonObject.get("error")
-                                if (error?.isJsonPrimitive == true) error.asString else error?.asJsonObject?.get("code")?.asString
-                            }.getOrNull()
-                            throw errorFor(it.code, code)
+    private suspend fun <T> request(request: Request, errors: (Int, String?) -> ApiFailure = ::errorFor, consume: (Response) -> T): T {
+        coroutineContext.ensureActive()
+        return suspendCancellableCoroutine { continuation ->
+            val call = client.newCall(request)
+            continuation.invokeOnCancellation { call.cancel() }
+            call.enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    if (continuation.isActive) continuation.resumeWithException(connectionFailure(e, request.url.host))
+                }
+                override fun onResponse(call: Call, response: Response) {
+                    response.use {
+                        try {
+                            if (!it.isSuccessful) {
+                                val code = runCatching {
+                                    val error = JsonParser.parseString(boundedBody(it)).asJsonObject.get("error")
+                                    if (error?.isJsonPrimitive == true) error.asString else error?.asJsonObject?.get("code")?.asString
+                                }.getOrNull()
+                                throw errors(it.code, code)
+                            }
+                            val result = consume(it)
+                            if (continuation.isActive) continuation.resume(result)
+                        } catch (e: Exception) {
+                            if (continuation.isActive) continuation.resumeWithException(
+                                if (e is ApiFailure || e is com.wynh.appapp.ai.auth.AuthFailure) e
+                                else if (e is IOException) ApiFailure(ApiFailure.Kind.NETWORK, "The response was interrupted. Please try again.")
+                                else malformed())
                         }
-                        val result = consume(it)
-                        if (continuation.isActive) continuation.resume(result)
-                    } catch (e: Exception) {
-                        if (continuation.isActive) continuation.resumeWithException(
-                            if (e is ApiFailure || e is com.wynh.appapp.ai.auth.AuthFailure) e
-                            else if (e is IOException) ApiFailure(ApiFailure.Kind.NETWORK, "The response was interrupted. Please try again.")
-                            else malformed())
                     }
                 }
-            }
-        })
+            })
+        }
     }
 
-    private fun boundedBody(response: Response): String {
+    private fun boundedBody(response: Response, maxBytes: Long = 1_048_576): String {
         val source = response.body?.source() ?: throw malformed()
-        if (source.request(1_048_577)) throw malformed()
+        if (source.request(maxBytes + 1)) throw malformed()
         return source.readUtf8()
     }
 
@@ -91,7 +96,7 @@ class HttpGateway(val client: OkHttpClient = OkHttpClient.Builder()
         fun connectionFailure(error: IOException, host: String? = null): ApiFailure {
             val detail = when (error) {
                 is java.net.UnknownHostException -> "The service hostname could not be resolved. Check your network or private DNS settings."
-                is javax.net.ssl.SSLException -> "A secure connection to OpenAI could not be established. Check the device date and network configuration."
+                is javax.net.ssl.SSLException -> "A secure connection to the AI service could not be established. Check the device date and network configuration."
                 is java.net.SocketTimeoutException -> "The connection timed out. Please try again."
                 else -> "The connection failed. Check your internet connection and try again."
             }
