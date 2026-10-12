@@ -124,6 +124,20 @@ Each app's `WebView` loads `https://<id>.app.local/index.html`. Requests for tha
    - Commit only when asked, and commit to the **current** branch — `main` included.
    - Do **not** create a branch for the work unless the request explicitly asks for one.
    - Keep commits focused: split unrelated fixes into separate commits rather than one omnibus change.
+6. **Releasing**:
+   - Only on the user's request. Bump `versionCode` (+1) and `versionName` in `app/build.gradle.kts`.
+   - Add a section at the top of `RELEASE_NOTES.md` (same layout as the existing ones: topical `##`
+     sections, Installation, `Version: x.y.z (version code n)`, Verification), then commit
+     `Release AppApp x.y.z` and tag `vx.y.z`. Never move or force-push an existing tag; ship a
+     patch version instead.
+   - Build `:app:assembleRelease`, verify the certificate fingerprint above, and copy the APK to
+     `AppApp-x.y.z.apk` with `AppApp-x.y.z.apk.sha256` (`sha256sum` output).
+   - Publish a GitHub release for the tag with both files, marked latest, titled
+     `App² x.y.z — Short description`. The release body is the new `RELEASE_NOTES.md` section
+     **without its `# App² x.y.z` heading**, since the release title already shows it.
+     Pushing a tag alone does not create a release.
+   - Use `gh` (installed in `~/.local/bin`, logged in as the owner). If it is missing or logged
+     out, ask the user to install or authenticate it.
 
 ---
 
