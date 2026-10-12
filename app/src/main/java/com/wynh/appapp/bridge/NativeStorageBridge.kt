@@ -424,6 +424,9 @@ class NativeStorageBridge(
             rememberNotification(context, subappId, id)
             log("[Notification] Posted notification #$id: '$title' - '$message'")
             true
+        } catch (e: SecurityException) {
+            log("[Notification Error] Permission denied: ${e.message}")
+            false
         } catch (e: Exception) {
             log("[Notification Error] Failed to show notification: ${e.message}")
             false
