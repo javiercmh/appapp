@@ -568,7 +568,13 @@ class SubappLibraryActivity : AppCompatActivity() {
             row.appMenu.contentDescription = getString(R.string.library_menu, name)
             row.appMenu.setOnClickListener { anchor ->
                 val content = layoutInflater.inflate(R.layout.popup_library_actions, null)
-                val popup = PopupWindow(content, resources.getDimensionPixelSize(R.dimen.library_actions_popup_width), ViewGroup.LayoutParams.WRAP_CONTENT, true).apply {
+                val popupWidth = resources.getDimensionPixelSize(R.dimen.library_actions_popup_width)
+                // An explicit height lets showAsDropDown flip the menu above the anchor when it would overflow.
+                content.measure(
+                    View.MeasureSpec.makeMeasureSpec(popupWidth, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+                )
+                val popup = PopupWindow(content, popupWidth, content.measuredHeight, true).apply {
                     elevation = resources.getDimension(R.dimen.library_actions_popup_elevation)
                     setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
                     isOutsideTouchable = true
@@ -588,7 +594,7 @@ class SubappLibraryActivity : AppCompatActivity() {
                 }
                 content.findViewById<View>(R.id.share_app).setOnClickListener { popup.dismiss(); showPackageDialog(record) }
                 content.findViewById<View>(R.id.edit_app).setOnClickListener { popup.dismiss(); edit(record) }
-                popup.showAsDropDown(anchor, -resources.getDimensionPixelSize(R.dimen.library_actions_popup_width) + anchor.width, 0)
+                popup.showAsDropDown(anchor, anchor.width - popupWidth, 0)
             }
         }
     }
