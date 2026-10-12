@@ -142,4 +142,17 @@ class WorkspaceUpdaterTest {
         assertThrows(IllegalArgumentException::class.java) { engine.preview(pkg.copy(appId = "other.publisher"), files) }
         assertThrows(IllegalArgumentException::class.java) { UpdatePackage.parse(File(files, "manifest.json").readText().replace("js/old.js", "data")) }
     }
+
+    @Test fun changedPublisherIdentityInstallsOnlyWhenAccepted() {
+        val root = workspace(); val engine = WorkspaceUpdater(root); val (pkg, files) = packageFiles("1")
+        engine.install(pkg, files, sha1, 3)
+        assertNull(engine.identityMismatch(pkg))
+        val manifest = File(files, "manifest.json"); manifest.writeText(manifest.readText().replace("test.publisher", "other.publisher"))
+        val renamed = UpdatePackage.parse(manifest.readText())
+        assertTrue(engine.identityMismatch(renamed)!!.contains("other.publisher"))
+        assertThrows(IllegalArgumentException::class.java) { engine.install(renamed, files, sha2, 3) }
+        engine.install(renamed, files, sha2, 3, acceptMismatch = true)
+        assertEquals("other.publisher", engine.installed()!!.appId)
+        assertNull(engine.identityMismatch(renamed))
+    }
 }
