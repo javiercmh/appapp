@@ -30,6 +30,7 @@ import java.io.FileInputStream
 /** Standalone document task bound to the app ID encoded in its launch URI. */
 class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
     private var speechSession: com.wynh.appapp.speech.SpeechSession? = null
+    private var translationSession: com.wynh.appapp.translation.TranslationSession? = null
     private var webView: WebView? = null
     private var activeId: String? = null
     private var historyBackPending = false
@@ -65,6 +66,7 @@ class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
         val record = id?.let { SubappRepository(this).resolve(it) }
         if (record == null) {
             speechSession?.close(); speechSession = null
+            translationSession?.close(); translationSession = null
             webView?.destroy(); webView = null
             setContentView(TextView(this).apply {
                 text = "App no longer available"
@@ -78,14 +80,16 @@ class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
         historyBackPending = false
         activeId?.let { SubappSessionRegistry.unregister(it, this) }
         speechSession?.close()
+        translationSession?.close()
         webView?.destroy()
         activeId = record.id
         val manager = WorkspaceManager(this, workspaceDir = record.workspaceDir)
         updateTaskAppearance(manager)
         SubappSessionRegistry.register(record.id, this)
         val root = FrameLayout(this)
-        val web = com.wynh.appapp.speech.SpeechWebView(this)
+        val web = WebView(this)
         speechSession = com.wynh.appapp.speech.SpeechSession(this, web, record.id).also { it.install() }
+        translationSession = com.wynh.appapp.translation.TranslationSession(this, web, record.id).also { it.install() }
         webView = web
         root.addView(web, FrameLayout.LayoutParams(-1, -1))
         setContentView(root)
@@ -184,6 +188,7 @@ class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
 
     override fun onResume() {
         speechSession?.resume()
+        translationSession?.resume()
         super.onResume()
         (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.auth?.setForeground(true)
         if (didInitialResume) {
@@ -199,6 +204,7 @@ class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
 
     override fun onPause() {
         speechSession?.pause()
+        translationSession?.pause()
         (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.auth?.setForeground(false)
         super.onPause()
     }
@@ -215,6 +221,7 @@ class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
 
     override fun pauseForUpdate() {
         speechSession?.pause()
+        translationSession?.pause()
         webView?.onPause()
         webView?.pauseTimers()
         webView?.visibility = android.view.View.INVISIBLE
@@ -222,6 +229,7 @@ class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
 
     override fun resumeAfterUpdate() {
         speechSession?.resume()
+        translationSession?.resume()
         webView?.resumeTimers()
         webView?.onResume()
         webView?.visibility = android.view.View.VISIBLE
@@ -230,6 +238,7 @@ class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
 
     override fun onDestroy() {
         speechSession?.close()
+        translationSession?.close()
         if (isFinishing) (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.cancelTask(taskId)
         activeId?.let { SubappSessionRegistry.unregister(it, this) }
         chooserCallback?.onReceiveValue(null); chooserCallback = null

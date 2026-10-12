@@ -343,14 +343,13 @@ not engine readiness. Browser previews reject calls with `unavailable`.
   Missing data must be installed through Android TTS settings; do not retry automatically.
   Empty text and text beyond Android's engine input limit are rejected.
 
-The native selection menu includes **Speak**. Mark pronunciation language with inherited HTML
-`lang`, e.g. `<span lang="ja-JP">こんにちは</span>`. Missing/conflicting annotations are rejected.
-This also works for selected text in inputs and textareas, excluding password fields.
+Subapps provide their own pronunciation buttons using `speech.speak({text, language})`.
+App² does not add a Speak action to Android’s text selection menu.
 A native **Stop** control appears during playback. Speech stops on backgrounding, page reload,
 navigation, workspace replacement, or closure; it is not persisted or resumed.
 The channel accepts only the owning subapp HTTPS origin and main frame. No AI account is needed.
 Store any subapp voice preferences in plain JSON under `data/`. The Starter Demo includes
-`js/speech-demo.js`; existing apps adopt the API or language markup explicitly.
+`js/speech-demo.js`; existing apps adopt the speech API explicitly.
 
 
 ### Pronunciation example
@@ -369,8 +368,42 @@ try {
 }
 ```
 
-For multilingual selection, annotate each passage independently:
-`<span lang="fr-FR">Bonjour</span>` and `<span lang="ja-JP">こんにちは</span>`.
-The nearest inherited `lang` wins, so an English document language does not describe a
-French word unless that word overrides it. Keep text selectable in CSS.
 Existing workspaces are not rewritten; adopt the current wrapper explicitly to add speech buttons.
+
+
+## Device Translation
+
+Import `translation` from `js/bridge.js`. These methods return Promises:
+
+- `await translation.availability()` returns `{available: true}` only when Android 10/API 29
+  or later has an installed activity that handles `Intent.ACTION_TRANSLATE`.
+- `await translation.open({text})` opens the default handler, or Android's resolver when a
+  handler must be selected, and resolves to `{opened: true}` after launching it.
+  It does not return translated text or confirm translation completion.
+
+Supply canonical selected text from the subapp's own selection model. Text is forwarded unchanged;
+blank text and text longer than 100000 JavaScript UTF-16 code units are rejected. Android's standard
+translation intent only accepts text (`Intent.EXTRA_TEXT`): it has no source or target language
+parameters. The receiving app controls language detection, target language, and translation UI.
+No contextual menu action is added by App². Call `open` only after a deliberate user action.
+Opening translation sends the supplied text to the selected external application.
+
+The channel is restricted to the owning subapp HTTPS origin and main frame, and requires a
+foreground app. Browser previews and unsupported hosts report `{available: false}` from
+`availability()`; `open()` rejects with `unavailable`. Native failures reject with `.code` and
+`.message`: `invalid_request` or `unavailable`; the wrapper may also reject with `timeout`.
+Handle errors and require deliberate retry. Availability can change between checking and opening.
+
+```js
+import { translation } from './bridge.js';
+translateButton.hidden = !(await translation.availability()).available;
+translateButton.addEventListener('click', async () => {
+  try {
+    await translation.open({text: canonicalSelectedText});
+  } catch (error) {
+    status.textContent = error.message;
+  }
+});
+```
+
+Existing workspaces must explicitly adopt the updated `js/bridge.js` to use this API.

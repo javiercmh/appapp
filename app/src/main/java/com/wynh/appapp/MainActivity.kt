@@ -223,9 +223,11 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
     private fun createNotificationChannel() = NativeStorageBridge.ensureNotificationChannel(this)
 
     private var speechSession: com.wynh.appapp.speech.SpeechSession? = null
+    private var translationSession: com.wynh.appapp.translation.TranslationSession? = null
 
     override fun onResume() {
         speechSession?.resume()
+        translationSession?.resume()
         super.onResume()
         (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.auth?.setForeground(true)
         // Catches a permission flipped in the system settings screen we sent the user to.
@@ -242,6 +244,7 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
 
     override fun onPause() {
         speechSession?.pause()
+        translationSession?.pause()
         (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.auth?.setForeground(false)
         super.onPause()
     }
@@ -384,6 +387,7 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
     @SuppressLint("SetJavaScriptEnabled")
     private fun setupWebView() {
         speechSession = com.wynh.appapp.speech.SpeechSession(this, binding.webView, subapp.id).also { it.install() }
+        translationSession = com.wynh.appapp.translation.TranslationSession(this, binding.webView, subapp.id).also { it.install() }
         val webView = binding.webView
         val settings = webView.settings
 
@@ -1512,6 +1516,7 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
 
     override fun pauseForUpdate() {
         speechSession?.pause()
+        translationSession?.pause()
         binding.webView.onPause()
         binding.webView.pauseTimers()
         binding.webView.visibility = View.INVISIBLE
@@ -1519,6 +1524,7 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
 
     override fun resumeAfterUpdate() {
         speechSession?.resume()
+        translationSession?.resume()
         binding.webView.resumeTimers()
         binding.webView.onResume()
         binding.webView.visibility = View.VISIBLE
@@ -1527,6 +1533,7 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
 
     override fun onDestroy() {
         speechSession?.close()
+        translationSession?.close()
         super.onDestroy()
         if (isFinishing) (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.cancelTask(taskId)
         if (::subapp.isInitialized) SubappSessionRegistry.unregister(subapp.id, this)

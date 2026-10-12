@@ -348,3 +348,37 @@ export const speech = {
   speak: options => speechCommand('speak', options),
   stop: () => speechCommand('stop')
 };
+
+// Opens the device translation handler; no translated result is returned.
+const TRANSLATION = window.AppTranslation || null;
+const translationRequests = new Map();
+if (TRANSLATION) TRANSLATION.onmessage = event => {
+  let message;
+  try { message = JSON.parse(event.data); } catch { return; }
+  const pending = translationRequests.get(message.id);
+  if (!pending) return;
+  translationRequests.delete(message.id);
+  clearTimeout(pending.timer);
+  if (message.error) {
+    const error = new Error(message.error.message);
+    error.code = message.error.code;
+    pending.reject(error);
+  } else pending.resolve(message.value);
+};
+function translationCommand(action, options) {
+  if (!TRANSLATION) return Promise.reject(Object.assign(new Error('Translation requires a supported App² host.'), {code: 'unavailable'}));
+  const id = `translation-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      translationRequests.delete(id);
+      reject(Object.assign(new Error('Translation command timed out.'), {code: 'timeout'}));
+    }, 15000);
+    translationRequests.set(id, {resolve, reject, timer});
+    try { TRANSLATION.postMessage(JSON.stringify({id, action, options})); }
+    catch (error) { clearTimeout(timer); translationRequests.delete(id); reject(error); }
+  });
+}
+export const translation = {
+  availability: () => TRANSLATION ? translationCommand('availability') : Promise.resolve({available: false}),
+  open: options => translationCommand('open', options)
+};
