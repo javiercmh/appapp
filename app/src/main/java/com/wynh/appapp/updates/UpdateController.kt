@@ -78,7 +78,7 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
                     return@launch
                 }
                 val text = buildString {
-                    append("Version: ${value.pkg.version}\n${source.display}\n\n${preview.added.size} added · ${preview.changed.size} changed · ${preview.removed.size} removed\n")
+                    append("Version: ${value.pkg.version}\n${source.display}\n")
                     if (mismatch != null) append("\n⚠ This publisher does not match the installed app:\n$mismatch\nOnly continue if you trust this repository. Updating adopts the new identity.\n")
                     if (subjects.isNotEmpty()) append("\nLatest commits:\n${subjects.joinToString("\n") { "• $it" }}\n")
                     append("\nUser records and unowned files are preserved.\n")
