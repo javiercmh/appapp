@@ -1,3 +1,23 @@
+# App² 1.5.2
+
+## Translation and text selection
+
+- Let subapps open Android's installed translation handler with selected text through the new `translation` API. Availability depends on Android 10 or later and an installed translation handler.
+- Let subapps hide Android's floating text-selection menu while retaining selection handles and events. The setting resets on each page load.
+- Remove App²'s contextual Speak action. Subapps can continue to provide pronunciation buttons through the speech API.
+
+## Library improvements
+
+- Keep app menus visible when opened near the bottom of the library.
+
+## Installation
+
+Download `AppApp-1.5.2.apk` and install it as an update to App². It uses the existing release signing certificate and application ID `com.wynh.appapp`. Existing subapp workspaces are not rewritten; adopt the updated `js/bridge.js` explicitly to use the new APIs.
+
+Version: `1.5.2` (version code `9`).
+
+---
+
 # App² 1.5.1
 
 ## Library and editor improvements
