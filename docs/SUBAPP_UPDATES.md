@@ -133,9 +133,13 @@ so restored code is reported as local changes during the next update review.
   match; it does not restore data that is missing. Do not install a debug APK on
   a phone unless its certificate is verified to match. Check migration
   implications before launching. A configured library's normal update does not
-  create a new legacy migration. Record app names/count and a harmless data
-  sentinel before and after; on any unexpected change, stop without cleanup and
-  report the observed state.
+  create a new legacy migration. For routine phone updates, make and verify one
+  full-library backup before installation and record app names/count. After
+  installation, open the library and confirm the same apps are present. A second
+  backup, file-hash comparison, and data-sentinel checks are not required. If the
+  library is empty or apps are unexpectedly missing, stop and report the state;
+  restore or alter entries only when the owner instructs you to do so. This
+  library check does not verify every app's internal data.
 - For first preview delivery, push the ZIP to Downloads and use the library's
   ZIP picker to create a separate app. Never import over the user's app or use
   `run-as` to bypass a signed release's sandbox.
