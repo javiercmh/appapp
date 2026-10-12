@@ -95,6 +95,12 @@ from elsewhere.**
 | `listFiles()` | `String` — JSON array of `{name, size, lastModified}` |
 | `getStorageStats()` | `String` — JSON with `usableSpaceBytes`, `totalSpaceBytes`, `appFilesCount`, `appFilesBytes`, `filesDir` |
 
+### Text selection menu
+
+| Method | Returns |
+| :--- | :--- |
+| `setSelectionMenuSuppressed(suppressed)` | `Boolean` — hides Android's floating selection menu for this page load; use `selectionMenu.setSuppressed()` from `js/bridge.js` |
+
 ### Notifications
 
 | Method | Returns |

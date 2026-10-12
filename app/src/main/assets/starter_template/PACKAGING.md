@@ -218,3 +218,15 @@ translateButton.addEventListener('click', async () => {
 ```
 
 Existing workspaces must explicitly adopt the updated `js/bridge.js` to use this API.
+
+## Text Selection Menu
+
+Import `selectionMenu` from `js/bridge.js`. `selectionMenu.available` reports a host that supports it.
+
+- `selectionMenu.setSuppressed(true)` hides Android's floating selection menu (Copy, Select all,
+  Share…) for the current page load and returns `true` when the host applied it. `false` restores it.
+- Selection handles, `selectionchange` and `getSelection()` keep working. The subapp must provide
+  its own actions, including Copy. The setting resets on reload or navigation: call it at startup.
+- Browser previews and older hosts return `false`; keep the subapp's own selection UI visible
+  in that case.
+

@@ -157,6 +157,9 @@ notifications (`showNotification` / `showNotificationWithId` / `cancelNotificati
 (`scheduleNotification` / `cancelScheduledNotification` / `canScheduleExactNotifications` /
 `requestExactNotificationPermission`)**.
 
+`setSelectionMenuSuppressed(Boolean)` hides Android's floating text-selection menu for the current
+page load (handles and selection events remain); `MainActivity` and `SubappRuntimeActivity` reset it in `onPageStarted`.
+
 `openNotificationSettings()` opens this app's notification screen (falling back to the app details
 page). It is the only route left for a user on API 26-32, where no runtime prompt exists, or one who
 has already refused the prompt — Android then silently declines to show it again. App²'s own Settings

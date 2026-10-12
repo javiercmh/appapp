@@ -382,3 +382,13 @@ export const translation = {
   availability: () => TRANSLATION ? translationCommand('availability') : Promise.resolve({available: false}),
   open: options => translationCommand('open', options)
 };
+
+// Hides Android's floating text-selection menu for this page load. Selection handles and
+// selection events keep working, so the app must provide its own actions (Copy included).
+export const selectionMenu = {
+  available: Boolean(N && typeof N.setSelectionMenuSuppressed === 'function'),
+  setSuppressed(suppressed) {
+    try { return selectionMenu.available && N.setSelectionMenuSuppressed(Boolean(suppressed)) === true; }
+    catch { return false; }
+  }
+};
