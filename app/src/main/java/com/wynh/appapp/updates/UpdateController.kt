@@ -79,12 +79,8 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
                 val text = buildString {
                     append("Version: ${value.pkg.version}\n${source.display}\n\n${preview.added.size} added · ${preview.changed.size} changed · ${preview.removed.size} removed\n")
                     if (subjects.isNotEmpty()) append("\nLatest commits:\n${subjects.joinToString("\n") { "• $it" }}\n")
-                    if (preview.adoption) append("\nLink publisher identity: ${value.pkg.appId}\n")
                     append("\nUser records and unowned files are preserved.\n")
-                    fun section(label: String, files: List<String>) { if (files.isNotEmpty()) append("\n$label:\n${files.joinToString("\n")}\n") }
-                    section("Added", preview.added); section("Replaced", preview.changed); section("Removed", preview.removed)
-                    if (preview.edited.isNotEmpty()) append("\nLocal changes listed below will be replaced by publisher files.\n")
-                    section(if (preview.adoption) "Existing files to adopt and replace" else "Locally edited or missing code", preview.edited)
+                    if (preview.edited.isNotEmpty()) append("\n${preview.edited.size} locally edited or missing code files will be replaced by publisher files.\n")
                     append("\nThe current and updated versions will be saved in Edit → Version history. A recovery backup will also be created.")
                 }
                 MaterialAlertDialogBuilder(activity).setTitle("Review app update").setMessage(text)
