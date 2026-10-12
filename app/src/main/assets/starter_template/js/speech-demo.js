@@ -10,4 +10,4 @@ for (const button of document.querySelectorAll('[data-speech-language]')) {
     } catch (error) { status.textContent = error.message; }
   });
 }
-status.textContent = speech.available ? 'Select an annotated word and tap Speak, or choose a language below.' : 'Open in App² to hear native speech.';
+status.textContent = speech.available ? 'Choose a language below to hear pronunciation.' : 'Open in App² to hear native speech.';

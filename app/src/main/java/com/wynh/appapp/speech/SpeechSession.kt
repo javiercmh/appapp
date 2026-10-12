@@ -1,12 +1,13 @@
 package com.wynh.appapp.speech
 
+import android.webkit.WebView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import com.google.gson.Gson
 import com.google.gson.JsonParser
 
-class SpeechSession(private val activity: AppCompatActivity, private val web: SpeechWebView, subappId: String) {
+class SpeechSession(private val activity: AppCompatActivity, private val web: WebView, subappId: String) {
     private val origin = "https://$subappId.app.local"
     private val controller = SpeechController(activity)
     private var generation = 0
@@ -15,16 +16,6 @@ class SpeechSession(private val activity: AppCompatActivity, private val web: Sp
     private val gson = Gson()
 
     fun install() {
-        web.speakSelection = selection@{ raw ->
-            if (closed || !foreground || !trustedPage()) return@selection
-            val options = runCatching { JsonParser.parseString(raw).asJsonObject }.getOrNull() ?: return@selection
-            if (options.get("language")?.asString.isNullOrBlank()) {
-                controller.showError("language", "The subapp must mark selected text with one speech language using HTML lang.")
-                return@selection
-            }
-            val page = generation
-            controller.withEngine({ if (page == generation && foreground) controller.speak(options, {}, controller::showError) }, controller::showError)
-        }
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) return
         WebViewCompat.addWebMessageListener(web, "AppSpeech", setOf(origin)) { _, message, source, mainFrame, reply ->
             if (closed || !mainFrame || source.toString().trimEnd('/') != origin) return@addWebMessageListener
@@ -55,12 +46,8 @@ class SpeechSession(private val activity: AppCompatActivity, private val web: Sp
             }
         }
     }
-    private fun trustedPage() = runCatching {
-        val uri = android.net.Uri.parse(web.url)
-        "${uri.scheme}://${uri.host}" == origin
-    }.getOrDefault(false)
-    fun pageChanged() { web.invalidateSelection(); generation++; controller.reset() }
-    fun pause() { web.invalidateSelection(); foreground = false; controller.reset() }
+    fun pageChanged() { generation++; controller.reset() }
+    fun pause() { foreground = false; controller.reset() }
     fun resume() { foreground = true }
-    fun close() { web.invalidateSelection(); closed = true; generation++; web.speakSelection = null; controller.close() }
+    fun close() { closed = true; generation++; controller.close() }
 }
