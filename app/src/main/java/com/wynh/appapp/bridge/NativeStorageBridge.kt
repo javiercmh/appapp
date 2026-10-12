@@ -34,7 +34,8 @@ class NativeStorageBridge(
     private val subappId: String,
     private val appWorkspaceDir: File,
     private val onLogListener: ((String) -> Unit)? = null,
-    private val onRequestNotificationPermission: (() -> Unit)? = null
+    private val onRequestNotificationPermission: (() -> Unit)? = null,
+    private val onSetSelectionMenuSuppressed: ((Boolean) -> Unit)? = null
 ) {
     private val sharedPrefs: SharedPreferences =
         context.getSharedPreferences("runtime_app_state_$subappId", Context.MODE_PRIVATE)
@@ -332,6 +333,22 @@ class NativeStorageBridge(
             true
         } else {
             onRequestNotificationPermission?.invoke()
+            false
+        }
+    }
+
+    /**
+     * Hides or restores Android's floating text-selection menu for the current page load.
+     * Selection handles and selection events keep working; the subapp supplies its own actions.
+     */
+    @JavascriptInterface
+    fun setSelectionMenuSuppressed(suppressed: Boolean): Boolean {
+        val callback = onSetSelectionMenuSuppressed ?: return false
+        return try {
+            callback(suppressed)
+            true
+        } catch (e: Exception) {
+            onLogListener?.invoke("[Selection Menu Error] ${e.message}")
             false
         }
     }

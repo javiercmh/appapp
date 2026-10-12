@@ -87,7 +87,7 @@ class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
         updateTaskAppearance(manager)
         SubappSessionRegistry.register(record.id, this)
         val root = FrameLayout(this)
-        val web = WebView(this)
+        val web = SelectionAwareWebView(this)
         speechSession = com.wynh.appapp.speech.SpeechSession(this, web, record.id).also { it.install() }
         translationSession = com.wynh.appapp.translation.TranslationSession(this, web, record.id).also { it.install() }
         webView = web
@@ -110,6 +110,9 @@ class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
                 if (android.os.Build.VERSION.SDK_INT >= 33) runOnUiThread {
                     notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
                 }
+            },
+            onSetSelectionMenuSuppressed = { suppressed ->
+                runOnUiThread { web.selectionMenuSuppressed = suppressed }
             }
         )
         web.addJavascriptInterface(bridge, "AndroidStorage")
@@ -122,6 +125,7 @@ class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
         web.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                 speechSession?.pageChanged()
+                web.selectionMenuSuppressed = false
                 super.onPageStarted(view, url, favicon)
             }
             override fun onPageFinished(view: WebView?, url: String?) {

@@ -225,6 +225,7 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
     private var speechSession: com.wynh.appapp.speech.SpeechSession? = null
     private var translationSession: com.wynh.appapp.translation.TranslationSession? = null
 
+
     override fun onResume() {
         speechSession?.resume()
         translationSession?.resume()
@@ -345,6 +346,9 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
             },
             onRequestNotificationPermission = {
                 runOnUiThread { promptNotificationPermission() }
+            },
+            onSetSelectionMenuSuppressed = { suppressed ->
+                runOnUiThread { binding.webView.selectionMenuSuppressed = suppressed }
             }
         )
 
@@ -470,6 +474,7 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
         webView.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                 speechSession?.pageChanged()
+                binding.webView.selectionMenuSuppressed = false
                 super.onPageStarted(view, url, favicon)
             }
             override fun shouldInterceptRequest(
