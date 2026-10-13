@@ -1,0 +1,7 @@
+10-13 11:15:37.128  4298  4320 I System.out: AUDIT disconnected "{\"id\":\"audit\",\"type\":\"error\",\"data\":{\"code\":\"authentication\",\"message\":\"Connect ChatGPT in App² Settings → AI.\"}}"
+10-13 11:15:39.229  4298  4320 I System.out: AUDIT iframe editor=true "{\"audit\":true,\"origin\":\"null\",\"storage\":\"object\",\"ai\":\"undefined\",\"value\":\"AUDIT-ONLY\",\"write\":true}"
+10-13 11:15:40.383  4298  4320 I System.out: AUDIT zip rejected=true reason=ZIP exceeds size limit
+10-13 11:15:43.190  4298  4320 I System.out: AUDIT zip rejected=true reason=Invalid zip entry path: ../escape.txt
+10-13 11:15:44.478  4298  4320 I System.out: AUDIT iframe editor=false "{\"audit\":true,\"origin\":\"null\",\"storage\":\"object\",\"ai\":\"undefined\",\"value\":\"AUDIT-ONLY\",\"write\":true}"
+10-13 11:15:47.527  4298  4320 I System.out: AUDIT editor external read="AUDIT-ONLY"
+10-13 11:15:48.610  4298  4320 I System.out: AUDIT zip rejected=true reason=Too many ZIP entries
