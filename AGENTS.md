@@ -21,8 +21,10 @@ This document provides architectural context, coding standards, and operational 
 | `com.wynh.appapp.workspace.WorkspaceManager` | Manages one app workspace under `filesDir/subapps/<id>/workspace/`. |
 | `com.wynh.appapp.workspace.WorkspaceHistoryManager` | Manages snapshots in that app's `workspace_history.json`. |
 | `com.wynh.appapp.workspace.WorkspacePackageManager` | Handles selective ZIP export/packaging, Android Sharesheet integration, direct stream export, and secure ZIP extraction with Zip-Slip defense and auto-backup snapshots. |
-| `com.wynh.appapp.bridge.NativeStorageBridge` | Main `@JavascriptInterface` exposed to the web runtime as `window.AndroidStorage`, `window.AndroidMemory`, and `window.AndroidNotification`. Manages persistent key-value state, unified file I/O directly in `workspace/`, native system notifications, and `AlarmManager`-backed scheduled notifications. |
+| `com.wynh.appapp.bridge.NativeStorageBridge` | Native implementation behind `window.AndroidStorage`, `window.AndroidMemory`, and `window.AndroidNotification` (its `jsMethods` table is the whole JavaScript surface). Manages persistent key-value state, unified file I/O directly in `workspace/`, native system notifications, and `AlarmManager`-backed scheduled notifications. |
 | `com.wynh.appapp.ai` | App-owned AI provider settings, encrypted ChatGPT credentials and OpenRouter API key, native model/inference requests, background request service and the origin-restricted asynchronous web message API. |
+| `com.wynh.appapp.bridge.TokenGatedBridge` | The only `@JavascriptInterface` object: one `call(token, method, argsJson)` method that rejects calls without the per-WebView secret and validates arguments against `jsMethods`. Also builds the document-start shim. |
+| `com.wynh.appapp.runtime.SubappWebViews` / `SubappWebViewClient` | Shared hardened WebView setup for editor and runtime: settings, origin-only bridge installation, navigation policy, workspace asset serving and static 404s. |
 | `com.wynh.appapp.bridge.ScheduledNotificationReceiver` | Posts a notification armed earlier via `scheduleNotification`. Runs even when the app process is cold, so it re-creates the notification channel itself. |
 | `com.wynh.appapp.bridge.AlarmBootReceiver` | Re-arms persisted scheduled notifications after `BOOT_COMPLETED` / `MY_PACKAGE_REPLACED`, which clear pending alarms. |
 | `com.wynh.appapp.templates.DefaultWebApp` | Loads the starter template files dynamically from standalone assets (`app/src/main/assets/starter_template/`). |
@@ -107,7 +109,8 @@ Each app's `WebView` loads `https://<id>.app.local/index.html`. Requests for tha
      `APPAPP_RELEASE_KEY_ALIAS`, and `APPAPP_RELEASE_KEY_PASSWORD` from Gradle properties.
      Keep these values and the keystore outside the repository (for example, in
      `~/.gradle/gradle.properties`); never commit signing secrets or keystore files.
-     Build a signed APK with `./gradlew :app:assembleRelease`; the output is
+     Build a signed APK with `./gradlew :app:assembleSignedRelease`, which refuses to run without
+     these properties; the output is
      `app/build/outputs/apk/release/app-release.apk`.
    - To update an existing installation, the release APK must be signed with the same key as
      that installation. The current AppApp phone installation uses SHA-256 certificate
@@ -130,7 +133,7 @@ Each app's `WebView` loads `https://<id>.app.local/index.html`. Requests for tha
      sections, Installation, `Version: x.y.z (version code n)`, Verification), then commit
      `Release AppApp x.y.z` and tag `vx.y.z`. Never move or force-push an existing tag; ship a
      patch version instead.
-   - Build `:app:assembleRelease`, verify the certificate fingerprint above, and copy the APK to
+   - Build `:app:assembleSignedRelease`, verify the certificate fingerprint above, and copy the APK to
      `AppApp-x.y.z.apk` with `AppApp-x.y.z.apk.sha256` (`sha256sum` output).
    - Publish a GitHub release for the tag with both files, marked latest, titled
      `App² x.y.z — Short description`. The release body is the new `RELEASE_NOTES.md` section
@@ -143,23 +146,59 @@ Each app's `WebView` loads `https://<id>.app.local/index.html`. Requests for tha
 
 ## 5. Extending the JavaScript Bridge
 
+### How the bridge is exposed
+
+`addJavascriptInterface` injects an object into **every** frame, including cross-origin and opaque
+sandboxed iframes, so no capability may be registered with it directly. Instead
+`SubappWebViews.installStorageBridge` (used by both `MainActivity` and `SubappRuntimeActivity`):
+
+- registers one `TokenGatedBridge` as `__app2NativeBridge`, holding a per-WebView 256-bit
+  `SecureRandom` token. Calls with a wrong or missing token are rejected (constant-time compare)
+  before any argument is parsed or any method runs;
+- adds a `WebViewCompat.addDocumentStartJavaScript` shim limited to `https://<id>.app.local`. It
+  keeps the token and raw object in a closure, deletes `window.__app2NativeBridge`, and defines
+  `window.AndroidStorage`, `AndroidMemory` and `AndroidNotification` as one frozen object whose
+  synchronous methods keep the historical names, argument counts and return values, so existing
+  workspaces' `bridge.js` work unchanged;
+- fails closed: without `WebViewFeature.DOCUMENT_START_SCRIPT` the bridge is not exposed and an
+  error is logged.
+
+Same-origin frames of the app also receive the shim (accepted: they are the app's own code).
+Frames of other origins and external pages get no token, so they can neither read nor write.
+`SubappWebViewClient` keeps the main frame on the app origin: a gesture `http(s)`/`mailto:`/`tel:`
+link opens externally via `ACTION_VIEW`, every other off-origin main-frame navigation (including
+redirects) is dropped, and a foreign document that commits anyway (e.g. a form POST, which skips
+`shouldOverrideUrlLoading`) triggers a reload of the app entry. File/content URL access and mixed
+content are disabled. Missing workspace files return a static 404 page; the path is logged only.
+
 When adding new bridge methods for the runtime web app:
 
-1. Add the method in `NativeStorageBridge.kt` (or a specialized bridge class).
-2. Annotate the method with `@android.webkit.JavascriptInterface`.
-3. Keep return types primitive (`String`, `Boolean`, `Int`, `Double`) or JSON-encoded strings for complex objects.
-4. Ensure methods run safely and handle exceptions gracefully without crashing the UI thread.
-5. If creating a new bridge class, update `app/proguard-rules.pro` to retain `@JavascriptInterface` methods:
-   ```proguard
-   -keepclassmembers class com.wynh.appapp.bridge.YourNewBridge {
-       @android.webkit.JavascriptInterface <methods>;
-   }
-   ```
-6. Register the bridge in `MainActivity.kt`:
-   ```kotlin
-   webView.addJavascriptInterface(yourBridgeInstance, "BridgeName")
-   ```
-7. Mirror the change in **both** `AGENTS.md` files and in the template's `bridge.js`.
+1. Add the method in `NativeStorageBridge.kt` (or a specialized bridge class) and an entry in its
+   `jsMethods` table with the parameter types (`ArgType.STRING`, `INT` or `BOOLEAN`). Do **not**
+   annotate it with `@JavascriptInterface` or register it with `addJavascriptInterface`.
+2. Keep return types primitive (`String`, `Boolean`, `Int`) or JSON-encoded strings for complex objects.
+3. Ensure methods run safely and handle exceptions gracefully; an exception becomes a JS `Error`.
+4. Asynchronous or main-frame-only capabilities should use an origin-restricted
+   `WebViewCompat.addWebMessageListener` channel instead (see `ai`, `speech`, `translation`).
+5. Mirror the change in **both** `AGENTS.md` files and in the template's `bridge.js`.
+
+### Per-subapp permissions and network policy
+
+Capabilities are granted per subapp by the user and stored natively outside every workspace
+(`grants/SubappGrants.kt`; subapp code, exports, backups and snapshots cannot reach them):
+
+| Capability | Default for a new or imported app | What happens without it |
+| --- | --- | --- |
+| AI | Off | The first `ai.start` shows a native dialog naming the app, the provider, the data sent and the cost source. Allow stores the grant; Don't allow fails with code `permission`. At most 6 starts per app per minute (`usage_limit`). |
+| Notifications | Off | `showNotification`, `showNotificationWithId` and `scheduleNotification` return `false` and a native dialog asks once per page load; `hasNotificationPermission()` is `false` until granted and Android's own permission is also held. Scheduled alarms of an ungranted app are skipped and cancelled on revocation. |
+| Internet | Off | Pages get a `Content-Security-Policy` limiting loads to the app's own origin (plus `data:` and `blob:`), and any request to another host is answered `403` and logged to `app.log` as `[Network] Blocked`. Loopback, private and link-local hosts are refused even with the grant. Changes apply on the next app launch. |
+
+Apps that existed before grants were introduced keep Internet (and Notifications when reminders were
+already scheduled); AI is never granted automatically. Users review and revoke every capability in
+the library: app menu → Permissions. Deleting an app, or a GitHub update that changes publisher code,
+clears its grants. ZIP and GitHub imports create a new app ID and therefore start with no grants.
+When adding a capability, extend `SubappCapability`, ask through `SubappGrants.ask`, and list the
+default here, in the starter `AGENTS.md`, `PACKAGING.md` and `PRIVACY.md`.
 
 ### Current bridge surface
 
@@ -256,6 +295,13 @@ binary file that the current subapp's origin interceptor can then serve via `<im
 5. **Workspace Files & Nested Subdirectories**:
    - `WorkspaceManager` and `NativeStorageBridge` support real nested subdirectories (e.g. `css/style.css`, `js/app.js`, `assets/images/photo.jpg`).
    - Slashes (`/`) are preserved for subdirectories, while path traversal (`..` escaping root) is strictly prevented. Parent directories are auto-created when writing files.
+   - Bridge file calls go through `workspace/BridgeWorkspaceFiles.kt`, which **rejects** unsafe paths
+     (empty, `..`, backslash, control characters, over-long paths/segments) and keeps the
+     historical `_` mapping for other non-`[A-Za-z0-9._-]` characters so existing files stay
+     reachable. It refuses symbolic links anywhere below the workspace root, checks
+     canonical containment on an exact path boundary, and enforces the caps in `BridgeFileLimits`
+     (16 MiB text, 6 MiB binary, 512 MiB per-workspace quota for bridge writes only). Editor,
+     history, template and import writes are not subject to the quota.
 6. **Binary Files & History Snapshots**:
    - `WorkspaceHistoryManager` stores file contents as JSON strings, so binary assets would be
      destroyed by a UTF-8 round-trip. `WorkspaceManager.isBinaryAsset()` excludes them from
