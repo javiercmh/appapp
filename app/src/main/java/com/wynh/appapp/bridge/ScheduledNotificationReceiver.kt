@@ -31,6 +31,7 @@ class ScheduledNotificationReceiver : BroadcastReceiver() {
         NativeStorageBridge.forgetPersistedAlarm(context, subappId, id)
 
         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
+        if (!com.wynh.appapp.grants.SubappGrants.isGranted(context, subappId, com.wynh.appapp.grants.SubappCapability.NOTIFICATIONS)) return
 
         NativeStorageBridge.ensureNotificationChannel(context)
 

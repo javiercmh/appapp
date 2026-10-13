@@ -477,6 +477,12 @@ class SubappLibraryActivity : AppCompatActivity() {
             dialog.findViewById<TextView>(R.id.settings_tv_app_version)?.text = settingsManager.getAppVersion()
             dialog.findViewById<TextView>(R.id.settings_tv_webview_version)?.text = settingsManager.getWebViewEngineVersion()
         }
+        dialog.findViewById<MaterialButton>(R.id.settings_btn_privacy_policy)?.setOnClickListener {
+            try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(getString(R.string.settings_privacy_policy_url)))) }
+            catch (_: android.content.ActivityNotFoundException) {
+                Toast.makeText(this, R.string.settings_privacy_policy_open_failed, Toast.LENGTH_SHORT).show()
+            }
+        }
         val historyButtons = mapOf(
             2 to dialog.findViewById<MaterialButton>(R.id.settings_btn_history_2),
             4 to dialog.findViewById<MaterialButton>(R.id.settings_btn_history_4),
@@ -592,11 +598,32 @@ class SubappLibraryActivity : AppCompatActivity() {
                     if (!AppIdentityManager(this@SubappLibraryActivity, record).requestInstall())
                         Toast.makeText(this@SubappLibraryActivity, R.string.shortcut_request_failed, Toast.LENGTH_LONG).show()
                 }
+                content.findViewById<View>(R.id.permissions_app).setOnClickListener { popup.dismiss(); showPermissions(record, name) }
                 content.findViewById<View>(R.id.share_app).setOnClickListener { popup.dismiss(); showPackageDialog(record) }
                 content.findViewById<View>(R.id.edit_app).setOnClickListener { popup.dismiss(); edit(record) }
                 popup.showAsDropDown(anchor, anchor.width - popupWidth, 0)
             }
         }
+    }
+
+    /** Lets the user grant or revoke each capability of one subapp. */
+    private fun showPermissions(record: com.wynh.appapp.workspace.SubappRecord, name: String) {
+        val labels = mapOf(
+            com.wynh.appapp.grants.SubappCapability.AI to R.string.library_permission_ai,
+            com.wynh.appapp.grants.SubappCapability.NOTIFICATIONS to R.string.library_permission_notifications,
+            com.wynh.appapp.grants.SubappCapability.NETWORK to R.string.library_permission_network
+        ).entries.toList()
+        val granted = com.wynh.appapp.grants.SubappGrants.store(this).granted(record.id)
+        val checked = BooleanArray(labels.size) { labels[it].key in granted }
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.library_permissions_title, name))
+            .setMultiChoiceItems(labels.map { getString(it.value) }.toTypedArray(), checked) { _, index, value -> checked[index] = value }
+            .setPositiveButton(R.string.library_permissions_done) { _, _ ->
+                labels.forEachIndexed { i, e ->
+                    com.wynh.appapp.grants.SubappGrants.setGranted(this, record.id, e.key, checked[i])
+                }
+            }
+            .show()
     }
 
     private fun finishReorder(commit: Boolean) {
@@ -712,10 +739,11 @@ class SubappLibraryActivity : AppCompatActivity() {
         header.newApp.isEnabled = false
         Toast.makeText(this, R.string.library_github_downloading, Toast.LENGTH_SHORT).show()
         Thread {
-            val result = com.wynh.appapp.workspace.GitHubFolderImporter.download(this, url)
+            val result = com.wynh.appapp.workspace.GitHubFolderImporter.download(cacheDir, url)
             runOnUiThread {
                 header.newApp.isEnabled = true
-                result.onSuccess { folder ->
+                result.onSuccess { imported ->
+                    val folder = imported.directory
                     val record = runCatching { repository.createImportedFrom(folder) }
                     folder.deleteRecursively()
                     record.onSuccess {
@@ -723,7 +751,7 @@ class SubappLibraryActivity : AppCompatActivity() {
                         val manager = WorkspaceManager(this, workspaceDir = it.workspaceDir)
                         val name = runCatching { JSONObject(manager.readFile("manifest.json")).optString("name") }
                             .getOrNull().orEmpty().ifBlank { getString(R.string.library_untitled) }
-                        Toast.makeText(this, getString(R.string.library_imported_app, name), Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, getString(R.string.library_imported_app, name) + "\n" + getString(R.string.library_import_offline_note), Toast.LENGTH_LONG).show()
                     }.onFailure { Toast.makeText(this, "Import failed: ${it.message}", Toast.LENGTH_LONG).show() }
                 }.onFailure { Toast.makeText(this, "GitHub import failed: ${it.message}", Toast.LENGTH_LONG).show() }
             }
