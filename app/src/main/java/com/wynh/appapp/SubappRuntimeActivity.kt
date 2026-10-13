@@ -5,12 +5,9 @@ import android.Manifest
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.webkit.WebResourceRequest
-import android.webkit.WebResourceResponse
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
-import android.webkit.WebViewClient
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient.FileChooserParams
 import android.widget.FrameLayout
@@ -22,10 +19,11 @@ import androidx.activity.enableEdgeToEdge
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.wynh.appapp.bridge.NativeStorageBridge
+import com.wynh.appapp.runtime.SubappWebViewClient
+import com.wynh.appapp.runtime.SubappWebViews
 import com.wynh.appapp.workspace.SubappRepository
 import com.wynh.appapp.workspace.WorkspaceManager
 import org.json.JSONObject
-import java.io.FileInputStream
 
 /** Standalone document task bound to the app ID encoded in its launch URI. */
 class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
@@ -100,10 +98,8 @@ class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
             web.evaluateJavascript("""(function(s){s.setProperty('--app-inset-top','${css(insets.top)}');s.setProperty('--app-inset-right','${css(insets.right)}');s.setProperty('--app-inset-bottom','${css(insets.bottom)}');s.setProperty('--app-inset-left','${css(insets.left)}');})(document.documentElement.style);window.dispatchEvent(new CustomEvent('app2:insets',{detail:{imeVisible:${windowInsets.isVisible(WindowInsetsCompat.Type.ime())}}}));""", null)
             windowInsets
         }
-        web.settings.javaScriptEnabled = true
-        web.settings.domStorageEnabled = true
-        web.settings.allowFileAccess = false
-        web.settings.cacheMode = WebSettings.LOAD_DEFAULT
+        SubappWebViews.configure(web, WebSettings.LOAD_DEFAULT)
+        val log: (String) -> Unit = { manager.appendToFile("app.log", "$it\n") }
         val bridge = NativeStorageBridge(
             this, record.id, record.workspaceDir,
             onRequestNotificationPermission = {
@@ -115,40 +111,24 @@ class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
                 runOnUiThread { web.selectionMenuSuppressed = suppressed }
             }
         )
-        web.addJavascriptInterface(bridge, "AndroidStorage")
-        web.addJavascriptInterface(bridge, "AndroidMemory")
-        web.addJavascriptInterface(bridge, "AndroidNotification")
+        SubappWebViews.installStorageBridge(web, record.id, bridge, log)
         (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.let {
             com.wynh.appapp.ai.AiWebMessageBridge(this, web, record.id, taskId, it).install()
         }
         com.wynh.appapp.updates.UpdateWebMessageBridge(this, web, record).install()
-        web.webViewClient = object : WebViewClient() {
+        web.webViewClient = object : SubappWebViewClient(this, record.id, { manager }, log, {
+            com.wynh.appapp.grants.SubappGrants.isGranted(this, record.id, com.wynh.appapp.grants.SubappCapability.NETWORK)
+        }) {
             override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                 speechSession?.pageChanged()
                 web.selectionMenuSuppressed = false
+                bridge.pageStarted()
                 super.onPageStarted(view, url, favicon)
             }
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
                 installWebHistoryTracking(view)
                 ViewCompat.requestApplyInsets(root)
-            }
-
-            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                val uri = request?.url ?: return true
-                return !(uri.scheme.equals("https", true) && uri.host.equals("${record.id}.app.local", true))
-            }
-
-            override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
-                val u = request?.url ?: return null
-                if (!u.host.equals("${record.id}.app.local", true)) return null
-                var path = u.path.orEmpty().removePrefix("/").ifBlank {
-                    try { JSONObject(manager.readFile("manifest.json")).optString("main", "index.html").trimStart('/') }
-                    catch (_: Exception) { "index.html" }
-                }
-                val file = manager.getFile(path)
-                if (!file.isFile) return WebResourceResponse("text/html", "UTF-8", "<h3>App file not found</h3>".byteInputStream())
-                return WebResourceResponse(WorkspaceManager.getMimeType(path), "UTF-8", FileInputStream(file))
             }
         }
         web.webChromeClient = object : WebChromeClient() {
@@ -163,9 +143,7 @@ class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
                 return true
             }
         }
-        val main = try { JSONObject(manager.readFile("manifest.json")).optString("main", "index.html").trimStart('/') }
-        catch (_: Exception) { "index.html" }
-        web.loadUrl("https://${record.id}.app.local/${main.ifBlank { "index.html" }}")
+        web.loadUrl(SubappWebViews.entryUrl(record.id, manager))
         NativeStorageBridge.reschedulePersistedAlarms(this, record.id)
     }
 

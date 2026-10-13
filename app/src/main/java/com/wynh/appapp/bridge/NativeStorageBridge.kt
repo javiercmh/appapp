@@ -10,22 +10,20 @@ import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import android.util.Base64
-import android.webkit.JavascriptInterface
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
-import java.io.FileInputStream
-import java.io.FileOutputStream
-import java.nio.charset.StandardCharsets
-import com.wynh.appapp.workspace.WorkspaceManager
+import com.wynh.appapp.workspace.BridgeWorkspaceFiles
 import com.wynh.appapp.workspace.SubappRepository
+import com.wynh.appapp.grants.SubappCapability
+import com.wynh.appapp.grants.SubappGrants
 
 /**
- * JavaScript Interface exposed inside WebView as `window.AndroidStorage`, `window.AndroidMemory`,
- * and `window.AndroidNotification`.
+ * Native side of `window.AndroidStorage`, `window.AndroidMemory` and `window.AndroidNotification`.
+ * It is never registered with `addJavascriptInterface` directly: only [jsMethods] are reachable,
+ * through the token-gated dispatcher that `SubappWebViews` exposes to the subapp origin.
  * Provides persistent state storage, unified workspace file system access (read/write/delete/list),
  * storage telemetry, and native system notifications.
  */
@@ -51,9 +49,46 @@ class NativeStorageBridge(
         onLogListener?.invoke(message)
     }
 
+    /** The complete JavaScript surface, with the parameter types the dispatcher validates. */
+    val jsMethods: Map<String, BridgeMethod> by lazy {
+        val s = ArgType.STRING
+        val i = ArgType.INT
+        mapOf(
+            "saveState" to BridgeMethod(s, s) { saveState(it[0] as String, it[1] as String) },
+            "loadState" to BridgeMethod(s, s) { loadState(it[0] as String, it[1] as String) },
+            "removeState" to BridgeMethod(s) { removeState(it[0] as String) },
+            "clearAllState" to BridgeMethod { clearAllState() },
+            "writeFile" to BridgeMethod(s, s) { writeFile(it[0] as String, it[1] as String) },
+            "readFile" to BridgeMethod(s) { readFile(it[0] as String) },
+            "writeFileBase64" to BridgeMethod(s, s) { writeFileBase64(it[0] as String, it[1] as String) },
+            "readFileBase64" to BridgeMethod(s) { readFileBase64(it[0] as String) },
+            "fileExists" to BridgeMethod(s) { fileExists(it[0] as String) },
+            "deleteFile" to BridgeMethod(s) { deleteFile(it[0] as String) },
+            "listFiles" to BridgeMethod { listFiles() },
+            "getStorageStats" to BridgeMethod { getStorageStats() },
+            "getWorkspaceFiles" to BridgeMethod { getWorkspaceFiles() },
+            "readWorkspaceFile" to BridgeMethod(s) { readWorkspaceFile(it[0] as String) },
+            "writeWorkspaceFile" to BridgeMethod(s, s) { writeWorkspaceFile(it[0] as String, it[1] as String) },
+            "workspaceFileExists" to BridgeMethod(s) { workspaceFileExists(it[0] as String) },
+            "hasNotificationPermission" to BridgeMethod { hasNotificationPermission() },
+            "requestNotificationPermission" to BridgeMethod { requestNotificationPermission() },
+            "setSelectionMenuSuppressed" to BridgeMethod(ArgType.BOOLEAN) { setSelectionMenuSuppressed(it[0] as Boolean) },
+            "openNotificationSettings" to BridgeMethod { openNotificationSettings() },
+            "showNotification" to BridgeMethod(s, s) { showNotification(it[0] as String, it[1] as String) },
+            "showNotificationWithId" to BridgeMethod(i, s, s) { showNotificationWithId(it[0] as Int, it[1] as String, it[2] as String) },
+            "scheduleNotification" to BridgeMethod(i, s, s, s) {
+                scheduleNotification(it[0] as Int, it[1] as String, it[2] as String, it[3] as String)
+            },
+            "cancelScheduledNotification" to BridgeMethod(i) { cancelScheduledNotification(it[0] as Int) },
+            "canScheduleExactNotifications" to BridgeMethod { canScheduleExactNotifications() },
+            "requestExactNotificationPermission" to BridgeMethod { requestExactNotificationPermission() },
+            "openExactAlarmSettings" to BridgeMethod { openExactAlarmSettings() },
+            "cancelNotification" to BridgeMethod(i) { cancelNotification(it[0] as Int) }
+        )
+    }
+
     // --- Persistent Key-Value State Access ---
 
-    @JavascriptInterface
     fun saveState(key: String, value: String): Boolean {
         return try {
             sharedPrefs.edit().putString(key, value).apply()
@@ -65,7 +100,6 @@ class NativeStorageBridge(
         }
     }
 
-    @JavascriptInterface
     fun loadState(key: String, defaultValue: String = ""): String {
         return try {
             val result = sharedPrefs.getString(key, defaultValue) ?: defaultValue
@@ -77,14 +111,12 @@ class NativeStorageBridge(
         }
     }
 
-    @JavascriptInterface
     fun removeState(key: String): Boolean {
         sharedPrefs.edit().remove(key).apply()
         log("[Storage] Removed state key '$key'")
         return true
     }
 
-    @JavascriptInterface
     fun clearAllState(): Boolean {
         sharedPrefs.edit().clear().apply()
         log("[Storage] Cleared all key-value state")
@@ -93,52 +125,25 @@ class NativeStorageBridge(
 
     // --- Unified File System Access (Stored directly in workspace/) ---
 
-    private fun getAppFile(fileName: String): File {
-        val sanitized = WorkspaceManager.sanitizeRelativePath(fileName)
-        val file = File(workspaceDir, sanitized)
-        return if (file.canonicalPath.startsWith(workspaceDir.canonicalPath)) {
-            file
-        } else {
-            File(workspaceDir, sanitized.substringAfterLast('/'))
-        }
-    }
+    private fun bridgeFiles() = BridgeWorkspaceFiles(workspaceDir, ::log)
 
-    @JavascriptInterface
     fun writeFile(fileName: String, content: String): Boolean {
         return synchronized(com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(appWorkspaceDir)) {
             try {
-                val file = getAppFile(fileName)
-                file.parentFile?.mkdirs()
-                FileOutputStream(file).use { output ->
-                    output.write(content.toByteArray(StandardCharsets.UTF_8))
-                }
-                val relPath = file.relativeTo(workspaceDir).path.replace('\\', '/')
-                log("[Storage] Wrote ${content.length} chars to workspace file '$relPath' (${file.length()} bytes)")
-                true
+                bridgeFiles().writeText(fileName, content)
             } catch (e: Exception) {
-                log("[Storage Error] Failed to write file '$fileName': ${e.message}")
+                log("[Storage Error] Failed to write file: ${e.message}")
                 false
             }
         }
     }
 
-    @JavascriptInterface
     fun readFile(fileName: String): String {
         return synchronized(com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(appWorkspaceDir)) {
             try {
-                val file = getAppFile(fileName)
-                if (!file.exists() || !file.isFile) {
-                    log("[Storage] File '$fileName' does not exist yet.")
-                    return ""
-                }
-                val content = FileInputStream(file).use { input ->
-                    input.bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
-                }
-                val relPath = file.relativeTo(workspaceDir).path.replace('\\', '/')
-                log("[Storage] Read ${content.length} chars from workspace file '$relPath'")
-                content
+                bridgeFiles().readText(fileName)
             } catch (e: Exception) {
-                log("[Storage Error] Failed to read file '$fileName': ${e.message}")
+                log("[Storage Error] Failed to read file: ${e.message}")
                 ""
             }
         }
@@ -152,35 +157,12 @@ class NativeStorageBridge(
      * Once written, the file is served by this subapp's local origin, so a web app can
      * simply reference it: `<img src="assets/photo_123.jpg">`.
      */
-    @JavascriptInterface
     fun writeFileBase64(fileName: String, base64: String): Boolean {
         return synchronized(com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(appWorkspaceDir)) {
             try {
-                if (base64.length > MAX_BASE64_CHARS) {
-                    log("[Storage Error] Refused '$fileName': ${base64.length} base64 chars exceeds cap of $MAX_BASE64_CHARS")
-                    return false
-                }
-                // Strip an optional data-URL prefix; browsers hand these out by default.
-                val payload = if (base64.startsWith("data:")) base64.substringAfter("base64,", "") else base64
-                if (payload.isEmpty()) {
-                    log("[Storage Error] Empty base64 payload for '$fileName'")
-                    return false
-                }
-                // DEFAULT (not NO_WRAP) so line breaks and padding from a data URL are tolerated.
-                val bytes = Base64.decode(payload, Base64.DEFAULT)
-                val file = getAppFile(fileName)
-                file.parentFile?.mkdirs()
-                FileOutputStream(file).use { output ->
-                    output.write(bytes)
-                }
-                val relPath = file.relativeTo(workspaceDir).path.replace('\\', '/')
-                log("[Storage] Wrote binary '$relPath' (${bytes.size} bytes)")
-                true
-            } catch (e: IllegalArgumentException) {
-                log("[Storage Error] Invalid base64 for '$fileName': ${e.message}")
-                false
+                bridgeFiles().writeBase64(fileName, base64)
             } catch (e: Exception) {
-                log("[Storage Error] Failed to write binary '$fileName': ${e.message}")
+                log("[Storage Error] Failed to write binary file: ${e.message}")
                 false
             }
         }
@@ -188,96 +170,61 @@ class NativeStorageBridge(
 
     /**
      * Reads a workspace file back as a base64 string. Returns "" if missing or over the size cap.
-     * Encoded with NO_WRAP so the result is safe to hand to `atob()` or embed in a `data:` URL.
+     * Encoded without line wrapping so the result is safe to hand to `atob()` or embed in a `data:` URL.
      */
-    @JavascriptInterface
     fun readFileBase64(fileName: String): String {
         return synchronized(com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(appWorkspaceDir)) {
             try {
-                val file = getAppFile(fileName)
-                if (!file.exists() || !file.isFile) {
-                    log("[Storage] Binary file '$fileName' does not exist yet.")
-                    return ""
-                }
-                if (file.length() > MAX_BINARY_BYTES) {
-                    log("[Storage Error] '$fileName' is ${file.length()} bytes; too large to read as base64")
-                    return ""
-                }
-                val encoded = Base64.encodeToString(file.readBytes(), Base64.NO_WRAP)
-                val relPath = file.relativeTo(workspaceDir).path.replace('\\', '/')
-                log("[Storage] Read binary '$relPath' (${file.length()} bytes)")
-                encoded
+                bridgeFiles().readBase64(fileName)
             } catch (e: Exception) {
-                log("[Storage Error] Failed to read binary '$fileName': ${e.message}")
+                log("[Storage Error] Failed to read binary file: ${e.message}")
                 ""
             }
         }
     }
 
-    @JavascriptInterface
     fun fileExists(fileName: String): Boolean {
         return synchronized(com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(appWorkspaceDir)) {
             try {
-                val file = getAppFile(fileName)
-                file.exists() && file.isFile
+                bridgeFiles().exists(fileName)
             } catch (_: Exception) {
                 false
             }
         }
     }
 
-    @JavascriptInterface
     fun deleteFile(fileName: String): Boolean {
         return synchronized(com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(appWorkspaceDir)) {
             try {
-                val file = getAppFile(fileName)
-                if (file.exists() && file.isFile) {
-                    val deleted = file.delete()
-                    log("[Storage] Deleted file '$fileName': $deleted")
-                    if (deleted) {
-                        var parent = file.parentFile
-                        while (parent != null && parent != workspaceDir && parent.canonicalPath.startsWith(workspaceDir.canonicalPath)) {
-                            val children = parent.listFiles()
-                            if (children == null || children.isEmpty()) {
-                                parent.delete()
-                                parent = parent.parentFile
-                            } else {
-                                break
-                            }
-                        }
-                    }
-                    deleted
-                } else {
-                    false
-                }
+                bridgeFiles().delete(fileName)
             } catch (e: Exception) {
-                log("[Storage Error] Failed to delete file '$fileName': ${e.message}")
+                log("[Storage Error] Failed to delete file: ${e.message}")
                 false
             }
         }
     }
 
-    @JavascriptInterface
     fun listFiles(): String {
         return synchronized(com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(appWorkspaceDir)) {
-            if (!workspaceDir.exists()) return "[]"
-            val jsonArray = JSONArray()
-            for (file in workspaceDir.walkTopDown().filter { it.isFile }) {
-                val relativePath = file.relativeTo(workspaceDir).path.replace('\\', '/')
-                val obj = JSONObject().apply {
-                    put("name", relativePath)
-                    put("size", file.length())
-                    put("lastModified", file.lastModified())
+            try {
+                val jsonArray = JSONArray()
+                for (entry in bridgeFiles().list()) {
+                    jsonArray.put(JSONObject().apply {
+                        put("name", entry.name)
+                        put("size", entry.size)
+                        put("lastModified", entry.lastModified)
+                    })
                 }
-                jsonArray.put(obj)
+                jsonArray.toString()
+            } catch (e: Exception) {
+                log("[Storage Error] Failed to list files: ${e.message}")
+                "[]"
             }
-            jsonArray.toString()
         }
     }
 
     // --- Storage & System Telemetry ---
 
-    @JavascriptInterface
     fun getStorageStats(): String {
         return synchronized(com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(appWorkspaceDir)) {
             val filesDir = context.filesDir
@@ -308,28 +255,29 @@ class NativeStorageBridge(
 
     // --- Workspace Project Access Aliases ---
 
-    @JavascriptInterface
     fun getWorkspaceFiles(): String = listFiles()
 
-    @JavascriptInterface
     fun readWorkspaceFile(fileName: String): String = readFile(fileName)
 
-    @JavascriptInterface
     fun writeWorkspaceFile(fileName: String, content: String): Boolean = writeFile(fileName, content)
 
-    @JavascriptInterface
     fun workspaceFileExists(fileName: String): Boolean = fileExists(fileName)
 
     // --- Native Notifications Bridge ---
 
-    @JavascriptInterface
-    fun hasNotificationPermission(): Boolean {
-        return NotificationManagerCompat.from(context).areNotificationsEnabled()
-    }
+    /** True only when Android allows App² notifications and the user allowed this subapp. */
+    fun hasNotificationPermission(): Boolean = systemNotificationsEnabled() && notificationsGranted()
 
-    @JavascriptInterface
+    /**
+     * Asks for this subapp's notification grant first (once per page load), then for Android's
+     * runtime permission as before. Returns true only when both are already in place.
+     */
     fun requestNotificationPermission(): Boolean {
-        return if (hasNotificationPermission()) {
+        if (!notificationsGranted()) {
+            askNotificationGrant()
+            return false
+        }
+        return if (systemNotificationsEnabled()) {
             true
         } else {
             onRequestNotificationPermission?.invoke()
@@ -337,11 +285,47 @@ class NativeStorageBridge(
         }
     }
 
+    private fun systemNotificationsEnabled() = NotificationManagerCompat.from(context).areNotificationsEnabled()
+
+    private fun notificationsGranted() =
+        SubappGrants.isGranted(context, subappId, SubappCapability.NOTIFICATIONS)
+
+    @Volatile private var notificationGrantAsked = false
+
+    /** Call from the WebView's onPageStarted: each page load may ask for the grant once. */
+    fun pageStarted() { notificationGrantAsked = false }
+
+    /**
+     * Shows the native grant dialog on the UI thread, at most once per page load, so a script
+     * calling a notification method in a loop cannot stack prompts. Allow stores the grant and then
+     * continues with Android's runtime permission; the web app retries the call itself.
+     */
+    private fun askNotificationGrant() {
+        if (notificationGrantAsked) return
+        val activity = context as? android.app.Activity ?: run {
+            log("[Notification Warning] Notifications are not allowed for this app; allow them in the library: app menu → Permissions.")
+            return
+        }
+        notificationGrantAsked = true
+        activity.runOnUiThread {
+            val name = SubappGrants.displayName(activity, subappId)
+            SubappGrants.ask(
+                activity,
+                activity.getString(com.wynh.appapp.R.string.permission_notifications_title, name),
+                activity.getString(com.wynh.appapp.R.string.permission_notifications_message, name)
+            ) { allowed ->
+                if (!allowed) { log("[Notification] Notifications were not allowed for this app."); return@ask }
+                SubappGrants.setGranted(activity, subappId, SubappCapability.NOTIFICATIONS, true)
+                log("[Notification] Notifications allowed for this app.")
+                if (!systemNotificationsEnabled()) onRequestNotificationPermission?.invoke()
+            }
+        }
+    }
+
     /**
      * Hides or restores Android's floating text-selection menu for the current page load.
      * Selection handles and selection events keep working; the subapp supplies its own actions.
      */
-    @JavascriptInterface
     fun setSelectionMenuSuppressed(suppressed: Boolean): Boolean {
         val callback = onSetSelectionMenuSuppressed ?: return false
         return try {
@@ -358,7 +342,6 @@ class NativeStorageBridge(
      * runtime prompt twice (Android then refuses to show it again) or who is on API 26-32, where
      * there is no runtime prompt at all but notifications can still be switched off.
      */
-    @JavascriptInterface
     fun openNotificationSettings(): Boolean {
         val screens = listOf(
             Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
@@ -380,15 +363,18 @@ class NativeStorageBridge(
         return false
     }
 
-    @JavascriptInterface
     fun showNotification(title: String, message: String): Boolean {
         val notificationId = (System.currentTimeMillis() % 100000).toInt()
         return showNotificationWithId(notificationId, title, message)
     }
 
-    @JavascriptInterface
     fun showNotificationWithId(id: Int, title: String, message: String): Boolean {
         return try {
+            if (!notificationsGranted()) {
+                log("[Notification Warning] Cannot post notification: not allowed for this app yet.")
+                askNotificationGrant()
+                return false
+            }
             if (!hasNotificationPermission()) {
                 log("[Notification Warning] Cannot post notification: permission not granted.")
                 onRequestNotificationPermission?.invoke()
@@ -439,11 +425,15 @@ class NativeStorageBridge(
      * previously scheduled alarm, which is what makes rescheduling idempotent for the caller.
      * Fires even when the app is closed; survives reboot via the persisted alarm list.
      */
-    @JavascriptInterface
     fun scheduleNotification(id: Int, triggerAtMillis: String, title: String, message: String): Boolean {
         val at = triggerAtMillis.toDoubleOrNull()?.toLong()
         if (at == null || at <= System.currentTimeMillis()) {
             log("[Notification Warning] Ignored schedule #$id: trigger time is missing or in the past.")
+            return false
+        }
+        if (!notificationsGranted()) {
+            log("[Notification Warning] Cannot schedule #$id: notifications are not allowed for this app yet.")
+            askNotificationGrant()
             return false
         }
         val scheduled = scheduleAlarm(context, subappId, id, at, title, message)
@@ -454,7 +444,6 @@ class NativeStorageBridge(
         return scheduled
     }
 
-    @JavascriptInterface
     fun cancelScheduledNotification(id: Int): Boolean {
         cancelAlarm(context, subappId, id)
         log("[Notification] Cancelled scheduled notification #$id")
@@ -462,14 +451,11 @@ class NativeStorageBridge(
     }
 
     /** Whether the app can schedule precise reminders right now. */
-    @JavascriptInterface
     fun canScheduleExactNotifications(): Boolean = canScheduleExact(context)
 
     /** Opens Android's user-controlled Alarms & reminders access screen. */
-    @JavascriptInterface
     fun requestExactNotificationPermission(): Boolean = openExactAlarmSettings()
 
-    @JavascriptInterface
     fun openExactAlarmSettings(): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || canScheduleExact(context)) return true
         val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
@@ -484,7 +470,6 @@ class NativeStorageBridge(
         }
     }
 
-    @JavascriptInterface
     fun cancelNotification(id: Int): Boolean {
         return try {
             NotificationManagerCompat.from(context).cancel(subappId, id)
@@ -570,7 +555,9 @@ class NativeStorageBridge(
             SubappRepository(context).ensureMigrated().forEach { reschedulePersistedAlarms(context, it.id) }
         }
 
+        /** Ungranted subapps are skipped; revocation already removed their persisted alarms. */
         fun reschedulePersistedAlarms(context: Context, subappId: String) {
+            if (!SubappGrants.isGranted(context, subappId, SubappCapability.NOTIFICATIONS)) return
             synchronized(alarmLock) {
                 val prefs = alarmPreferences(context, subappId)
                 val stored = JSONObject(prefs.getString(ALARM_PREFS, "{}") ?: "{}")
@@ -591,6 +578,11 @@ class NativeStorageBridge(
                 }
             }
         }
+
+        /** Whether [subappId] has any persisted scheduled notification (used by the grant migration). */
+        fun hasPersistedAlarms(context: Context, subappId: String): Boolean = runCatching {
+            JSONObject(alarmPreferences(context, subappId).getString(ALARM_PREFS, "{}") ?: "{}").length() > 0
+        }.getOrDefault(false)
 
         fun forgetPersistedAlarm(context: Context, subappId: String, id: Int) {
             synchronized(alarmLock) {
@@ -664,14 +656,5 @@ class NativeStorageBridge(
             ids.forEach { cancelAlarm(context, subappId, it) }
             alarms.edit().clear().commit()
         }
-
-        /**
-         * Caps for the binary bridge. A @JavascriptInterface call blocks the calling JS thread and
-         * marshals the payload across JNI as a Java String (~2 bytes per char), so an unbounded
-         * multi-megapixel photo would spike transient heap. Web apps should downscale first;
-         * these are the backstop.
-         */
-        private const val MAX_BINARY_BYTES = 6L * 1024 * 1024
-        private const val MAX_BASE64_CHARS = 8_400_000
     }
 }

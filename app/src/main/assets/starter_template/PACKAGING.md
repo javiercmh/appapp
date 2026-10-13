@@ -4,6 +4,16 @@ The starter runs as plain HTML, CSS, and JavaScript inside App²'s Android WebVi
 native capabilities through `window.AndroidStorage` (also aliased as `window.AndroidMemory` and
 `window.AndroidNotification`). The bundled `js/bridge.js` is the only file that should call it.
 
+Only top-level documents and same-origin frames of `https://<subapp-id>.app.local` receive these
+objects. They are installed before page scripts run and call one token-protected native interface;
+iframes of other origins (including opaque `sandbox` and `srcdoc` frames without
+`allow-same-origin`) and external web pages have no storage bridge, and raw calls from them are
+rejected. Methods stay synchronous with the same names, argument counts and return types; a call
+with the wrong argument count or type (for example `null` where a string is expected) throws.
+Main-frame navigation cannot leave the app origin: a tapped `http(s)`, `mailto:` or `tel:` link
+opens in another Android app, and other navigations are blocked. `file://` and `content://` URLs
+are not loadable.
+
 Each saved subapp runs at its own stable origin, `https://<subapp-id>.app.local/`. Files, browser
 storage, bridge key-value state, notifications, and scheduled reminders are isolated by subapp ID.
 The ID stays stable when the manifest name changes. Relative asset URLs and module imports continue
@@ -70,6 +80,20 @@ Listen for `app2:ai:connection` with `event.detail = {providerId, connected}` an
 The native host binds requests to the exact subapp HTTPS origin and main frame and derives subapp/task ownership. Another subapp cannot retrieve, cancel or acknowledge your request. Callers cannot provide arbitrary endpoints or authentication headers. Only one unfinished **or unacknowledged** request per subapp is allowed. Native credentials remain encrypted outside workspaces, snapshots and exports.
 
 Requests use native Responses streaming with `store:false`; text succeeds only after `response.completed`. Switching apps or opening the sign-in browser allows the active request to continue under a foreground notification. Rotation preserves the native request. Explicit reload, final screen closure, deletion and swiping the owning task from Recent Apps cancel its requests; closing another task does not. Completed results remain available until acknowledgement or task closure. Process death, force-stop and reboot do not restart inference. Persisted IDs can become `not_found`. Web workflows after inference (validation and auto-save) resume when the web app runs again; the foreground service does not execute the whole web app in the background.
+
+## Permissions and offline mode
+
+The user grants capabilities to each app in the library (app menu → Permissions). Without a grant:
+- **AI**: the first `ai.start` opens a native dialog; if refused it rejects with `code: 'permission'`.
+  Expect that failure and show a retry affordance. Generation starts are limited to six per minute.
+- **Notifications**: `showNotification`, `showNotificationWithId` and `scheduleNotification` return
+  `false` and the host asks the user. `hasNotificationPermission()` stays `false` until allowed.
+- **Internet**: the app runs offline. Everything must come from files in the workspace; remote
+  scripts, fonts, images, `fetch`, WebSockets and links to private-network addresses are blocked
+  (the reason is written to `app.log`). Bundle libraries and assets inside the app instead. Apps that
+  truly need web APIs ask the user to enable Internet in Permissions; it applies on the next launch.
+
+Imported apps, and apps updated from GitHub with changed code, start with no permissions.
 
 ## Scheduled notifications
 
