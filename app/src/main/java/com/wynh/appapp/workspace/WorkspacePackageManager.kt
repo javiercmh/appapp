@@ -103,7 +103,7 @@ object WorkspacePackageManager {
     }
 
     /**
-     * Extracts ZIP entries from an input stream directly into the workspace.
+     * Validates ZIP entries into a staging directory beside the workspace, then swaps it in.
      */
     fun importFromInputStream(
         inputStream: InputStream,
@@ -111,94 +111,114 @@ object WorkspacePackageManager {
         historyManager: WorkspaceHistoryManager,
         savePreImportSnapshot: Boolean = true
     ): Result<List<String>> = synchronized(com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(workspaceManager.workspaceDir)) {
-        var staging: File? = null
         return@synchronized try {
             // 1. Capture pre-import snapshot
             if (savePreImportSnapshot) historyManager.saveSnapshot(workspaceManager, "Pre-Import Backup")
-
-            val workspaceDir = workspaceManager.workspaceDir
-            if (!workspaceDir.exists()) {
-                workspaceDir.mkdirs()
-            }
-
-            val importedFileNames = mutableListOf<String>()
-
-            // 2. Extract ZIP contents to a temporary staging folder first to verify validity
-            val tempExtractDir = File(workspaceDir.parentFile, "workspace_temp_${System.currentTimeMillis()}")
-            staging = tempExtractDir
-            if (tempExtractDir.exists()) {
-                tempExtractDir.deleteRecursively()
-            }
-            tempExtractDir.mkdirs()
-
-            val seen = mutableSetOf<String>()
-            var totalBytes = 0L
-            ZipInputStream(BufferedInputStream(inputStream)).use { zis ->
-                var entry: ZipEntry? = zis.nextEntry
-                while (entry != null) {
-                    val entryName = entry.name
-                    // Skip hidden metadata files created by macOS/OS archivers (e.g. __MACOSX, .DS_Store)
-                    if (!entryName.startsWith("__MACOSX") && !entryName.contains(".DS_Store")) {
-                        val destinationFile = checkedZipDestination(tempExtractDir, entryName.removeSuffix("/"))
-
-                        // Zip-Slip Path Traversal Protection
-                        if (!destinationFile.canonicalPath.startsWith(tempExtractDir.canonicalPath + File.separator)) {
-                            throw SecurityException("ZIP entry contains unsafe path traversal: $entryName")
-                        }
-
-                        require(seen.add(destinationFile.canonicalPath)) { "Duplicate ZIP entry: $entryName" }
-                        require(seen.size <= 1024) { "Too many ZIP entries" }
-                        if (entry.isDirectory) {
-                            destinationFile.mkdirs()
-                        } else {
-                            destinationFile.parentFile?.mkdirs()
-                            FileOutputStream(destinationFile).use { fos ->
-                                val buffer = ByteArray(8192)
-                                var entryBytes = 0L
-                                while (true) {
-                                    val count = zis.read(buffer)
-                                    if (count < 0) break
-                                    entryBytes += count; totalBytes += count
-                                    require(entryBytes <= 8 * 1024 * 1024 && totalBytes <= 32 * 1024 * 1024) { "ZIP exceeds size limit" }
-                                    fos.write(buffer, 0, count)
-                                }
-                            }
-                            importedFileNames.add(destinationFile.name)
-                        }
-                    }
-                    zis.closeEntry()
-                    entry = zis.nextEntry
-                }
-            }
-
-            if (importedFileNames.isEmpty()) {
-                tempExtractDir.deleteRecursively()
-                return@synchronized Result.failure(Exception("The selected ZIP file contains no readable project files."))
-            }
-
-            require(File(tempExtractDir, "index.html").isFile) { "ZIP must contain index.html at its root" }
-
-            // 3. Clean replace: remove existing files in workspace and copy new files over
-            val currentFiles = workspaceDir.listFiles() ?: emptyArray()
-            for (f in currentFiles) {
-                f.deleteRecursively()
-            }
-
-            val extractedFiles = tempExtractDir.listFiles() ?: emptyArray()
-            for (f in extractedFiles) {
-                val dest = File(workspaceDir, f.name)
-                f.copyRecursively(dest, overwrite = true)
-            }
-            tempExtractDir.deleteRecursively()
-
+            // 2. Extract, validate and atomically replace the workspace
+            val importedFileNames = replaceFromZip(inputStream, workspaceManager.workspaceDir)
             // Ensure core entry point index.html exists
             workspaceManager.ensureWorkspaceInitialized()
-
             Result.success(importedFileNames)
         } catch (e: Exception) {
             Result.failure(e)
-        } finally {
-            staging?.deleteRecursively()
         }
+    }
+
+    /** Every entry, including skipped metadata and directories, counts toward these limits. */
+    internal data class ZipLimits(
+        val entries: Int = 1024,
+        val entryBytes: Long = 8L * 1024 * 1024,
+        val totalBytes: Long = 32L * 1024 * 1024,
+        val timeoutMillis: Long = 60_000
+    )
+
+    private fun staging(workspaceDir: File) = File(workspaceDir.parentFile, "workspace_import_staging")
+    private fun previous(workspaceDir: File) = File(workspaceDir.parentFile, "workspace_import_old")
+
+    /**
+     * Replaces [workspaceDir] with the archive contents only after the whole archive validates.
+     * The old workspace is renamed aside and restored if activation fails. Caller holds the workspace lock.
+     */
+    internal fun replaceFromZip(
+        inputStream: InputStream,
+        workspaceDir: File,
+        limits: ZipLimits = ZipLimits(),
+        rename: (File, File) -> Boolean = File::renameTo
+    ): List<String> {
+        recoverImport(workspaceDir)
+        val staged = staging(workspaceDir)
+        val old = previous(workspaceDir)
+        try {
+            check(staged.mkdirs()) { "Could not create import staging" }
+            val importedFileNames = extractZip(inputStream, staged, limits)
+            require(importedFileNames.isNotEmpty()) { "The selected ZIP file contains no readable project files." }
+            require(File(staged, "index.html").isFile) { "ZIP must contain index.html at its root" }
+            if (workspaceDir.exists()) check(rename(workspaceDir, old)) { "Could not move old workspace aside" }
+            try {
+                check(rename(staged, workspaceDir)) { "Could not activate imported workspace" }
+            } catch (e: Exception) {
+                if (old.exists() && !workspaceDir.exists()) old.renameTo(workspaceDir)
+                throw e
+            }
+            old.deleteRecursively()
+            return importedFileNames
+        } finally {
+            staged.deleteRecursively()
+        }
+    }
+
+    /** Restores a workspace left aside by an interrupted swap and removes stale import directories. */
+    internal fun recoverImport(workspaceDir: File) {
+        val old = previous(workspaceDir)
+        if (old.exists() && !workspaceDir.exists()) check(old.renameTo(workspaceDir)) { "Could not restore workspace after interrupted import" }
+        old.deleteRecursively()
+        staging(workspaceDir).deleteRecursively()
+    }
+
+    /** Extracts into an empty [destination], bounding inflated bytes of every entry and elapsed time. */
+    internal fun extractZip(inputStream: InputStream, destination: File, limits: ZipLimits = ZipLimits()): List<String> {
+        val deadline = System.nanoTime() + limits.timeoutMillis * 1_000_000
+        val importedFileNames = mutableListOf<String>()
+        val seen = mutableSetOf<String>()
+        var entries = 0
+        var totalBytes = 0L
+        val buffer = ByteArray(8192)
+        ZipInputStream(BufferedInputStream(inputStream)).use { zis ->
+            var entry: ZipEntry? = zis.nextEntry
+            while (entry != null) {
+                require(++entries <= limits.entries) { "Too many ZIP entries" }
+                val entryName = entry.name
+                // Skip hidden metadata files created by macOS/OS archivers (e.g. __MACOSX, .DS_Store)
+                val skipped = entryName.startsWith("__MACOSX") || entryName.contains(".DS_Store")
+                var output: OutputStream? = null
+                if (!skipped) {
+                    val destinationFile = checkedZipDestination(destination, entryName.removeSuffix("/"))
+                    require(seen.add(destinationFile.canonicalPath)) { "Duplicate ZIP entry: $entryName" }
+                    if (entry.isDirectory) {
+                        destinationFile.mkdirs()
+                    } else {
+                        destinationFile.parentFile?.mkdirs()
+                        output = FileOutputStream(destinationFile)
+                        importedFileNames.add(destinationFile.name)
+                    }
+                }
+                // Skipped and directory entries are still inflated by the stream, so they are read and counted too.
+                output.use { out ->
+                    var entryBytes = 0L
+                    while (true) {
+                        if (Thread.interrupted()) throw InterruptedException("ZIP import cancelled")
+                        require(System.nanoTime() < deadline) { "ZIP import timed out" }
+                        val count = zis.read(buffer)
+                        if (count < 0) break
+                        entryBytes += count; totalBytes += count
+                        require(entryBytes <= limits.entryBytes && totalBytes <= limits.totalBytes) { "ZIP exceeds size limit" }
+                        out?.write(buffer, 0, count)
+                    }
+                }
+                zis.closeEntry()
+                entry = zis.nextEntry
+            }
+        }
+        return importedFileNames
     }
 }
