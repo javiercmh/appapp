@@ -70,6 +70,16 @@ All methods live on `window.AndroidStorage`. `window.AndroidMemory` and
 notification API. When the app runs in a normal desktop browser these globals are absent, which is
 how `bridge.js` detects the fallback path.
 
+Only top-level documents and same-origin frames of `https://<subapp-id>.app.local` receive these
+objects. They are installed before page scripts run and call one token-protected native interface;
+iframes of other origins (including opaque `sandbox` and `srcdoc` frames without
+`allow-same-origin`) and external web pages have no storage bridge, and raw calls from them are
+rejected. Methods stay synchronous with the same names, argument counts and return types; a call
+with the wrong argument count or type (for example `null` where a string is expected) throws.
+Main-frame navigation cannot leave the app origin: a tapped `http(s)`, `mailto:` or `tel:` link
+opens in another Android app, and other navigations are blocked. `file://` and `content://` URLs
+are not loadable.
+
 `bridge.js` already wraps everything below. **Extend `bridge.js` rather than calling these globals
 from elsewhere.**
 
@@ -140,7 +150,13 @@ the same host scheduler; background scheduling is unavailable in a plain browser
    camera photo is several megabytes and will jank the UI. Writes over ~6 MB are rejected outright.
 5. **`writeFile` is text only.** Images and other binaries must go through `writeFileBase64`, or the
    bytes get mangled by UTF-8 encoding.
-6. **Do not use `alert()` or `confirm()`.** They render as jarring system dialogs on mobile. Use
+6. **File paths are validated.** Use relative paths built from `A-Z a-z 0-9 . _ -` segments
+   joined by `/` (a leading `/` or `./` is accepted). Any other character, such as a space or a
+   non-ASCII letter, is stored as `_`. Empty paths, `..`, backslashes, control characters,
+   symbolic links, segments over 255 characters and nesting over 16 levels make file calls fail (`""` / `false`) with a reason in `app.log`.
+   Text reads and writes are capped at 16 MiB, binary at 6 MiB, and bridge writes fail once the
+   workspace would exceed 512 MiB in total.
+7. **Do not use `alert()` or `confirm()`.** They render as jarring system dialogs on mobile. Use
    inline validation and the toast pattern in `ui.js`.
 
 ---
@@ -223,6 +239,20 @@ origin and may continue while the app is in the background.
 - Keep it vanilla — no frameworks, no build tooling, no package manager.
 - Prefer `textContent` over `innerHTML` when inserting user-entered text.
 
+
+## Permissions and offline mode
+
+The user grants capabilities to each app in the library (app menu → Permissions). Without a grant:
+- **AI**: the first `ai.start` opens a native dialog; if refused it rejects with `code: 'permission'`.
+  Expect that failure and show a retry affordance. Generation starts are limited to six per minute.
+- **Notifications**: `showNotification`, `showNotificationWithId` and `scheduleNotification` return
+  `false` and the host asks the user. `hasNotificationPermission()` stays `false` until allowed.
+- **Internet**: the app runs offline. Everything must come from files in the workspace; remote
+  scripts, fonts, images, `fetch`, WebSockets and links to private-network addresses are blocked
+  (the reason is written to `app.log`). Bundle libraries and assets inside the app instead. Apps that
+  truly need web APIs ask the user to enable Internet in Permissions; it applies on the next launch.
+
+Imported apps, and apps updated from GitHub with changed code, start with no permissions.
 
 ## Subapp AI guide
 
