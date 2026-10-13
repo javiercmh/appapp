@@ -54,6 +54,8 @@ class AppAiManager(context: Context) {
     ), preferences.getString("exposure", "chatgpt")?.takeIf { it in AiProviderRegistry.modes } ?: "chatgpt")
     val exposure: String get() = registry.exposure
     private val requestLock = Mutex()
+    /** At most six generation starts per subapp per minute, across all of its tasks. */
+    private val startLimiter = AiStartRateLimiter()
     private val ledger = AiRequestLedger()
     private val requests = ledger.results
     private val jobs = ledger.owners
@@ -136,6 +138,11 @@ class AppAiManager(context: Context) {
 
     fun start(appId: String, taskId: Int, providerId: String, model: String, instructions: String, input: String, effort: String?): String {
         val route = registry.route(providerId, model)
+        // Defense in depth: the web bridge asks first, but nothing generates without the grant.
+        if (!com.wynh.appapp.grants.SubappGrants.isGranted(app, appId, com.wynh.appapp.grants.SubappCapability.AI))
+            throw com.wynh.appapp.ai.network.ApiFailure(com.wynh.appapp.ai.network.ApiFailure.Kind.PERMISSION, "AI is not allowed for this app. Allow it when asked, or in the library: app menu → Permissions.")
+        if (!startLimiter.tryAcquire(appId))
+            throw com.wynh.appapp.ai.network.ApiFailure(com.wynh.appapp.ai.network.ApiFailure.Kind.USAGE_LIMIT, "This app started too many AI requests. Wait a minute, then generate again.")
         val id = UUID.randomUUID().toString()
         try { ledger.begin(id, AiRequestOwner(appId, taskId, route.provider.id, Job())) }
         catch (_: IllegalStateException) { throw com.wynh.appapp.ai.network.ApiFailure(com.wynh.appapp.ai.network.ApiFailure.Kind.INVALID_REQUEST, "A request is already running or awaiting acknowledgement.") }
@@ -183,6 +190,10 @@ class AppAiManager(context: Context) {
         jobs.filterValues { it.taskId == taskId }.keys.toList().forEach(::cancel)
     }
     fun cancelAll() { jobs.keys.toList().forEach(::cancel) }
+    /** Cancels running requests of [appId] but keeps completed results available for saving. */
+    fun cancelUnfinished(appId: String) {
+        jobs.filter { (id, owner) -> owner.appId == appId && requests[id]?.done == false }.keys.toList().forEach(::cancel)
+    }
     fun cancelApp(appId: String) { jobs.filterValues { it.appId == appId }.keys.toList().forEach(::cancel) }
     fun cancelProvider(providerId: String) {
         ledger.cancelProvider(providerId)

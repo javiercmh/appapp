@@ -90,6 +90,9 @@
     <string name="settings_font_normal">Normal (13sp)</string>
     <string name="settings_font_large">Large (16sp)</string>
     <string name="settings_section_about">About App²</string>
+    <string name="settings_privacy_policy">Privacy policy</string>
+    <string name="settings_privacy_policy_url" translatable="false">https://github.com/Javiercmh/appapp/blob/main/PRIVACY.md</string>
+    <string name="settings_privacy_policy_open_failed">No browser is available to open the privacy policy.</string>
     <string name="settings_app_version_label">App Version</string>
     <string name="settings_webview_version_label">WebView Version</string>
     <string name="settings_storage_label">Workspace Footprint</string>
@@ -155,4 +158,16 @@
     <string name="editor_files">Files</string>
     <string name="library_starter_demo">Starter demo</string>
     <string name="library_starter_demo_desc">Create an editable demo showcasing App² features.</string>
+    <string name="permission_allow">Allow</string>
+    <string name="permission_deny">Don\'t allow</string>
+    <string name="permission_ai_title">Allow %1$s to use AI?</string>
+    <string name="permission_notifications_title">Allow %1$s to send notifications?</string>
+    <string name="permission_notifications_message">%1$s will be able to post notifications and schedule reminders that appear even when it is closed. You can change this later in the library: app menu → Permissions.</string>
+    <string name="library_permissions">Permissions</string>
+    <string name="library_permissions_title">Permissions for %1$s</string>
+    <string name="library_permission_ai">AI requests (prompts are sent to the AI provider selected in Settings → AI)</string>
+    <string name="library_permission_notifications">Notifications and scheduled reminders</string>
+    <string name="library_permission_network">Internet (contact other websites; apps without it can only use their own files; applies the next time the app opens)</string>
+    <string name="library_import_offline_note">Imported apps run offline. Allow Internet in the app menu → Permissions if it needs it.</string>
+    <string name="library_permissions_done">Done</string>
 </resources>

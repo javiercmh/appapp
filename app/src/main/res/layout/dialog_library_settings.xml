@@ -596,6 +596,19 @@
                             android:textColor="@color/on_surface"
                             android:textSize="13sp" />
                     </LinearLayout>
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/settings_btn_privacy_policy"
+                        style="@style/Widget.Material3.Button.TonalButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="38dp"
+                        android:layout_marginTop="8dp"
+                        android:insetTop="0dp"
+                        android:insetBottom="0dp"
+                        android:minHeight="0dp"
+                        android:text="@string/settings_privacy_policy"
+                        android:textColor="@color/on_surface"
+                        android:textSize="12sp"
+                        app:backgroundTint="@color/surface_elevated" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
