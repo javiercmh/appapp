@@ -36,6 +36,10 @@ class WorkspaceManager(
      * Initializes the workspace directory and starter files if not already present.
      */
     fun ensureWorkspaceInitialized() {
+        // An import interrupted mid-swap leaves the old workspace aside; restore it before seeding a starter.
+        synchronized(com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(workspaceDir)) {
+            WorkspacePackageManager.recoverImport(workspaceDir)
+        }
         if (!workspaceDir.exists()) {
             workspaceDir.mkdirs()
         }
@@ -110,7 +114,7 @@ class WorkspaceManager(
     fun getFile(fileName: String): File {
         val sanitized = sanitizeRelativePath(fileName)
         val file = File(workspaceDir, sanitized)
-        return if (file.canonicalPath.startsWith(workspaceDir.canonicalPath)) {
+        return if (BridgeWorkspaceFiles.isWithin(workspaceDir.canonicalPath, file.canonicalPath)) {
             file
         } else {
             File(workspaceDir, sanitized.substringAfterLast('/'))
@@ -254,7 +258,7 @@ class WorkspaceManager(
                 if (deleted) {
                     // Clean up empty parent directories up to workspaceDir
                     var parent = file.parentFile
-                    while (parent != null && parent != workspaceDir && parent.canonicalPath.startsWith(workspaceDir.canonicalPath)) {
+                    while (parent != null && parent != workspaceDir && BridgeWorkspaceFiles.isStrictlyInside(workspaceDir.canonicalPath, parent.canonicalPath)) {
                         val children = parent.listFiles()
                         if (children == null || children.isEmpty()) {
                             parent.delete()
