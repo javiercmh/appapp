@@ -1,0 +1,6 @@
+
+com.wynh.appapp.audit.StoreAuditTest:.........
+
+Time: 16.302
+
+OK (9 tests)

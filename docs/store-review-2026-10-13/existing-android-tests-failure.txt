@@ -1,0 +1,41 @@
+> Task :app:compileDebugAndroidTestKotlin FAILED
+e: file:///home/melo/projects/appapp/app/src/androidTest/java/com/wynh/appapp/SubappRuntimeBackDeviceTest.kt:11:31 Unresolved reference 'SpeechWebView'.
+e: file:///home/melo/projects/appapp/app/src/androidTest/java/com/wynh/appapp/SubappRuntimeBackDeviceTest.kt:61:35 Unresolved reference 'SpeechWebView'.
+e: file:///home/melo/projects/appapp/app/src/androidTest/java/com/wynh/appapp/SubappRuntimeBackDeviceTest.kt:99:51 Unresolved reference 'SpeechWebView'.
+e: file:///home/melo/projects/appapp/app/src/androidTest/java/com/wynh/appapp/SubappRuntimeBackDeviceTest.kt:100:21 Unresolved reference 'SpeechWebView'.
+e: file:///home/melo/projects/appapp/app/src/androidTest/java/com/wynh/appapp/SubappRuntimeBackDeviceTest.kt:102:85 Cannot infer type for type parameter 'T'. Specify it explicitly.
+e: file:///home/melo/projects/appapp/app/src/androidTest/java/com/wynh/appapp/SubappRuntimeBackDeviceTest.kt:102:85 Cannot infer type for type parameter 'R'. Specify it explicitly.
+e: file:///home/melo/projects/appapp/app/src/androidTest/java/com/wynh/appapp/SubappRuntimeBackDeviceTest.kt:102:85 Unresolved reference. None of the following candidates is applicable because of a receiver type mismatch:
+fun <T, R> T.let(block: (T) -> R): R
+e: file:///home/melo/projects/appapp/app/src/androidTest/java/com/wynh/appapp/SubappRuntimeBackDeviceTest.kt:102:89 Cannot infer type for type parameter 'T'. Specify it explicitly.
+e: file:///home/melo/projects/appapp/app/src/androidTest/java/com/wynh/appapp/speech/SpeechDeviceTest.kt:22:25 Unresolved reference 'SpeechWebView'.
+e: file:///home/melo/projects/appapp/app/src/androidTest/java/com/wynh/appapp/speech/SpeechDeviceTest.kt:24:45 Unresolved reference 'evaluateJavascript'.
+e: file:///home/melo/projects/appapp/app/src/androidTest/java/com/wynh/appapp/speech/SpeechDeviceTest.kt:24:83 Unresolved reference 'it'.
+e: file:///home/melo/projects/appapp/app/src/androidTest/java/com/wynh/appapp/speech/SpeechDeviceTest.kt:27:28 Unresolved reference 'SpeechWebView'.
+e: file:///home/melo/projects/appapp/app/src/androidTest/java/com/wynh/appapp/speech/SpeechDeviceTest.kt:53:39 Unresolved reference 'SpeechWebView'.
+e: file:///home/melo/projects/appapp/app/src/androidTest/java/com/wynh/appapp/speech/SpeechDeviceTest.kt:55:70 Cannot infer type for type parameter 'T'. Specify it explicitly.
+e: file:///home/melo/projects/appapp/app/src/androidTest/java/com/wynh/appapp/speech/SpeechDeviceTest.kt:106:32 Unresolved reference 'SpeechWebView'.
+e: file:///home/melo/projects/appapp/app/src/androidTest/java/com/wynh/appapp/speech/SpeechDeviceTest.kt:110:32 Unresolved reference 'speakSelection'.
+e: file:///home/melo/projects/appapp/app/src/androidTest/java/com/wynh/appapp/speech/SpeechDeviceTest.kt:111:17 Unresolved reference 'speakSelection'.
+e: file:///home/melo/projects/appapp/app/src/androidTest/java/com/wynh/appapp/speech/SpeechDeviceTest.kt:111:47 Unresolved reference 'it'.
+e: file:///home/melo/projects/appapp/app/src/androidTest/java/com/wynh/appapp/speech/SpeechDeviceTest.kt:111:55 Unresolved reference 'speakSelection'.
+e: file:///home/melo/projects/appapp/app/src/androidTest/java/com/wynh/appapp/speech/SpeechDeviceTest.kt:112:28 Unresolved reference 'startActionMode'.
+e: file:///home/melo/projects/appapp/app/src/androidTest/java/com/wynh/appapp/speech/SpeechDeviceTest.kt:120:38 Unresolved reference 'menu'.
+e: file:///home/melo/projects/appapp/app/src/androidTest/java/com/wynh/appapp/speech/SpeechDeviceTest.kt:120:62 Unresolved reference 'menu'.
+e: file:///home/melo/projects/appapp/app/src/androidTest/java/com/wynh/appapp/speech/SpeechDeviceTest.kt:121:39 Unresolved reference 'menu'.
+e: file:///home/melo/projects/appapp/app/src/androidTest/java/com/wynh/appapp/speech/SpeechDeviceTest.kt:121:52 Cannot infer type for type parameter 'R'. Specify it explicitly.
+e: file:///home/melo/projects/appapp/app/src/androidTest/java/com/wynh/appapp/speech/SpeechDeviceTest.kt:121:63 Unresolved reference 'menu'.
+e: file:///home/melo/projects/appapp/app/src/androidTest/java/com/wynh/appapp/speech/SpeechDeviceTest.kt:121:82 Cannot infer type for type parameter 'T'. Specify it explicitly.
+e: file:///home/melo/projects/appapp/app/src/androidTest/java/com/wynh/appapp/speech/SpeechDeviceTest.kt:121:89 Cannot infer type for type parameter 'T'. Specify it explicitly.
+e: file:///home/melo/projects/appapp/app/src/androidTest/java/com/wynh/appapp/speech/SpeechDeviceTest.kt:121:94 Unresolved reference 'title'.
+e: file:///home/melo/projects/appapp/app/src/androidTest/java/com/wynh/appapp/speech/SpeechDeviceTest.kt:122:29 Unresolved reference 'menu'.
+e: file:///home/melo/projects/appapp/app/src/androidTest/java/com/wynh/appapp/speech/SpeechDeviceTest.kt:122:64 Unresolved reference 'itemId'.
+e: file:///home/melo/projects/appapp/app/src/androidTest/java/com/wynh/appapp/speech/SpeechDeviceTest.kt:129:51 Unresolved reference 'SpeechWebView'.
+e: file:///home/melo/projects/appapp/app/src/androidTest/java/com/wynh/appapp/speech/SpeechDeviceTest.kt:130:21 Unresolved reference 'SpeechWebView'.
+e: file:///home/melo/projects/appapp/app/src/androidTest/java/com/wynh/appapp/speech/SpeechDeviceTest.kt:131:117 Cannot infer type for type parameter 'T'. Specify it explicitly.
+e: file:///home/melo/projects/appapp/app/src/androidTest/java/com/wynh/appapp/speech/SpeechDeviceTest.kt:131:117 Cannot infer type for type parameter 'R'. Specify it explicitly.
+e: file:///home/melo/projects/appapp/app/src/androidTest/java/com/wynh/appapp/speech/SpeechDeviceTest.kt:131:117 Unresolved reference. None of the following candidates is applicable because of a receiver type mismatch:
+fun <T, R> T.let(block: (T) -> R): R
+e: file:///home/melo/projects/appapp/app/src/androidTest/java/com/wynh/appapp/speech/SpeechDeviceTest.kt:131:121 Cannot infer type for type parameter 'T'. Specify it explicitly.
+
+> Task :app:compileDebugUnitTestKotlin
