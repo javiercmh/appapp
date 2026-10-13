@@ -34,11 +34,9 @@ import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
-import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebStorage
 import android.webkit.WebView
-import android.webkit.WebViewClient
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.ImageView
@@ -76,11 +74,8 @@ import com.google.android.material.card.MaterialCardView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.ByteArrayInputStream
 import java.io.File
-import java.io.FileInputStream
 import java.io.FileOutputStream
-import java.nio.charset.StandardCharsets
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -395,22 +390,18 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
         val webView = binding.webView
         val settings = webView.settings
 
-        // Enable JavaScript and modern web capabilities
-        settings.javaScriptEnabled = true
-        settings.domStorageEnabled = true
-        settings.allowFileAccess = true
-        settings.allowContentAccess = true
+        // Shared hardened settings; the editor additionally disables caching so edits show at once.
+        com.wynh.appapp.runtime.SubappWebViews.configure(webView, WebSettings.LOAD_NO_CACHE)
         settings.loadWithOverviewMode = true
         settings.useWideViewPort = true
-        settings.cacheMode = WebSettings.LOAD_NO_CACHE
 
         // Hardware acceleration
         webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
 
-        // Inject Native Bridges as window.AndroidStorage, window.AndroidMemory, window.AndroidNotification
-        webView.addJavascriptInterface(storageBridge, "AndroidStorage")
-        webView.addJavascriptInterface(storageBridge, "AndroidMemory")
-        webView.addJavascriptInterface(storageBridge, "AndroidNotification")
+        // window.AndroidStorage / AndroidMemory / AndroidNotification, for this app's origin only
+        com.wynh.appapp.runtime.SubappWebViews.installStorageBridge(webView, subapp.id, storageBridge) { msg ->
+            runOnUiThread { appendLog(msg) }
+        }
         (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.let {
             com.wynh.appapp.ai.AiWebMessageBridge(this, webView, subapp.id, taskId, it).install()
         }
@@ -471,55 +462,15 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
         }
 
         // Handle page lifecycle and intercept workspace asset requests
-        webView.webViewClient = object : WebViewClient() {
+        webView.webViewClient = object : com.wynh.appapp.runtime.SubappWebViewClient(
+            this, subapp.id, { workspaceManager }, { msg -> runOnUiThread { appendLog(msg) } },
+            { com.wynh.appapp.grants.SubappGrants.isGranted(this, subapp.id, com.wynh.appapp.grants.SubappCapability.NETWORK) }
+        ) {
             override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                 speechSession?.pageChanged()
                 binding.webView.selectionMenuSuppressed = false
+                storageBridge.pageStarted()
                 super.onPageStarted(view, url, favicon)
-            }
-            override fun shouldInterceptRequest(
-                view: WebView?,
-                request: WebResourceRequest?
-            ): WebResourceResponse? {
-                val url = request?.url ?: return null
-                val host = url.host ?: ""
-                val scheme = url.scheme ?: ""
-
-                // Intercept this subapp's origin and serve only its own workspace files.
-                if ((scheme.equals("https", ignoreCase = true) || scheme.equals("http", ignoreCase = true))
-                    && host.equals("${subapp.id}.app.local", ignoreCase = true)) {
-
-                    var path = url.path ?: "/index.html"
-                    if (path.isEmpty() || path == "/") {
-                        val mainFile = try {
-                            val manifestContent = workspaceManager.readFile("manifest.json")
-                            if (manifestContent.isNotBlank()) {
-                                JSONObject(manifestContent).optString("main", "index.html").trim().removePrefix("/")
-                            } else "index.html"
-                        } catch (_: Exception) {
-                            "index.html"
-                        }
-                        path = "/${mainFile.ifBlank { "index.html" }}"
-                    }
-                    val fileName = path.removePrefix("/")
-                    val file = workspaceManager.getFile(fileName)
-
-                    if (file.exists() && file.isFile) {
-                        val mimeType = WorkspaceManager.getMimeType(fileName)
-                        val inputStream = FileInputStream(file)
-                        return WebResourceResponse(mimeType, "UTF-8", inputStream)
-                    } else {
-                        appendLog("[WebView Error] Workspace file not found: $fileName")
-                        val notFoundHtml = "<html><body><h3>404 Not Found</h3><p>Workspace file '$fileName' does not exist.</p></body></html>"
-                        return WebResourceResponse(
-                            "text/html",
-                            "UTF-8",
-                            ByteArrayInputStream(notFoundHtml.toByteArray(StandardCharsets.UTF_8))
-                        )
-                    }
-                }
-
-                return super.shouldInterceptRequest(view, request)
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
@@ -627,18 +578,7 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
      */
     fun reloadApp() {
         (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.cancelTask(taskId)
-        val entryPoint = try {
-            val manifestContent = workspaceManager.readFile("manifest.json")
-            if (manifestContent.isNotBlank()) {
-                val json = JSONObject(manifestContent)
-                val main = json.optString("main", "index.html").trim().removePrefix("/")
-                if (main.isNotBlank() && workspaceManager.getFile(main).exists()) main else "index.html"
-            } else {
-                "index.html"
-            }
-        } catch (_: Exception) {
-            "index.html"
-        }
+        val entryPoint = com.wynh.appapp.runtime.SubappWebViews.entryPath(workspaceManager)
 
         appendLog("[Compiler] Loading App² workspace entry '$entryPoint' into runtime...")
         binding.webView.clearCache(true)
