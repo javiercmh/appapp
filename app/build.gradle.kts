@@ -59,16 +59,22 @@ android {
     }
 }
 
-tasks.configureEach {
-    if (name == "assembleRelease") {
-        doFirst {
-            check(hasReleaseSigning) {
-                "Release signing is not configured. Set APPAPP_RELEASE_STORE_FILE, " +
-                    "APPAPP_RELEASE_STORE_PASSWORD, APPAPP_RELEASE_KEY_ALIAS, and " +
-                    "APPAPP_RELEASE_KEY_PASSWORD in your user-level Gradle properties."
-            }
+// Plain assembleRelease stays buildable without credentials (F-Droid builds and signs itself).
+// Publishers use assembleSignedRelease, which refuses to run without the release key.
+val verifyReleaseSigning by tasks.registering {
+    doFirst {
+        check(hasReleaseSigning) {
+            "Release signing is not configured. Set APPAPP_RELEASE_STORE_FILE, " +
+                "APPAPP_RELEASE_STORE_PASSWORD, APPAPP_RELEASE_KEY_ALIAS, and " +
+                "APPAPP_RELEASE_KEY_PASSWORD in your user-level Gradle properties."
         }
     }
+}
+tasks.matching { it.name == "assembleRelease" }.configureEach { mustRunAfter(verifyReleaseSigning) }
+tasks.register("assembleSignedRelease") {
+    group = "build"
+    description = "Builds the release APK signed with the publisher key."
+    dependsOn(verifyReleaseSigning, "assembleRelease")
 }
 
 kotlin {
