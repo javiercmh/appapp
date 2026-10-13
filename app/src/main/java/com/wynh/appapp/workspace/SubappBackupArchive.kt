@@ -107,6 +107,7 @@ object SubappBackupArchive {
         val buffer = ByteArray(32768)
         var size = 0L
         while (true) {
+            if (Thread.interrupted()) throw InterruptedException("Backup operation cancelled")
             val count = input.read(buffer)
             if (count < 0) break
             size += count
