@@ -48,7 +48,9 @@ The Android host uses Kotlin, Material components, and WebView. Build with JDK 1
 
 ## License
 
-MIT License.
+MIT License; see [`LICENSE`](LICENSE). It covers everything in this repository, including the
+starter template and the examples under `examples/`, unless a file says otherwise. Bundled
+libraries and third-party marks are listed in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 This means, you can do whatever you want with App².
 Just one personal request: please do not put ads, non-consensual trackers, or other invasive code in your apps.
 

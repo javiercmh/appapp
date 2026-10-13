@@ -107,7 +107,7 @@ so restored code is reported as local changes during the next update review.
   `:app:assembleDebug :app:testDebugUnitTest :app:assembleDebugAndroidTest`.
   Install the matching APK and test APK on the selected emulator and run
   `com.wynh.appapp.updates.UpdaterDeviceTest` with AndroidJUnitRunner.
-- Build signed release with `./gradlew :app:assembleRelease`.
+- Build signed release with `./gradlew :app:assembleSignedRelease`.
 - Run `adb devices -l`; always use `-s <serial>`. Check `pm path com.wynh.appapp`
   and inspect installed version/certificate. Pull the installed APK read-only if
   necessary. Verify both APKs with the SDK's `apksigner verify --print-certs`.
