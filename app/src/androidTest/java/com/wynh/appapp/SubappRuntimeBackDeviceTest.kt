@@ -8,7 +8,6 @@ import androidx.test.espresso.Espresso.pressBack
 import androidx.test.espresso.NoActivityResumedException
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import com.wynh.appapp.speech.SpeechWebView
 import com.wynh.appapp.workspace.SubappRepository
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -58,7 +57,7 @@ class SubappRuntimeBackDeviceTest {
             val intent = Intent(context, SubappRuntimeActivity::class.java)
                 .setData(Uri.parse("appapp://subapp/${record.id}"))
             ActivityScenario.launch<SubappRuntimeActivity>(intent).use { scenario ->
-                lateinit var web: SpeechWebView
+                lateinit var web: android.webkit.WebView
                 scenario.onActivity { activity ->
                     web = findWeb(activity.findViewById(android.R.id.content))!!
                 }
@@ -96,8 +95,8 @@ class SubappRuntimeBackDeviceTest {
         }
     }
 
-    private fun findWeb(view: android.view.View): SpeechWebView? {
-        if (view is SpeechWebView) return view
+    private fun findWeb(view: android.view.View): android.webkit.WebView? {
+        if (view is android.webkit.WebView) return view
         if (view is android.view.ViewGroup) {
             for (index in 0 until view.childCount) findWeb(view.getChildAt(index))?.let { return it }
         }
