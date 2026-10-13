@@ -1,25 +1,89 @@
 package com.wynh.appapp.workspace
 
-import android.content.Context
-import org.json.JSONArray
-import org.json.JSONObject
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
+import com.wynh.appapp.updates.GitHubClient
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+import java.util.UUID
 
-/** Downloads a public GitHub repository or repository subfolder into a temporary directory. */
+/**
+ * Downloads a public GitHub repository or repository subfolder into a temporary staging directory.
+ * The requested branch is resolved to one commit and every listing and file is read at that commit.
+ * Limits match ZIP import: 1024 entries, 8 MiB per file and 32 MiB in total.
+ */
 object GitHubFolderImporter {
+    const val MAX_ENTRIES = 1024
+    const val MAX_DEPTH = 16
+    const val MAX_FILE_BYTES = 8L * 1024 * 1024
+    const val MAX_TOTAL_BYTES = 32L * 1024 * 1024
+    const val TIMEOUT_MILLIS = 2 * 60_000L
+    private const val MAX_LISTING_BYTES = 4L * 1024 * 1024
+
+    data class Import(val directory: File, val commit: String)
     private data class FolderLink(val owner: String, val repo: String, val branch: String, val path: String)
 
-    fun download(context: Context, link: String): Result<File> = runCatching {
-        val parsed = resolveDefaultBranch(parse(link))
-        val destination = File(context.cacheDir, "github_import_${System.currentTimeMillis()}")
+    fun download(
+        cacheDir: File,
+        link: String,
+        connect: (URL) -> HttpURLConnection = { it.openConnection() as HttpURLConnection },
+        clock: () -> Long = System::currentTimeMillis,
+    ): Result<Import> = runCatching {
+        val parsed = parse(link)
+        val client = GitHubClient(connect, "AppApp-Android", MAX_TOTAL_BYTES + 4 * MAX_LISTING_BYTES, maxRedirects = 3, timeoutMillis = TIMEOUT_MILLIS, clock = clock)
+        fun json(url: String): JsonObject = runCatching {
+            JsonParser.parseString(client.get(url, MAX_LISTING_BYTES, "application/vnd.github+json").toString(Charsets.UTF_8)).asJsonObject
+        }.getOrElse { if (it is IllegalArgumentException) throw it else throw IllegalArgumentException("GitHub returned an invalid response") }
+        val repo = "${parsed.owner}/${parsed.repo}"
+        val api = "https://api.github.com/repos/$repo"
+        val ref = parsed.branch.ifBlank {
+            json(api).str("default_branch") ?: throw IllegalArgumentException("Could not find the repository's default branch")
+        }
+        val head = json("$api/commits/${encode(ref)}")
+        val commit = head.str("sha").orEmpty()
+        require(commit.matches(Regex("[a-f0-9]{40}"))) { "GitHub returned an invalid commit" }
+        var tree = head.getAsJsonObject("commit")?.getAsJsonObject("tree")?.str("sha")
+            ?: throw IllegalArgumentException("GitHub returned an invalid commit")
+        val folder = parsed.path.split('/').filter { it.isNotBlank() }
+        folder.forEach { segment ->
+            tree = entries(json("$api/git/trees/$tree")).firstOrNull { it.str("path") == segment && it.str("type") == "tree" }
+                ?.str("sha") ?: throw IllegalArgumentException("The GitHub folder was not found at commit ${commit.take(7)}")
+        }
+        val listing = json("$api/git/trees/$tree?recursive=1")
+        require(listing.get("truncated")?.asBoolean != true) { "The GitHub folder is too large to import" }
+        val items = entries(listing)
+        require(items.size <= MAX_ENTRIES) { "The GitHub folder has more than $MAX_ENTRIES entries" }
+
+        val destination = File(cacheDir, "github_import_${UUID.randomUUID()}")
         check(destination.mkdirs()) { "Could not create temporary import folder" }
         try {
-            downloadDirectory(parsed, parsed.path, destination)
-            check(File(destination, "index.html").isFile) { "The selected GitHub folder must contain index.html" }
-            destination
+            val seen = mutableSetOf<String>()
+            var declared = 0L
+            val files = items.mapNotNull { item ->
+                val path = item.str("path").orEmpty()
+                val target = checkedZipDestination(destination, path)
+                require(path.count { it == '/' } < MAX_DEPTH) { "The GitHub folder is nested more than $MAX_DEPTH levels deep" }
+                require(seen.add(target.canonicalPath)) { "GitHub returned a duplicate path: $path" }
+                // Submodules ("commit") and symbolic links are not workspace files.
+                if (item.str("type") != "blob" || item.str("mode") == "120000") return@mapNotNull null
+                val size = item.get("size")?.asLong ?: 0L
+                declared += size
+                require(size <= MAX_FILE_BYTES && declared <= MAX_TOTAL_BYTES) { "The GitHub folder exceeds the import size limit" }
+                path to target
+            }
+            require(files.any { it.first == "index.html" }) { "The selected GitHub folder must contain index.html" }
+            val raw = "https://raw.githubusercontent.com/$repo/$commit/" + (folder + "").joinToString("/") { encode(it) }
+            var written = 0L
+            files.forEach { (path, target) ->
+                val bytes = client.get(raw + encodePath(path), MAX_FILE_BYTES)
+                written += bytes.size
+                require(written <= MAX_TOTAL_BYTES) { "The GitHub folder exceeds the import size limit" }
+                check(target.parentFile!!.isDirectory || target.parentFile!!.mkdirs()) { "Could not create folder for $path" }
+                target.writeBytes(bytes)
+            }
+            Import(destination, commit)
         } catch (error: Exception) {
             destination.deleteRecursively()
             throw error
@@ -48,70 +112,13 @@ object GitHubFolderImporter {
             "The GitHub URL must identify a repository"
         }
         require(parts.size <= 2 || branch.isNotBlank()) { "The GitHub folder URL is missing its branch" }
+        require(path.split('/').none { it == "." || it == ".." }) { "The GitHub folder URL is invalid" }
         return FolderLink(owner, repo, branch, path)
     }
 
-    private fun resolveDefaultBranch(link: FolderLink): FolderLink {
-        if (link.branch.isNotBlank()) return link
-        val repository = JSONObject(requestText("https://api.github.com/repos/${link.owner}/${link.repo}"))
-        val branch = repository.optString("default_branch")
-        require(branch.isNotBlank()) { "Could not find the repository's default branch" }
-        return link.copy(branch = branch)
-    }
-
-    private fun downloadDirectory(link: FolderLink, path: String, destination: File) {
-        val contentsPath = if (path.isBlank()) "contents" else "contents/${encodePath(path)}"
-        val apiUrl = "https://api.github.com/repos/${link.owner}/${link.repo}/$contentsPath?ref=${encode(link.branch)}"
-        val response = requestText(apiUrl)
-        val entries = runCatching { JSONArray(response) }.getOrElse {
-            throw IllegalArgumentException("GitHub did not return a folder listing")
-        }
-        for (index in 0 until entries.length()) {
-            val entry = entries.getJSONObject(index)
-            val name = entry.getString("name")
-            require(name != "." && name != ".." && !name.contains('/') && !name.contains('\\')) { "GitHub returned an unsafe file name" }
-            val childPath = listOf(path, name).filter { it.isNotBlank() }.joinToString("/")
-            val output = File(destination, name)
-            when (entry.getString("type")) {
-                "dir" -> {
-                    check(output.mkdirs()) { "Could not create folder $name" }
-                    downloadDirectory(link, childPath, output)
-                }
-                "file" -> {
-                    val downloadUrl = entry.optString("download_url")
-                    require(downloadUrl.startsWith("https://raw.githubusercontent.com/")) { "GitHub returned an invalid file URL" }
-                    requestBytes(downloadUrl).inputStream().use { input -> output.outputStream().use(input::copyTo) }
-                }
-            }
-        }
-    }
-
-    private fun requestText(address: String): String = requestBytes(address).toString(Charsets.UTF_8).also {
-        if (it.startsWith("{")) {
-            val error = runCatching { JSONObject(it).optString("message") }.getOrNull()
-            if (!error.isNullOrBlank()) throw IllegalArgumentException(error)
-        }
-    }
-
-    private fun requestBytes(address: String): ByteArray {
-        val connection = URL(address).openConnection() as HttpURLConnection
-        connection.connectTimeout = 15_000
-        connection.readTimeout = 20_000
-        connection.setRequestProperty("Accept", "application/vnd.github+json")
-        connection.setRequestProperty("User-Agent", "AppApp-Android")
-        return connection.useConnection {
-            val status = connection.responseCode
-            if (status !in 200..299) {
-                val detail = connection.errorStream?.bufferedReader()?.use { it.readText() }
-                val message = runCatching { JSONObject(detail.orEmpty()).optString("message") }.getOrNull()
-                throw IllegalArgumentException(message?.takeIf { it.isNotBlank() } ?: "GitHub request failed ($status)")
-            }
-            connection.inputStream.use { it.readBytes() }
-        }
-    }
-
-    private inline fun <T> HttpURLConnection.useConnection(block: () -> T): T = try { block() } finally { disconnect() }
-
+    private fun entries(listing: JsonObject): List<JsonObject> =
+        listing.getAsJsonArray("tree")?.map { it.asJsonObject } ?: throw IllegalArgumentException("GitHub did not return a folder listing")
+    private fun JsonObject.str(name: String): String? = get(name)?.takeIf { it.isJsonPrimitive }?.asString
     private fun encodePath(path: String): String = path.split('/').joinToString("/") { encode(it) }
     private fun encode(value: String): String = URLEncoder.encode(value, "UTF-8").replace("+", "%20")
 }

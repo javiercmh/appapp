@@ -25,6 +25,8 @@ class SubappRepository(private val context: Context) {
         recoverBackupImport()
         if (!migrationMarker.exists()) migrateLegacyWorkspace()
         migrationMarker.takeIf { it.isFile }?.readText()?.let(::cleanupLegacyStorage)
+        // Runs the one-time grant migration now that the library (and any legacy reminders) exist.
+        com.wynh.appapp.grants.SubappGrants.store(context)
         return@synchronized list()
     }
 
@@ -94,6 +96,7 @@ class SubappRepository(private val context: Context) {
             context.getSharedPreferences("runtime_app_state_$id", Context.MODE_PRIVATE).edit().clear().commit()
             context.getSharedPreferences("runtime_scheduled_alarms_$id", Context.MODE_PRIVATE).edit().clear().commit()
             context.getSharedPreferences("runtime_notifications_$id", Context.MODE_PRIVATE).edit().clear().commit()
+            com.wynh.appapp.grants.SubappGrants.clear(context, id)
             writeIndex(list().map { it.id }.filterNot { it == id })
         }
         return@synchronized deleted

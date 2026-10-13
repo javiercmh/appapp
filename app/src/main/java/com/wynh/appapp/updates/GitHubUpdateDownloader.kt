@@ -12,45 +12,20 @@ class GitHubUpdateDownloader(private val cache: File, private val connect: (URL)
     fun recentSubjects(source: GitHubSource, since: String?, limit: Int = 8): List<String> {
         val repo = "${source.owner}/${source.repository}"
         val branch = URLEncoder.encode(source.branch, "UTF-8").replace("+", "%20")
-        val connection = connect(URL("https://api.github.com/repos/$repo/commits?sha=$branch&per_page=30"))
-        connection.connectTimeout = 15_000; connection.readTimeout = 20_000
-        connection.instanceFollowRedirects = false
-        connection.setRequestProperty("User-Agent", "AppApp-Updater")
-        try {
-            require(connection.responseCode in 200..299) { "GitHub request failed (${connection.responseCode})" }
-            val text = connection.inputStream.use { it.readBytes() }.toString(Charsets.UTF_8)
-            val subjects = mutableListOf<String>()
-            for (item in JsonParser.parseString(text).asJsonArray) {
-                val commit = item.asJsonObject
-                if (commit.get("sha").asString == since) break
-                subjects.add(commit.getAsJsonObject("commit").get("message").asString.lineSequence().first().trim().take(120))
-            }
-            return subjects.filter { it.isNotEmpty() }.take(limit)
-        } finally { connection.disconnect() }
+        val text = GitHubClient(connect, "AppApp-Updater", MAX_BYTES)
+            .get("https://api.github.com/repos/$repo/commits?sha=$branch&per_page=30", 1024 * 1024).toString(Charsets.UTF_8)
+        val subjects = mutableListOf<String>()
+        for (item in JsonParser.parseString(text).asJsonArray) {
+            val commit = item.asJsonObject
+            if (commit.get("sha").asString == since) break
+            subjects.add(commit.getAsJsonObject("commit").get("message").asString.lineSequence().first().trim().take(120))
+        }
+        return subjects.filter { it.isNotEmpty() }.take(limit)
     }
 
     fun download(source: GitHubSource, hostVersion: Long): Download {
-        var bytes = 0L
-        fun get(url: String, limit: Int): ByteArray {
-            val connection = connect(URL(url))
-            connection.connectTimeout = 15_000; connection.readTimeout = 20_000
-            connection.instanceFollowRedirects = false
-            connection.setRequestProperty("User-Agent", "AppApp-Updater")
-            try {
-                require(connection.responseCode in 200..299) { "GitHub request failed (${connection.responseCode}); check connectivity and repository access" }
-                val output = java.io.ByteArrayOutputStream()
-                connection.inputStream.use { input ->
-                    val buffer = ByteArray(8192)
-                    while (true) {
-                        val count = input.read(buffer); if (count < 0) break
-                        bytes += count
-                        require(output.size() + count <= limit && bytes <= 32 * 1024 * 1024) { "Update exceeds download limit" }
-                        output.write(buffer, 0, count)
-                    }
-                }
-                return output.toByteArray()
-            } finally { connection.disconnect() }
-        }
+        val client = GitHubClient(connect, "AppApp-Updater", MAX_BYTES, timeoutMillis = 5 * 60_000)
+        fun get(url: String, limit: Int) = client.get(url, limit.toLong())
         fun encode(value: String) = URLEncoder.encode(value, "UTF-8").replace("+", "%20")
         val repo = "${source.owner}/${source.repository}"
         val commit = JsonParser.parseString(get("https://api.github.com/repos/$repo/commits/${encode(source.branch)}", 1024 * 1024).toString(Charsets.UTF_8)).asJsonObject.get("sha").asString
@@ -72,4 +47,6 @@ class GitHubUpdateDownloader(private val cache: File, private val connect: (URL)
             return Download(pkg, commit, directory)
         } catch (e: Exception) { directory.deleteRecursively(); throw e }
     }
+
+    private companion object { const val MAX_BYTES = 32L * 1024 * 1024 }
 }

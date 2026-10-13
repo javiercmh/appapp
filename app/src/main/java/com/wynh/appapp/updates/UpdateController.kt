@@ -84,6 +84,7 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
                     append("\nUser records and unowned files are preserved.\n")
                     if (preview.edited.isNotEmpty()) append("\n${preview.edited.size} locally edited or missing code files will be replaced by publisher files.\n")
                     append("\nThe current and updated versions will be saved in Edit → Version history. A recovery backup will also be created.")
+                    append("\n\nAI and notification permissions are reset because the app code changes. The app will ask again; scheduled reminders stop until notifications are allowed again.")
                 }
                 MaterialAlertDialogBuilder(activity).setTitle("Review app update").setMessage(text)
                     .setPositiveButton(if (mismatch != null) "Accept and update" else if (preview.adoption) "Link and update" else "Update") { _, _ ->
@@ -107,7 +108,9 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
                     history.ensureInitialVersion(workspace)
                     check(history.saveSnapshot(workspace, "Before $label") != null) { "Could not save version history; update cancelled" }
                     operation()
-                    check(history.saveSnapshot(workspace, label) != null) { "App updated, but version history could not be saved" }
+                    // New publisher code must ask for capabilities again, even if the snapshot below fails.
+                    try { check(history.saveSnapshot(workspace, label) != null) { "App updated, but version history could not be saved" } }
+                    finally { com.wynh.appapp.grants.SubappGrants.resetAfterCodeChange(activity, record.id) }
                 }
             } finally { SubappSessionRegistry.resume(record.id) }
             Toast.makeText(activity, "App code updated; user files preserved", Toast.LENGTH_LONG).show()
