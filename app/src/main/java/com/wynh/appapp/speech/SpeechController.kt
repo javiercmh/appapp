@@ -72,6 +72,7 @@ class SpeechController(private val activity: Activity) {
             val locale = SpeechPolicy.language(options.get("language")?.asString.orEmpty())
             val rate = SpeechPolicy.scalar(options.get("rate")?.asDouble ?: 1.0)
             val pitch = SpeechPolicy.scalar(options.get("pitch")?.asDouble ?: 1.0)
+            val showControl = SpeechPolicy.showControl(options)
             val id = options.get("voiceId")?.takeUnless { it.isJsonNull }?.asString
             stop()
             val voice = if (id != null) {
@@ -88,8 +89,9 @@ class SpeechController(private val activity: Activity) {
             if (tts.setVoice(voice) != TextToSpeech.SUCCESS || tts.setSpeechRate(rate) != TextToSpeech.SUCCESS ||
                 tts.setPitch(pitch) != TextToSpeech.SUCCESS) return error("voice", "The speech engine rejected the voice settings.")
             current = UUID.randomUUID().toString(); complete = done; failure = error
-            control = Snackbar.make(activity.findViewById(android.R.id.content), "Speaking", Snackbar.LENGTH_INDEFINITE)
-                .setAction("Stop") { stop() }.also { it.show() }
+            control = if (!showControl) null else
+                Snackbar.make(activity.findViewById(android.R.id.content), "Speaking", Snackbar.LENGTH_INDEFINITE)
+                    .setAction("Stop") { stop() }.also { it.show() }
             if (tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, current) != TextToSpeech.SUCCESS)
                 fail("synthesis", "The speech engine could not start playback.")
         } catch (e: Exception) {

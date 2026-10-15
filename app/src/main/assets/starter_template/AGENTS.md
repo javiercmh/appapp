@@ -373,12 +373,15 @@ not engine readiness. Browser previews reject calls with `unavailable`.
 - `await speech.voices()` returns `{voices: [{id, name, language, requiresNetwork}]}` from
   Android's configured TTS engine. Discover voice IDs; do not hardcode them. Online voices
   may transmit text through the configured engine and require connectivity.
-- `await speech.speak({text, language, voiceId?, rate?, pitch?})` requires a BCP 47 language
+- `await speech.speak({text, language, voiceId?, rate?, pitch?, showControl?})` requires a BCP 47 language
   such as `fr-FR`, `de-DE`, or `ja-JP`. No language detection is performed. An explicit voice
   must match the requested language and script. Regional fallback within that language is allowed.
-  Rate and pitch default to 1 and accept finite values from 0.5 to 2.
+  Rate and pitch default to 1 and accept finite values from 0.5 to 2. `showControl: false`
+  hides the native Speaking bar; the subapp must then provide its own Stop control.
 - The speak Promise resolves with `{status: "completed"}` after playback or
   `{status: "cancelled"}` after replacement/Stop. New playback replaces previous playback.
+- `await speech.capabilities()` returns `{features: [...]}` listing optional speak options the host
+  honours (`rate`, `pitch`, `showControl`). Older hosts reject it with `invalid_request`.
 - `await speech.stop()` resolves to `true`, including when idle.
 - Errors reject with `.code` and `.message`: `unavailable`, `invalid_request`, `language`,
   `missing_data`, `voice`, `network`, `synthesis`, `cancelled`, or command `timeout`.
@@ -387,7 +390,7 @@ not engine readiness. Browser previews reject calls with `unavailable`.
 
 Subapps provide their own pronunciation buttons using `speech.speak({text, language})`.
 App² does not add a Speak action to Android’s text selection menu.
-A native **Stop** control appears during playback. Speech stops on backgrounding, page reload,
+A native **Stop** control appears during playback unless the call passes `showControl: false`. Speech stops on backgrounding, page reload,
 navigation, workspace replacement, or closure; it is not persisted or resumed.
 The channel accepts only the owning subapp HTTPS origin and main frame. No AI account is needed.
 Store any subapp voice preferences in plain JSON under `data/`. The Starter Demo includes

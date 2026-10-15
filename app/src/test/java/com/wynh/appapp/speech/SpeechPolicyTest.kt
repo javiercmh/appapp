@@ -1,5 +1,6 @@
 package com.wynh.appapp.speech
 
+import com.google.gson.JsonParser
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -19,5 +20,16 @@ class SpeechPolicyTest {
         }
         assertEquals(0.5f, SpeechPolicy.scalar(0.5))
         assertEquals(2f, SpeechPolicy.scalar(2.0))
+    }
+    @Test fun `native speaking bar is shown unless a subapp opts out with a boolean`() {
+        fun options(json: String) = JsonParser.parseString(json).asJsonObject
+        assertTrue(SpeechPolicy.showControl(options("{}")))
+        assertTrue(SpeechPolicy.showControl(options("""{"showControl":null}""")))
+        assertTrue(SpeechPolicy.showControl(options("""{"showControl":true}""")))
+        assertFalse(SpeechPolicy.showControl(options("""{"showControl":false}""")))
+        for (bad in listOf("\"false\"", "0", "{}")) {
+            assertThrows(IllegalArgumentException::class.java) { SpeechPolicy.showControl(options("""{"showControl":$bad}""")) }
+        }
+        assertTrue("showControl" in SpeechPolicy.features && "rate" in SpeechPolicy.features)
     }
 }
