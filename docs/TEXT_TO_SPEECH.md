@@ -70,13 +70,15 @@ with `unavailable`; the development server does not simulate speech.
 | --- | --- |
 | `speech.available` | Boolean indicating native channel availability. |
 | `await speech.voices()` | `{voices: [{id, name, language, requiresNetwork}]}` for Android's configured engine. |
-| `await speech.speak({text, language, voiceId?, rate?, pitch?})` | Resolves after playback with `{status: "completed"}`, or `{status: "cancelled"}` when interrupted by Stop or replacement. |
+| `await speech.speak({text, language, voiceId?, rate?, pitch?, showControl?})` | Resolves after playback with `{status: "completed"}`, or `{status: "cancelled"}` when interrupted by Stop or replacement. |
+| `await speech.capabilities()` | `{features: ["rate", "pitch", "showControl"]}`; hosts without this call reject it with `invalid_request`, so treat that as no optional features. |
 | `await speech.stop()` | Resolves to `true`, including when nothing is playing. |
 
 `text` must be nonempty and fit Android's speech input limit. `language` is a required BCP 47
 tag, such as `fr-FR`, `de-DE`, or `ja-JP`. Regional fallback within the same language is allowed;
 explicit scripts must match. Optional `rate` and `pitch` default to `1` and accept finite values
-from `0.5` through `2`.
+from `0.5` through `2`. `showControl` defaults to `true`, which shows the native Speaking bar with Stop;
+with `false` the host shows no bar and the subapp must provide its own Stop control. It must be a boolean.
 
 ## Choose a voice
 

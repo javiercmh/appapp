@@ -31,6 +31,7 @@ class SpeechSession(private val activity: AppCompatActivity, private val web: We
             }
             if (!foreground) { error("unavailable", "Speech requires a foreground app."); return@addWebMessageListener }
             when (action) {
+                "capabilities" -> respond(mapOf("id" to id, "value" to mapOf("features" to SpeechPolicy.features)))
                 "stop" -> { controller.reset(); respond(mapOf("id" to id, "value" to true)) }
                 "voices", "speak" -> controller.withEngine({
                     if (page == generation && foreground && !closed) {

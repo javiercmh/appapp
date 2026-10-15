@@ -346,6 +346,7 @@ function speechCommand(action, options) {
 export const speech = {
   available: Boolean(SPEECH),
   voices: () => speechCommand('voices'),
+  capabilities: () => speechCommand('capabilities'),
   speak: options => speechCommand('speak', options),
   stop: () => speechCommand('stop')
 };
