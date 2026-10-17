@@ -11,7 +11,9 @@ import android.webkit.WebView
 
 /**
  * WebView that can hide Android's floating text-selection menu. An emptied floating menu draws no
- * toolbar, while the selection handles and the page's selection events keep working.
+ * toolbar, while the selection handles and the page's selection events keep working. Only menus that
+ * carry the standard selection actions (copy, cut, paste, select all, share) are emptied; any other
+ * action mode, such as one that only offers text-service or IME entries, is left untouched.
  */
 class SelectionAwareWebView @JvmOverloads constructor(
     context: Context,
@@ -29,13 +31,13 @@ class SelectionAwareWebView @JvmOverloads constructor(
     private inner class SuppressibleCallback(private val inner: ActionMode.Callback) : ActionMode.Callback2() {
         override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
             val created = inner.onCreateActionMode(mode, menu)
-            if (selectionMenuSuppressed) menu.clear()
+            if (selectionMenuSuppressed && hasSelectionActions(menu)) menu.clear()
             return created
         }
 
         override fun onPrepareActionMode(mode: ActionMode, menu: Menu): Boolean {
             val changed = inner.onPrepareActionMode(mode, menu)
-            if (selectionMenuSuppressed) { menu.clear(); return true }
+            if (selectionMenuSuppressed && hasSelectionActions(menu)) { menu.clear(); return true }
             return changed
         }
 
@@ -48,5 +50,19 @@ class SelectionAwareWebView @JvmOverloads constructor(
             (inner as? ActionMode.Callback2)?.onGetContentRect(mode, view, outRect)
                 ?: super.onGetContentRect(mode, view, outRect)
         }
+    }
+
+    private fun hasSelectionActions(menu: Menu): Boolean =
+        (0 until menu.size()).any { menu.getItem(it).itemId in SELECTION_ACTION_IDS }
+
+    private companion object {
+        val SELECTION_ACTION_IDS = setOf(
+            android.R.id.copy,
+            android.R.id.cut,
+            android.R.id.paste,
+            android.R.id.pasteAsPlainText,
+            android.R.id.selectAll,
+            android.R.id.shareText
+        )
     }
 }
