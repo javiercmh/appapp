@@ -159,3 +159,10 @@ The Promise resolves `true` when native review opens, not when installation
 completes. It rejects on an unavailable channel or timeout. Only the owning HTTPS
 origin and main frame can open review. Callers cannot supply download endpoints
 or silently install. Browsers and development mocks report unavailable.
+
+
+## Runtime coordination
+
+Update installation runs as an owned background workspace operation. Only sessions of the affected app are suspended; App² does not pause process-wide WebView timers. The affected document reloads after the transaction. Publisher permission revocation persists before new code activates, including Internet permission; if revocation fails, new code is not published. A failed update after revocation may require re-enabling capabilities for the unchanged app.
+
+The shared text-history restore now stages a complete replacement and preserves binary/unknown files. It remains a bounded text history, not an all-file backup. See [architecture](ARCHITECTURE.md) and [pending device checks](DEVICE_CHECKS.md).

@@ -137,6 +137,8 @@ class AppAiManager(context: Context) {
     suspend fun nextAuthorizationUrl(): String = withTimeout(600_000) { auth.browserRequests.receive() }
 
     fun start(appId: String, taskId: Int, providerId: String, model: String, instructions: String, input: String, effort: String?): String {
+        if (com.wynh.appapp.workspace.WorkspaceOperations.isBusy(java.io.File(app.filesDir, "subapps/$appId/workspace")))
+            throw com.wynh.appapp.ai.network.ApiFailure(com.wynh.appapp.ai.network.ApiFailure.Kind.INVALID_REQUEST, "The app workspace is being changed. Try again after it finishes.")
         val route = registry.route(providerId, model)
         // Defense in depth: the web bridge asks first, but nothing generates without the grant.
         if (!com.wynh.appapp.grants.SubappGrants.isGranted(app, appId, com.wynh.appapp.grants.SubappCapability.AI))

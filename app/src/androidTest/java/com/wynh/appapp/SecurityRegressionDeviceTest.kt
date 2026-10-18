@@ -86,6 +86,8 @@ class SecurityRegressionDeviceTest {
                     assertTrue(frame, frame.startsWith("\"frame:undefined|") && !frame.contains("SENTINEL"))
                     assertEquals("\"blocked\"", r("net"))                // offline by default
                     // Even a direct load of an external page returns to the app, with the bridge intact only there.
+                    // Do not let the old document satisfy the wait while navigation has only been queued.
+                    js(web, "window.results = null")
                     instrumentation.runOnMainSync { web.loadUrl("https://example.com/") }
                     await(web, "location.hostname.endsWith('.app.local') && !!window.results && window.results.ready === true")
                     assertEquals("\"object\"", js(web, "typeof AndroidStorage"))

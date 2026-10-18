@@ -1,5 +1,8 @@
 package com.wynh.appapp
 
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+
 import com.wynh.appapp.workspace.AppIdentityManager
 
 import android.graphics.Bitmap
@@ -7,17 +10,9 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 
 import android.Manifest
-import android.annotation.SuppressLint
 import android.app.Dialog
-import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.LinearGradient
-import android.graphics.Paint
-import android.graphics.Shader
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -28,12 +23,6 @@ import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.webkit.ConsoleMessage
-import android.webkit.MimeTypeMap
-import android.webkit.ValueCallback
-import android.webkit.WebChromeClient
-import android.webkit.WebResourceError
-import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebStorage
 import android.webkit.WebView
@@ -50,10 +39,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
-import androidx.core.content.pm.ShortcutInfoCompat
-import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.Insets
-import androidx.core.graphics.drawable.IconCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
@@ -69,13 +55,11 @@ import com.wynh.appapp.workspace.WorkspaceManager
 import com.wynh.appapp.workspace.WorkspaceSnapshot
 import com.wynh.appapp.workspace.SubappRepository
 import com.wynh.appapp.workspace.SubappRecord
+import com.wynh.appapp.workspace.WorkspaceActionController
 import com.google.android.material.button.MaterialButton
-import com.google.android.material.card.MaterialCardView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
-import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -90,6 +74,7 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var storageBridge: NativeStorageBridge
+    private val workspaceActions by lazy { androidx.lifecycle.ViewModelProvider(this)[com.wynh.appapp.workspace.WorkspaceActionController::class.java] }
     private lateinit var workspaceManager: WorkspaceManager
     private lateinit var historyManager: WorkspaceHistoryManager
     private lateinit var settingsManager: AppSettingsManager
@@ -119,65 +104,18 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
     private var previewVisible = false
     private var filesRoot: View? = null
 
+    // Screens an operation's completion may have to close or refresh; see onWorkspaceCompleted.
+    private var refreshFiles: (() -> Unit)? = null
+    private var editorDialog: Dialog? = null
+    private var configDialog: Dialog? = null
+    private var historyDialog: Dialog? = null
+
 
     /** Last system-bar + cutout insets, republished to the WebView as CSS custom properties. */
     private var lastInsets: Insets = Insets.NONE
     private var lastImeVisible: Boolean = false
 
-    /**
-     * Held between `onShowFileChooser` and the picker result. WebView requires this callback to be
-     * invoked exactly once — with null on cancel — or the originating `<input type="file">` is
-     * permanently stuck and will never open a chooser again.
-     */
-    private var pendingFileChooserCallback: ValueCallback<Array<Uri>>? = null
-
-    // Backs `<input type="file">` inside the runtime web app.
-    private val webFileChooserLauncher =
-        registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-            deliverFileChooserResult(if (uri != null) arrayOf(uri) else null)
-        }
-
-    private val webFileChooserMultiLauncher =
-        registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris: List<Uri> ->
-            deliverFileChooserResult(if (uris.isEmpty()) null else uris.toTypedArray())
-        }
-
-    /**
-     * Single delivery point for a pending file chooser. Idempotent: clears the field before
-     * invoking, so a second call is a no-op rather than a double-delivery.
-     */
-    private fun deliverFileChooserResult(uris: Array<Uri>?) {
-        val callback = pendingFileChooserCallback ?: return
-        pendingFileChooserCallback = null
-        try {
-            callback.onReceiveValue(uris)
-        } catch (e: Exception) {
-            // The page may have navigated or reloaded while the picker was open.
-            appendLog("[WebView] Stale file chooser callback ignored: ${e.message}")
-        }
-    }
-
-    /**
-     * Collapses an `<input accept="...">` list into the single MIME string GetContent takes.
-     * Falls back to a family wildcard when the types agree, and to a full wildcard when they don't.
-     */
-    private fun resolveChooserMimeType(acceptTypes: Array<String>?): String {
-        val raw = acceptTypes?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList()
-        if (raw.isEmpty()) return "*/*"
-        val mimes = raw.map { type ->
-            if (type.startsWith(".")) {
-                MimeTypeMap.getSingleton().getMimeTypeFromExtension(type.removePrefix(".").lowercase()) ?: "*/*"
-            } else {
-                type
-            }
-        }
-        val firstFamily = mimes.first().substringBefore('/')
-        return when {
-            mimes.size == 1 -> mimes.first()
-            mimes.all { it.substringBefore('/') == firstFamily } -> "$firstFamily/*"
-            else -> "*/*"
-        }
-    }
+    private val runtimeChooser = com.wynh.appapp.runtime.RuntimeFileChooser(this, ::appendLog)
 
     // Android refuses to show the runtime prompt again once it has been denied, so after a denial
     // the only way forward is the system notification settings screen.
@@ -217,13 +155,11 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
     // Shared with ScheduledNotificationReceiver, which may run in a cold process.
     private fun createNotificationChannel() = NativeStorageBridge.ensureNotificationChannel(this)
 
-    private var speechSession: com.wynh.appapp.speech.SpeechSession? = null
-    private var translationSession: com.wynh.appapp.translation.TranslationSession? = null
+    private var runtimeSession: com.wynh.appapp.runtime.RuntimeSession? = null
 
 
     override fun onResume() {
-        speechSession?.resume()
-        translationSession?.resume()
+        runtimeSession?.resume()
         super.onResume()
         (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.auth?.setForeground(true)
         // Catches a permission flipped in the system settings screen we sent the user to.
@@ -239,8 +175,7 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
     }
 
     override fun onPause() {
-        speechSession?.pause()
-        translationSession?.pause()
+        runtimeSession?.pause()
         (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.auth?.setForeground(false)
         super.onPause()
     }
@@ -278,7 +213,10 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // Enable Edge-to-Edge display for notches, display cutouts, and status/navigation bars
-        enableEdgeToEdge()
+        enableEdgeToEdge(
+            statusBarStyle = androidx.activity.SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = androidx.activity.SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+        )
         super.onCreate(savedInstanceState)
 
         createNotificationChannel()
@@ -315,9 +253,16 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
         // Initialize Workspace Manager
         subappRepository = SubappRepository(this)
         val requestedId = intent.getStringExtra(EXTRA_SUBAPP_ID)
-        subapp = requestedId?.let(subappRepository::resolve)
-            ?: subappRepository.ensureMigrated().firstOrNull()
-            ?: subappRepository.createStarter()
+        subapp = try {
+            if (requestedId != null) subappRepository.resolve(requestedId) ?: error("App no longer available")
+            else subappRepository.ensureMigrated().firstOrNull() ?: subappRepository.createStarter()
+        } catch (e: Exception) {
+            MaterialAlertDialogBuilder(this).setTitle(R.string.library_recovery_title)
+                .setMessage(e.message).setPositiveButton(R.string.library_open_runner) { _, _ ->
+                    startActivity(Intent(this, SubappLibraryActivity::class.java)); finish()
+                }.setCancelable(false).show()
+            return
+        }
         SubappSessionRegistry.register(subapp.id, this)
         workspaceManager = WorkspaceManager(this, { msg -> runOnUiThread { appendLog(msg) } }, subapp.workspaceDir)
 
@@ -328,7 +273,6 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
 
         // Initialize Workspace History Manager
         historyManager = WorkspaceHistoryManager(this, { msg -> runOnUiThread { appendLog(msg) } }, subapp.directory)
-        historyManager.ensureInitialVersion(workspaceManager)
         binding.toolbar.title = loadAppConfig().name
 
         // Initialize Native Storage & State Bridge
@@ -349,7 +293,12 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
 
         setupWebView()
         setupListeners()
+        com.wynh.appapp.runtime.WorkspaceOperationUi.bind(this, ::onWorkspaceCompleted)
+        if (!java.io.File(subapp.directory, "workspace_initial_snapshot.json").exists()) {
+            workspaceActions.execute(subapp, "Preparing editor…", replacement = false) { manager, history -> history.ensureInitialVersion(manager) }
+        }
         reloadApp()
+        if (savedInstanceState != null) workspaceActions.editorDraft?.let { draft -> showFileEditorDialog(draft.fileName) { showFiles() } }
         if (savedInstanceState?.getBoolean("editor_preview") == true || isStandalone) showPreview() else showFiles()
         if (savedInstanceState != null) {
             val id = savedInstanceState.getString("config_record_id")
@@ -383,114 +332,16 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
         })
     }
 
-    @SuppressLint("SetJavaScriptEnabled")
     private fun setupWebView() {
-        speechSession = com.wynh.appapp.speech.SpeechSession(this, binding.webView, subapp.id).also { it.install() }
-        translationSession = com.wynh.appapp.translation.TranslationSession(this, binding.webView, subapp.id).also { it.install() }
-        val webView = binding.webView
-        val settings = webView.settings
-
-        // Shared hardened settings; the editor additionally disables caching so edits show at once.
-        com.wynh.appapp.runtime.SubappWebViews.configure(webView, WebSettings.LOAD_NO_CACHE)
-        settings.loadWithOverviewMode = true
-        settings.useWideViewPort = true
-
-        // Hardware acceleration
-        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
-
-        // window.AndroidStorage / AndroidMemory / AndroidNotification, for this app's origin only
-        com.wynh.appapp.runtime.SubappWebViews.installStorageBridge(webView, subapp.id, storageBridge) { msg ->
-            runOnUiThread { appendLog(msg) }
-        }
-        (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.let {
-            com.wynh.appapp.ai.AiWebMessageBridge(this, webView, subapp.id, taskId, it).install()
-        }
-
-        com.wynh.appapp.updates.UpdateWebMessageBridge(this, webView, subapp).install()
-
-        // Intercept JavaScript console logs and errors
-        webView.webChromeClient = object : WebChromeClient() {
-            override fun onConsoleMessage(consoleMessage: ConsoleMessage): Boolean {
-                val level = consoleMessage.messageLevel().name
-                val msg = consoleMessage.message()
-                val line = consoleMessage.lineNumber()
-                val logEntry = "[$level] (line $line) $msg"
-                appendLog(logEntry)
-                return true
+        runtimeSession = com.wynh.appapp.runtime.RuntimeSession(
+            this, binding.webView, subapp, workspaceManager, storageBridge, runtimeChooser, ::appendLog,
+            WebSettings.LOAD_NO_CACHE,
+            ready = { binding.progressBar.visibility = View.GONE; pushInsetsToWebView() },
+            progress = { value ->
+                binding.progressBar.visibility = if (value in 1..99) View.VISIBLE else View.GONE
+                binding.progressBar.progress = value
             }
-
-            override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                if (newProgress in 1..99) {
-                    binding.progressBar.visibility = View.VISIBLE
-                    binding.progressBar.progress = newProgress
-                } else {
-                    binding.progressBar.visibility = View.GONE
-                }
-            }
-
-            // Enables `<input type="file">` in the runtime web app. Without this override the
-            // WebView silently ignores taps on file inputs.
-            override fun onShowFileChooser(
-                webView: WebView?,
-                filePathCallback: ValueCallback<Array<Uri>>?,
-                fileChooserParams: FileChooserParams?
-            ): Boolean {
-                if (filePathCallback == null) return false
-
-                // Release any chooser still in flight so its <input> isn't stuck forever.
-                deliverFileChooserResult(null)
-                pendingFileChooserCallback = filePathCallback
-
-                val mimeType = resolveChooserMimeType(fileChooserParams?.acceptTypes)
-                val allowMultiple = fileChooserParams?.mode == FileChooserParams.MODE_OPEN_MULTIPLE
-
-                return try {
-                    if (allowMultiple) {
-                        webFileChooserMultiLauncher.launch(mimeType)
-                    } else {
-                        webFileChooserLauncher.launch(mimeType)
-                    }
-                    appendLog("[WebView] File chooser opened (accept=$mimeType, multiple=$allowMultiple)")
-                    true
-                } catch (e: Exception) {
-                    // e.g. no picker app installed. Release the callback so the input stays usable.
-                    appendLog("[WebView Error] Could not open file picker: ${e.message}")
-                    deliverFileChooserResult(null)
-                    true
-                }
-            }
-        }
-
-        // Handle page lifecycle and intercept workspace asset requests
-        webView.webViewClient = object : com.wynh.appapp.runtime.SubappWebViewClient(
-            this, subapp.id, { workspaceManager }, { msg -> runOnUiThread { appendLog(msg) } },
-            { com.wynh.appapp.grants.SubappGrants.isGranted(this, subapp.id, com.wynh.appapp.grants.SubappCapability.NETWORK) }
-        ) {
-            override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
-                speechSession?.pageChanged()
-                binding.webView.selectionMenuSuppressed = false
-                storageBridge.pageStarted()
-                super.onPageStarted(view, url, favicon)
-            }
-
-            override fun onPageFinished(view: WebView?, url: String?) {
-                super.onPageFinished(view, url)
-                binding.progressBar.visibility = View.GONE
-                // A fresh document starts without the custom properties, so republish them.
-                pushInsetsToWebView()
-                appendLog("[WebView] Page render complete.")
-            }
-
-            override fun onReceivedError(
-                view: WebView?,
-                request: WebResourceRequest?,
-                error: WebResourceError?
-            ) {
-                super.onReceivedError(view, request, error)
-                val errorMsg = error?.description ?: "Unknown error"
-                appendLog("[WebView Error] $errorMsg")
-            }
-        }
+        )
     }
 
     private fun setupListeners() {
@@ -499,11 +350,7 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
             showFiles()
         }
 
-        binding.btnHistory.setOnClickListener {
-            showHistoryDialog {
-                reloadApp()
-            }
-        }
+        binding.btnHistory.setOnClickListener { showHistoryDialog(returnToFiles = false) }
 
         // Top Bar Refresh Button: Refresh site & clear cache
         binding.btnReset.setOnClickListener {
@@ -557,19 +404,64 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
     }
 
     private fun saveAppConfig(config: AppConfigData) {
-        val identity = com.wynh.appapp.workspace.AppIdentityManager(this, subapp)
         val iconChange = if (config.iconFileName == null) {
             com.wynh.appapp.workspace.AppIdentityManager.IconChange.Reset
         } else {
             com.wynh.appapp.workspace.AppIdentityManager.IconChange.Keep
         }
-        if (identity.save(config.name, config.description, iconChange)) {
-            binding.toolbar.title = config.name
-            identity.refreshPinnedShortcut()
-            appendLog("[Config] Updated manifest.json for '${config.name}'")
-        } else {
-            appendLog("[Config Error] Failed to save manifest.json")
-            Toast.makeText(this, R.string.library_configure_save_failed, Toast.LENGTH_LONG).show()
+        val app = applicationContext
+        val record = subapp
+        workspaceActions.execute(record, "Saving app settings…", replacement = false, completion = settingsSaved(config.name)) { _, _ ->
+            check(com.wynh.appapp.workspace.AppIdentityManager(app, record).save(config.name, config.description, iconChange)) { "Could not save app settings" }
+        }
+    }
+
+    private fun settingsSaved(name: String) = WorkspaceActionController.Completion(WorkspaceActionController.Kind.SETTINGS_SAVED, name)
+
+    /**
+     * Every follow-up of a workspace operation lives here, not in a coroutine of the screen that
+     * started it, so it also runs on the new instance after a rotation.
+     */
+    private fun onWorkspaceCompleted(completion: WorkspaceActionController.Completion) {
+        when (completion.kind) {
+            WorkspaceActionController.Kind.FILE_SAVED -> {
+                // The saved text is now the baseline the open editor compares against.
+                workspaceActions.editorDraft?.takeIf { it.fileName == completion.subject }
+                    ?.let { workspaceActions.editorDraft = it.copy(initial = completion.payload) }
+                Toast.makeText(this, getString(R.string.file_saved_toast, completion.subject), Toast.LENGTH_SHORT).show()
+            }
+            WorkspaceActionController.Kind.FILE_CREATED -> {
+                refreshFiles?.invoke()
+                Toast.makeText(this, "Created '${completion.subject}'", Toast.LENGTH_SHORT).show()
+                showFileEditorDialog(completion.subject) { refreshFiles?.invoke() }
+            }
+            WorkspaceActionController.Kind.FILE_DELETED -> {
+                if (completion.subject == "icon.png") {
+                    saveAppConfig(loadAppConfig().copy(iconFileName = null))
+                    Toast.makeText(this, "Reset custom app icon to default", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this, "Deleted '${completion.subject}'", Toast.LENGTH_SHORT).show()
+                }
+                editorDialog?.dismiss()
+                refreshFiles?.invoke()
+            }
+            WorkspaceActionController.Kind.PREVIEW_READY -> { reloadApp(); showPreview() }
+            WorkspaceActionController.Kind.SETTINGS_SAVED -> {
+                binding.toolbar.title = completion.subject
+                AppIdentityManager(this, subapp).refreshPinnedShortcut()
+                configDialog?.let { dialog ->
+                    clearConfigDraft(); dialog.dismiss(); showFiles()
+                    Toast.makeText(this, R.string.config_saved_toast, Toast.LENGTH_SHORT).show()
+                }
+            }
+            WorkspaceActionController.Kind.RESTORED -> {
+                historyDialog?.dismiss()
+                Toast.makeText(this, R.string.history_restored, Toast.LENGTH_SHORT).show()
+                reloadApp()
+                if (completion.payload == RETURN_TO_FILES) showFiles()
+            }
+            WorkspaceActionController.Kind.RESET -> finishFullAppReset()
+            WorkspaceActionController.Kind.UPDATED -> Unit // toast and sessions are handled by WorkspaceOperationUi and the registry
         }
     }
 
@@ -586,11 +478,12 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
     }
 
     private fun appendLog(message: String) {
+        if (Looper.myLooper() != Looper.getMainLooper()) { runOnUiThread { appendLog(message) }; return }
         val timestamp = timeFormat.format(Date())
         val formattedLog = "$timestamp $message\n"
         logBuffer.append(formattedLog)
         if (::workspaceManager.isInitialized) {
-            workspaceManager.appendToFile("app.log", formattedLog)
+            com.wynh.appapp.workspace.WorkspaceLog.append(applicationContext, workspaceManager.workspaceDir, formattedLog.trimEnd())
         }
     }
 
@@ -612,9 +505,7 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
         val filesContainer = root.findViewById<LinearLayout>(R.id.hub_files_container)
         subtitleText.text = loadAppConfig().name
         root.findViewById<View>(R.id.hub_configure).setOnClickListener { showConfigure(subapp) }
-        root.findViewById<View>(R.id.hub_history).setOnClickListener {
-            showHistoryDialog { reloadApp(); showFiles() }
-        }
+        root.findViewById<View>(R.id.hub_history).setOnClickListener { showHistoryDialog(returnToFiles = true) }
         previewVisible = false
         binding.webView.visibility = View.GONE
         binding.editorContainer.visibility = View.VISIBLE
@@ -764,10 +655,10 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
 
         // Run
         btnRun.setOnClickListener {
-            historyManager.saveSnapshot(workspaceManager, "Run Snapshot")
-            reloadApp()
-            Toast.makeText(this, getString(R.string.app_reloaded), Toast.LENGTH_SHORT).show()
-            showPreview()
+            workspaceActions.execute(subapp, "Preparing preview…", replacement = false,
+                completion = WorkspaceActionController.Completion(WorkspaceActionController.Kind.PREVIEW_READY)) { manager, history ->
+                check(history.saveSnapshot(manager, "Run Snapshot") != null) { "Could not save version history" }
+            }
         }
 
         // New File Creation
@@ -782,24 +673,15 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
                 .setPositiveButton("Create") { _, _ ->
                     val newName = input.text.toString().trim()
                     if (newName.isNotBlank()) {
-                        if (saveWorkspaceChange("Created $newName") { workspaceManager.createFile(newName, "") }) {
-                            refreshFileList()
-                            Toast.makeText(this, "Created '$newName'", Toast.LENGTH_SHORT).show()
-                            showFileEditorDialog(newName) {
-                                refreshFileList()
-                            }
-                        } else {
-                            Toast.makeText(this, "File already exists or invalid name", Toast.LENGTH_SHORT).show()
-                        }
+                        saveWorkspaceChange("Created $newName", WorkspaceActionController.Kind.FILE_CREATED, newName) { it.createFile(newName, "") }
                     }
                 }
                 .setNegativeButton("Cancel", null)
                 .show()
         }
 
+        refreshFiles = refreshFileList
         refreshFileList()
-
-
     }
 
     private fun showConfigure(record: SubappRecord) {
@@ -843,19 +725,18 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
                 pendingConfigIcon != null -> AppIdentityManager.IconChange.Replace(pendingConfigIcon!!)
                 else -> AppIdentityManager.IconChange.Keep
             }
-            if (identity.save(newName, description.text.toString().trim(), iconChange)) {
-                identity.refreshPinnedShortcut()
-                clearConfigDraft()
-                dialog.dismiss()
-                binding.toolbar.title = identity.load().name
-                showFiles()
-                Toast.makeText(this, R.string.config_saved_toast, Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(this, R.string.library_configure_save_failed, Toast.LENGTH_LONG).show()
+            val newDescription = description.text.toString().trim()
+            val app = applicationContext
+            workspaceActions.execute(record, "Saving app settings…", replacement = false, completion = settingsSaved(newName)) { _, _ ->
+                check(AppIdentityManager(app, record).save(newName, newDescription, iconChange)) { "Could not save app settings" }
             }
         }
         dialog.setOnCancelListener { clearConfigDraft() }
-        dialog.setOnDismissListener { if (configuringRecord != null) clearConfigDraft() }
+        dialog.setOnDismissListener {
+            if (configDialog === dialog) configDialog = null
+            if (configuringRecord != null) clearConfigDraft()
+        }
+        configDialog = dialog
         dialog.show()
         dialog.window?.setLayout(
             minOf((resources.displayMetrics.widthPixels * 0.94).toInt(), (resources.displayMetrics.density * 520).toInt()),
@@ -869,10 +750,7 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
         val bitmap = when {
             resetConfigIcon -> null
             pendingConfigIcon != null -> BitmapFactory.decodeByteArray(pendingConfigIcon, 0, pendingConfigIcon!!.size)
-            else -> AppIdentityManager(this, record).load().iconPath?.let { path ->
-                val file = WorkspaceManager(this, workspaceDir = record.workspaceDir).getFile(path)
-                file.takeIf { it.isFile }?.let { BitmapFactory.decodeFile(it.absolutePath) }
-            }
+            else -> com.wynh.appapp.workspace.SubappMetadataLoader.load(record.workspaceDir).icon
         }
         if (bitmap == null) preview.setImageResource(R.mipmap.ic_launcher_round) else preview.setImageBitmap(bitmap)
     }
@@ -1004,22 +882,14 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
                 .setTitle(R.string.action_delete_file)
                 .setMessage(getString(R.string.delete_file_confirm, fileName))
                 .setPositiveButton(R.string.discard) { _, _ ->
-                    if (saveWorkspaceChange("Deleted $fileName") { workspaceManager.deleteFile(fileName) }) {
-                        if (fileName == "icon.png") {
-                            val currentConfig = loadAppConfig()
-                            saveAppConfig(currentConfig.copy(iconFileName = null))
-                            Toast.makeText(this, "Reset custom app icon to default", Toast.LENGTH_SHORT).show()
-                        } else {
-                            Toast.makeText(this, "Deleted '$fileName'", Toast.LENGTH_SHORT).show()
-                        }
-                        dialog.dismiss()
-                        onDismiss()
-                    }
+                    saveWorkspaceChange("Deleted $fileName", WorkspaceActionController.Kind.FILE_DELETED, fileName) { it.deleteFile(fileName) }
                 }
                 .setNegativeButton("Cancel", null)
                 .show()
         }
 
+        dialog.setOnDismissListener { if (editorDialog === dialog) editorDialog = null }
+        editorDialog = dialog
         dialog.show()
     }
 
@@ -1028,6 +898,9 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
      * Dimensions match the parent screen 100%.
      */
     private fun showFileEditorDialog(fileName: String, onDismiss: () -> Unit) {
+        val loaded = runCatching { workspaceManager.files.readText(fileName, 16L * 1024 * 1024) }.getOrElse {
+            Toast.makeText(this, R.string.editor_cannot_read, Toast.LENGTH_LONG).show(); return
+        }
         val dialog = Dialog(this, R.style.Theme_AppApp_FullScreenDialog)
         dialog.setContentView(R.layout.dialog_file_editor)
         dialog.window?.setLayout(
@@ -1071,10 +944,14 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
         }
 
         fileNameTitle.text = fileName
-        var initialContent = workspaceManager.readFile(fileName)
-        codeInput.setText(initialContent)
+        // The last saved text is kept in the controller's draft, where a finished save updates it even
+        // if this dialog was recreated meanwhile.
+        fun savedText() = workspaceActions.editorDraft?.takeIf { it.fileName == fileName }?.initial ?: loaded
+        val draft = workspaceActions.editorDraft?.takeIf { it.fileName == fileName }
+        codeInput.setText(draft?.text ?: loaded)
+        workspaceActions.editorDraft = WorkspaceActionController.EditorDraft(fileName, draft?.initial ?: loaded, codeInput.text.toString())
         codeInput.textSize = settingsManager.editorFontSizeSp
-        statsBadge.text = "${initialContent.length} chars"
+        statsBadge.text = "${codeInput.text.length} chars"
 
         // Check if file is protected against deletion (only index.html and manifest.json are protected)
         val protectedFiles = setOf("index.html", "manifest.json")
@@ -1086,11 +963,7 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
                 .setTitle(R.string.action_delete_file)
                 .setMessage(getString(R.string.delete_file_confirm, fileName))
                 .setPositiveButton(R.string.discard) { _, _ ->
-                    if (saveWorkspaceChange("Deleted $fileName") { workspaceManager.deleteFile(fileName) }) {
-                        Toast.makeText(this, "Deleted '$fileName'", Toast.LENGTH_SHORT).show()
-                        dialog.dismiss()
-                        onDismiss()
-                    }
+                    saveWorkspaceChange("Deleted $fileName", WorkspaceActionController.Kind.FILE_DELETED, fileName) { it.deleteFile(fileName) }
                 }
                 .setNegativeButton("Cancel", null)
                 .show()
@@ -1107,6 +980,7 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 statsBadge.text = "${s?.length ?: 0} chars"
+                workspaceActions.editorDraft = WorkspaceActionController.EditorDraft(fileName, savedText(), s?.toString().orEmpty())
             }
             override fun afterTextChanged(s: Editable?) {
                 highlightRunnable?.let { handler.removeCallbacks(it) }
@@ -1152,23 +1026,13 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
         }
 
         fun hasUnsavedChanges(): Boolean {
-            return codeInput.text.toString() != initialContent
+            return codeInput.text.toString() != savedText()
         }
 
         fun saveFile() {
             val content = codeInput.text.toString()
-            if (content == initialContent) return
-            if (historyManager.saveSnapshot(workspaceManager, "Before editing $fileName") == null ||
-                !workspaceManager.writeFile(fileName, content)) {
-                Toast.makeText(this, "Could not save file or version history", Toast.LENGTH_LONG).show()
-                return
-            }
-            if (historyManager.saveSnapshot(workspaceManager, "Edited $fileName") == null) {
-                Toast.makeText(this, "File saved, but version history could not be saved. Try Save again.", Toast.LENGTH_LONG).show()
-                return
-            }
-            initialContent = content
-            Toast.makeText(this, getString(R.string.file_saved_toast, fileName), Toast.LENGTH_SHORT).show()
+            if (content == savedText()) return
+            saveWorkspaceChange("Edited $fileName", WorkspaceActionController.Kind.FILE_SAVED, fileName, content) { it.writeFile(fileName, content) }
         }
 
         btnSave.setOnClickListener {
@@ -1205,7 +1069,37 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
             }
         }
 
+        // Android 13+ dispatches gesture/system Back without a KeyEvent. Route it through the
+        // same unsaved-change guard instead of Dialog's default cancel-and-discard behavior.
+        var nativeBack: Any? = null
+        dialog.setOnShowListener {
+            if (Build.VERSION.SDK_INT >= 33) nativeBack = registerDialogBackCallback(dialog) { handleBack() }
+        }
+        dialog.setOnDismissListener {
+            if (Build.VERSION.SDK_INT >= 33) {
+                unregisterDialogBackCallback(dialog, nativeBack)
+                nativeBack = null
+            }
+            if (editorDialog === dialog) editorDialog = null
+            if (!isChangingConfigurations) workspaceActions.editorDraft = null
+        }
+        editorDialog = dialog
         dialog.show()
+    }
+
+    @androidx.annotation.RequiresApi(33)
+    private fun registerDialogBackCallback(dialog: Dialog, onBack: () -> Unit): android.window.OnBackInvokedCallback {
+        val callback = android.window.OnBackInvokedCallback { onBack() }
+        dialog.onBackInvokedDispatcher.registerOnBackInvokedCallback(
+            android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, callback)
+        return callback
+    }
+
+    @androidx.annotation.RequiresApi(33)
+    private fun unregisterDialogBackCallback(dialog: Dialog, callback: Any?) {
+        (callback as? android.window.OnBackInvokedCallback)?.let {
+            dialog.onBackInvokedDispatcher.unregisterOnBackInvokedCallback(it)
+        }
     }
 
     /**
@@ -1214,20 +1108,22 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
     /**
      * Opens version history snapshot dialog allowing user to revert to previous states.
      */
-    private fun saveWorkspaceChange(label: String, change: () -> Boolean): Boolean {
-        if (historyManager.saveSnapshot(workspaceManager, "Before $label") == null) {
-            Toast.makeText(this, "Could not save version history", Toast.LENGTH_LONG).show()
-            return false
+    private fun saveWorkspaceChange(
+        label: String, kind: WorkspaceActionController.Kind, subject: String, payload: String = "", change: (WorkspaceManager) -> Boolean
+    ) = workspaceActions.change(subapp, label, WorkspaceActionController.Completion(kind, subject, payload), change)
+
+    private fun showHistoryDialog(returnToFiles: Boolean) {
+        lifecycleScope.launch {
+            val snapshots = try { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { historyManager.getSnapshots() } }
+            catch (e: Exception) { Toast.makeText(this@MainActivity, e.message, Toast.LENGTH_LONG).show(); return@launch }
+            showHistorySnapshots(snapshots, returnToFiles)
         }
-        if (!change()) return false
-        if (historyManager.saveSnapshot(workspaceManager, label) == null) {
-            Toast.makeText(this, "Change saved, but version history could not be saved", Toast.LENGTH_LONG).show()
-        }
-        return true
     }
 
-    private fun showHistoryDialog(onRestored: () -> Unit) {
+    private fun showHistorySnapshots(snapshots: List<com.wynh.appapp.workspace.WorkspaceSnapshot>, returnToFiles: Boolean) {
         val dialog = Dialog(this, com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog)
+        historyDialog = dialog
+        dialog.setOnDismissListener { if (historyDialog === dialog) historyDialog = null }
         dialog.setContentView(R.layout.dialog_version_history)
         dialog.window?.setLayout(
             ViewGroup.LayoutParams.MATCH_PARENT,
@@ -1238,7 +1134,6 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
         val emptyState = dialog.findViewById<TextView>(R.id.history_empty_state)
         val btnClose = dialog.findViewById<MaterialButton>(R.id.history_dialog_btn_close)
 
-        val snapshots = historyManager.getSnapshots()
         container.removeAllViews()
 
         if (snapshots.isEmpty()) {
@@ -1266,11 +1161,9 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
                         .setTitle(title)
                         .setMessage(message)
                         .setPositiveButton(if (isInitial) "Restore" else "Revert") { _, _ ->
-                            if (historyManager.restoreSnapshot(snap.id, workspaceManager)) {
-                                val toastMsg = if (isInitial) "Restored initial version" else "Reverted to ${snap.formattedTime}"
-                                Toast.makeText(this, toastMsg, Toast.LENGTH_SHORT).show()
-                                dialog.dismiss()
-                                onRestored()
+                            workspaceActions.execute(subapp, "Restoring version…",
+                                completion = WorkspaceActionController.Completion(WorkspaceActionController.Kind.RESTORED, payload = if (returnToFiles) RETURN_TO_FILES else "")) { manager, history ->
+                                check(history.restoreSnapshot(snap.id, manager)) { "Could not restore version" }
                             }
                         }
                         .setNegativeButton("Cancel", null)
@@ -1442,10 +1335,18 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
      * - Wipes WebView cache, form data, history, and web storage
      */
     private fun performFullAppReset() {
-        workspaceManager.factoryResetWorkspace()
-        historyManager.clearAllHistory()
-        settingsManager.resetSettingsToDefaults()
+        // A replacement operation: the workspace is reserved, running pages are fenced and reload, and the
+        // disk work stays off the UI thread. Web-view cleanup follows in finishFullAppReset.
+        val settings = settingsManager
+        workspaceActions.execute(subapp, "Resetting app…",
+            completion = WorkspaceActionController.Completion(WorkspaceActionController.Kind.RESET)) { manager, history ->
+            check(manager.factoryResetWorkspace()) { "Could not restore the starter app" }
+            check(history.clearAllHistory()) { "The app was reset, but its version history could not be cleared" }
+            settings.resetSettingsToDefaults()
+        }
+    }
 
+    private fun finishFullAppReset() {
         binding.webView.clearCache(true)
         binding.webView.clearFormData()
         binding.webView.clearHistory()
@@ -1455,40 +1356,39 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
         appendLog("[System] App² factory reset completed. Starter template restored.")
 
         reloadApp()
+        refreshFiles?.invoke()
 
         Toast.makeText(this, getString(R.string.settings_reset_success), Toast.LENGTH_LONG).show()
     }
 
     override fun pauseForUpdate() {
-        speechSession?.pause()
-        translationSession?.pause()
-        binding.webView.onPause()
-        binding.webView.pauseTimers()
-        binding.webView.visibility = View.INVISIBLE
+        runtimeSession?.suspendForOperation()
     }
 
     override fun resumeAfterUpdate() {
-        speechSession?.resume()
-        translationSession?.resume()
-        binding.webView.resumeTimers()
-        binding.webView.onResume()
-        binding.webView.visibility = View.VISIBLE
-        reloadApp()
+        runtimeSession?.resumeAfterOperation()
     }
 
     override fun onDestroy() {
-        speechSession?.close()
-        translationSession?.close()
+        // Dialog windows belong to this activity, while drafts and operations survive recreation.
+        // Detach callbacks before dismissing so teardown cannot clear the next screen's draft.
+        listOfNotNull(editorDialog, configDialog, historyDialog).forEach { dialog ->
+            dialog.setOnDismissListener(null)
+            dialog.dismiss()
+        }
+        editorDialog = null; configDialog = null; historyDialog = null
+        runtimeSession?.close()
         super.onDestroy()
         if (isFinishing) (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.cancelTask(taskId)
         if (::subapp.isInitialized) SubappSessionRegistry.unregister(subapp.id, this)
         // Release any in-flight file chooser before tearing the WebView down.
-        deliverFileChooserResult(null)
+        runtimeChooser.complete(null)
         binding.webView.destroy()
     }
 
     companion object {
         const val EXTRA_SUBAPP_ID = "EXTRA_SUBAPP_ID"
         const val EXTRA_OPEN_SETTINGS = "EXTRA_OPEN_SETTINGS"
+        private const val RETURN_TO_FILES = "files"
     }
 }

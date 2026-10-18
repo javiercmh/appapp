@@ -33,9 +33,12 @@ object GitHubFolderImporter {
     ): Result<Import> = runCatching {
         val parsed = parse(link)
         val client = GitHubClient(connect, "AppApp-Android", MAX_TOTAL_BYTES + 4 * MAX_LISTING_BYTES, maxRedirects = 3, timeoutMillis = TIMEOUT_MILLIS, clock = clock)
-        fun json(url: String): JsonObject = runCatching {
-            JsonParser.parseString(client.get(url, MAX_LISTING_BYTES, "application/vnd.github+json").toString(Charsets.UTF_8)).asJsonObject
-        }.getOrElse { if (it is IllegalArgumentException) throw it else throw IllegalArgumentException("GitHub returned an invalid response") }
+        fun json(url: String): JsonObject {
+            if (Thread.interrupted()) throw InterruptedException("GitHub import cancelled")
+            return runCatching {
+                JsonParser.parseString(client.get(url, MAX_LISTING_BYTES, "application/vnd.github+json").toString(Charsets.UTF_8)).asJsonObject
+            }.getOrElse { if (it is IllegalArgumentException) throw it else throw IllegalArgumentException("GitHub returned an invalid response") }
+        }
         val repo = "${parsed.owner}/${parsed.repo}"
         val api = "https://api.github.com/repos/$repo"
         val ref = parsed.branch.ifBlank {
@@ -77,6 +80,8 @@ object GitHubFolderImporter {
             val raw = "https://raw.githubusercontent.com/$repo/$commit/" + (folder + "").joinToString("/") { encode(it) }
             var written = 0L
             files.forEach { (path, target) ->
+                // Cancel interrupts the worker; a request already in flight finishes, the next one never starts.
+                if (Thread.interrupted()) throw InterruptedException("GitHub import cancelled")
                 val bytes = client.get(raw + encodePath(path), MAX_FILE_BYTES)
                 written += bytes.size
                 require(written <= MAX_TOTAL_BYTES) { "The GitHub folder exceeds the import size limit" }
@@ -92,7 +97,7 @@ object GitHubFolderImporter {
 
     private fun parse(link: String): FolderLink {
         val uri = runCatching { URL(link) }.getOrElse { throw IllegalArgumentException("Enter a valid GitHub folder URL") }
-        require(uri.protocol == "https" && uri.host.equals("github.com", ignoreCase = true)) {
+        require(uri.protocol == "https" && uri.host.equals("github.com", ignoreCase = true) && uri.userInfo.isNullOrEmpty()) {
             "Use a public github.com folder URL"
         }
         val parts = uri.path.trim('/').split('/').filter { it.isNotBlank() }

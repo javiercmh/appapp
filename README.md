@@ -37,7 +37,9 @@ Subapps use standard HTML, CSS, and JavaScript, with a native bridge for Android
 - [AI integration guide](docs/AI.md)
 - [Text to Speech guide](docs/TEXT_TO_SPEECH.md)
 - [Starter Demo source](app/src/main/assets/starter_template/)
-- [Host architecture and development guidelines](AGENTS.md)
+- [Architecture and transaction boundaries](docs/ARCHITECTURE.md)
+- [Host development guidelines](AGENTS.md)
+- [Pending native verification](docs/DEVICE_CHECKS.md)
 
 The Android host uses Kotlin, Material components, and WebView. Build with JDK 17 or 21 and the checked-in Gradle wrapper:
 
@@ -63,6 +65,8 @@ port to change the port. Python 3.9+ is sufficient; no dependencies are needed.
 The server writes real notes, photos and AI results to the served workspace, so use a disposable
 copy for testing. Mock AI is offline and uses no ChatGPT credentials or plan usage. Android
 permissions and exact alarms require device testing.
+
+CI uses JDK 21 for JVM tests, lint, debug assembly and device-test compilation. Native interaction checks still require an emulator.
 
 Run development checks with `python3 -B -m unittest discover -s tests -p 'test_demo_dev_server.py'`
 and `node --test tests/*.test.mjs`.

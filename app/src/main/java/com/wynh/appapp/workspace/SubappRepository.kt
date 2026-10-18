@@ -23,6 +23,8 @@ class SubappRepository(private val context: Context) {
     fun ensureMigrated(): List<SubappRecord> = synchronized(operationLock) {
         root.mkdirs()
         recoverBackupImport()
+        LibraryPublication(root).recover()
+        if (LibraryIndex(index).read() == LibraryState.Missing) LibraryIndex(index).write(emptyList())
         if (!migrationMarker.exists()) migrateLegacyWorkspace()
         migrationMarker.takeIf { it.isFile }?.readText()?.let(::cleanupLegacyStorage)
         // Runs the one-time grant migration now that the library (and any legacy reminders) exist.
@@ -32,10 +34,7 @@ class SubappRepository(private val context: Context) {
 
     fun list(): List<SubappRecord> = synchronized(operationLock) {
         root.mkdirs()
-        val ids = try {
-            val array = JSONArray(index.takeIf { it.exists() }?.readText() ?: "[]")
-            (0 until array.length()).mapNotNull { array.optString(it).takeIf(::validId) }
-        } catch (_: Exception) { emptyList() }
+        val ids = LibraryIndex(index).ids()
         return@synchronized ids.distinct().mapNotNull(::resolve)
     }
 
@@ -51,48 +50,52 @@ class SubappRepository(private val context: Context) {
     fun resolve(id: String): SubappRecord? {
         if (!validId(id)) return null
         val dir = File(root, id)
-        if (dir.isDirectory) com.wynh.appapp.updates.WorkspaceUpdater(dir).recover()
-        return if (File(dir, "workspace/index.html").isFile) SubappRecord(id, dir) else null
-    }
-
-    fun createStarter(): SubappRecord = synchronized(operationLock) {
-        val id = UUID.randomUUID().toString()
-        val dir = File(root, id)
-        val workspace = WorkspaceManager(context, workspaceDir = File(dir, "workspace"))
-        check(workspace.resetWorkspace()) { "Could not initialize starter app" }
-        register(id)
-        WorkspaceHistoryManager(context, appDirectory = dir)
-            .captureInitialVersion(workspace, "Starter Template")
-        return@synchronized SubappRecord(id, dir)
-    }
-
-    fun createImportedFrom(sourceWorkspace: File): SubappRecord = synchronized(operationLock) {
-        val id = UUID.randomUUID().toString()
-        val dir = File(root, id)
-        val destination = File(dir, "workspace")
-        require(sourceWorkspace.isDirectory)
-        sourceWorkspace.copyRecursively(destination, overwrite = false)
-        if (!File(destination, "index.html").isFile) {
-            destination.deleteRecursively()
-            DefaultWebApp.getStarterFiles(context).forEach { (name, content) ->
-                val file = File(destination, name)
-                file.parentFile?.mkdirs()
-                file.writeText(content)
-            }
+        val workspace = File(dir, "workspace")
+        // Only an earlier process can leave interrupted work behind, and a running operation recovers at
+        // its own start. So recover once per process, and never wait for a workspace that is in use.
+        if (dir.isDirectory && recovered.add(workspace.absolutePath)) {
+            try { WorkspaceOperations.recoverIfIdle(workspace) { com.wynh.appapp.updates.WorkspaceUpdater(dir).recover() } }
+            catch (e: Exception) { recovered.remove(workspace.absolutePath); throw e }
         }
-        register(id)
-        val importedWorkspace = WorkspaceManager(context, workspaceDir = destination)
-        WorkspaceHistoryManager(context, appDirectory = dir)
-            .captureInitialVersion(importedWorkspace, "Imported App")
-        return@synchronized SubappRecord(id, dir)
+        return if (workspace.isDirectory || WorkspaceOperations.isBusy(workspace)) SubappRecord(id, dir) else null
+    }
+
+    fun createStarter(): SubappRecord = publishNewApp { directory ->
+        val workspace = WorkspaceManager(context, workspaceDir = File(directory, "workspace"))
+        check(workspace.resetWorkspace()) { "Could not initialize starter app" }
+        check(WorkspaceHistoryManager(context, appDirectory = directory).captureInitialVersion(workspace, "Starter Template")) { "Could not save initial version" }
+    }
+
+    fun createImportedFrom(sourceWorkspace: File, provenance: String? = null): SubappRecord = publishNewApp { directory ->
+        require(sourceWorkspace.isDirectory && File(sourceWorkspace, "index.html").isFile) { "Imported app must contain index.html" }
+        val destination = File(directory, "workspace")
+        WorkspaceFiles.copyTree(sourceWorkspace, destination)
+        check(sameFiles(sourceWorkspace, destination)) { "Imported app copy could not be verified" }
+        val manager = WorkspaceManager(context, workspaceDir = destination)
+        check(WorkspaceHistoryManager(context, appDirectory = directory).captureInitialVersion(manager, "Imported App")) { "Could not save initial version" }
+        if (provenance != null) WorkspaceFiles.atomicWrite(File(directory, "import-source.json"), provenance.toByteArray(Charsets.UTF_8))
+    }
+
+    private fun publishNewApp(build: (File) -> Unit): SubappRecord = synchronized(operationLock) {
+        LibraryPublication(root).publish(build = build)
+    }
+
+    fun recoverLibrary(): List<SubappRecord> = synchronized(operationLock) {
+        val ids = root.listFiles().orEmpty().filter { it.isDirectory && validId(it.name) && File(it, "workspace").isDirectory }.map { it.name }
+        LibraryIndex(index).recover(ids)
+        list()
     }
 
     fun delete(id: String): Boolean = synchronized(operationLock) {
         if (!validId(id)) return@synchronized false
-        (context.applicationContext as? com.wynh.appapp.ai.AppAiApplication)?.ai?.cancelApp(id)
         val record = resolve(id) ?: return@synchronized false
-        val deleted = record.directory.deleteRecursively()
+        LibraryIndex(index).ids()
+        val deleted = WorkspaceOperations.run(record.workspaceDir) { record.directory.deleteRecursively() }
         if (deleted) {
+            // Only now: a refused or failed delete leaves the app fully working. Reminders are read from
+            // the preferences cleared below, so they are cancelled first.
+            (context.applicationContext as? com.wynh.appapp.ai.AppAiApplication)?.ai?.cancelApp(id)
+            com.wynh.appapp.bridge.NativeStorageBridge.cancelAllForSubapp(context, id)
             context.getSharedPreferences("runtime_app_state_$id", Context.MODE_PRIVATE).edit().clear().commit()
             context.getSharedPreferences("runtime_scheduled_alarms_$id", Context.MODE_PRIVATE).edit().clear().commit()
             context.getSharedPreferences("runtime_notifications_$id", Context.MODE_PRIVATE).edit().clear().commit()
@@ -104,13 +107,15 @@ class SubappRepository(private val context: Context) {
 
     companion object {
         val operationLock = Any()
+        private val recovered = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
     }
 
     /** Captures all workspaces with a fixed library and every workspace write lock held. */
     fun stageBackup(destination: File): List<File> = synchronized(operationLock) {
         val records = list()
         fun capture(index: Int): List<File> {
-            if (index < records.size) return synchronized(com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(records[index].workspaceDir)) {
+            // Backup only reads: running pages keep their generation and are not told to reload.
+            if (index < records.size) return WorkspaceOperations.run(records[index].workspaceDir, replacement = false) {
                 capture(index + 1)
             }
             val bytes = records.sumOf { record -> record.workspaceDir.walkTopDown().filter { it.isFile }.sumOf { it.length() } }
@@ -255,11 +260,6 @@ class SubappRepository(private val context: Context) {
     }
 
     private fun register(id: String) = writeIndex((list().map { it.id } + id).distinct())
-    private fun writeIndex(ids: List<String>) {
-        root.mkdirs()
-        val temp = File(root, "index.tmp")
-        temp.writeText(JSONArray(ids).toString())
-        check(temp.renameTo(index)) { "Could not save app library" }
-    }
+    private fun writeIndex(ids: List<String>) { root.mkdirs(); LibraryIndex(index).write(ids) }
     private fun validId(id: String): Boolean = runCatching { UUID.fromString(id).toString() == id }.getOrDefault(false)
 }

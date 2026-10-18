@@ -61,7 +61,7 @@ android {
 
 // Plain assembleRelease stays buildable without credentials (F-Droid builds and signs itself).
 // Publishers use assembleSignedRelease, which refuses to run without the release key.
-val verifyReleaseSigning by tasks.registering {
+val verifyReleaseSigning = tasks.register("verifyReleaseSigning") {
     doFirst {
         check(hasReleaseSigning) {
             "Release signing is not configured. Set APPAPP_RELEASE_STORE_FILE, " +
@@ -97,7 +97,7 @@ dependencies {
     implementation(libs.androidx.browser)
     implementation(libs.androidx.lifecycle.runtime)
 
-    testImplementation("junit:junit:4.13.2")
-    androidTestImplementation("androidx.test.ext:junit:1.3.0")
-    androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
+    testImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.test.junit)
+    androidTestImplementation(libs.androidx.test.espresso)
 }

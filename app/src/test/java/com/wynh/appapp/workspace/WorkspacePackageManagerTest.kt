@@ -100,7 +100,7 @@ class WorkspacePackageManagerTest {
         val old = File(root.parentFile, "workspace_import_old")
         check(root.renameTo(old))
         File(root.parentFile, "workspace_import_staging").mkdirs()
-        WorkspacePackageManager.recoverImport(root)
+        WorkspaceOperations.recover(root)
         assertIntact(root)
     }
 }

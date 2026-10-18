@@ -105,53 +105,49 @@
 
             <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="16dp" app:cardCornerRadius="16dp"><com.google.android.material.button.MaterialButton android:id="@+id/hub_configure" style="@style/Widget.Material3.Button.TextButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:text="@string/library_configure" app:icon="@drawable/ic_tune"/></com.google.android.material.card.MaterialCardView>
             <com.google.android.material.button.MaterialButton android:id="@+id/hub_history" style="@style/Widget.Material3.Button.TextButton" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/action_history" app:icon="@drawable/ic_history"/>
-            <!-- Project Files & Directory Section -->
+            <!-- Keep the action on its own row so large fonts cannot push it off screen. -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
+                android:orientation="vertical"
                 android:paddingBottom="10dp">
-
                 <TextView
-                    android:layout_width="wrap_content"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/project_files_header"
                     android:textColor="@color/accent_blue"
                     android:textSize="13sp"
                     android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/hub_file_count_badge"
-                    android:layout_width="wrap_content"
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp"
-                    android:background="@drawable/bg_tab_selected"
-                    android:paddingHorizontal="8dp"
-                    android:paddingVertical="2dp"
-                    android:text="4 files"
-                    android:textColor="@color/on_surface_muted"
-                    android:textSize="11sp" />
-
-                <View
-                    android:layout_width="0dp"
-                    android:layout_height="1dp"
-                    android:layout_weight="1" />
-
-                <!-- New File Button -->
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/hub_btn_new_file"
-                    style="@style/Widget.Material3.Button.TextButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="36dp"
-                    android:paddingHorizontal="8dp"
-                    android:text="@string/action_new_file"
-                    android:textColor="@color/accent_blue"
-                    android:textSize="12sp"
-                    app:icon="@drawable/ic_add"
-                    app:iconPadding="4dp"
-                    app:iconSize="16dp"
-                    app:iconTint="@color/accent_blue" />
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+                    <TextView
+                        android:id="@+id/hub_file_count_badge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_tab_selected"
+                        android:paddingHorizontal="8dp"
+                        android:paddingVertical="2dp"
+                        android:textColor="@color/on_surface_muted"
+                        android:textSize="11sp" />
+                    <View android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/hub_btn_new_file"
+                        style="@style/Widget.Material3.Button.TextButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:minHeight="48dp"
+                        android:paddingHorizontal="8dp"
+                        android:text="@string/action_new_file"
+                        android:textColor="@color/accent_blue"
+                        android:textSize="12sp"
+                        app:icon="@drawable/ic_add"
+                        app:iconPadding="4dp"
+                        app:iconSize="16dp"
+                        app:iconTint="@color/accent_blue" />
+                </LinearLayout>
             </LinearLayout>
 
             <!-- Dynamic Files List Container -->

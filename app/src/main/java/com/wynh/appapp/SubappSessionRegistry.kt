@@ -21,15 +21,11 @@ object SubappSessionRegistry {
         if (sessions[id].isNullOrEmpty()) sessions.remove(id)
     }
 
-    @Synchronized fun pause(id: String) {
-        sessions[id]?.forEach { (it.get() as? UpdatableSubappSession)?.pauseForUpdate() }
-    }
-
-    @Synchronized fun resume(id: String) {
-        sessions[id]?.forEach { (it.get() as? UpdatableSubappSession)?.resumeAfterUpdate() }
-    }
-
-    @Synchronized fun close(id: String) {
-        sessions.remove(id)?.forEach { it.get()?.finish() }
+    private fun live(id: String): List<Activity> = synchronized(this) { sessions[id].orEmpty().mapNotNull { it.get() } }
+    fun pause(id: String) { live(id).forEach { (it as? UpdatableSubappSession)?.pauseForUpdate() } }
+    fun resume(id: String) { live(id).forEach { (it as? UpdatableSubappSession)?.resumeAfterUpdate() } }
+    fun close(id: String) {
+        val activities = synchronized(this) { sessions.remove(id).orEmpty().mapNotNull { it.get() } }
+        activities.forEach { it.finish() }
     }
 }

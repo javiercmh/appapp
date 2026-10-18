@@ -69,7 +69,7 @@ object SubappWebViews {
     fun entryPath(manager: WorkspaceManager): String {
         val main = try { JSONObject(manager.readFile("manifest.json")).optString("main", "index.html").trim().removePrefix("/") }
         catch (_: Exception) { "index.html" }
-        return if (main.isNotBlank() && manager.getFile(main).isFile) main else "index.html"
+        return if (main.isNotBlank() && runCatching { manager.getFile(main).isFile }.getOrDefault(false)) main else "index.html"
     }
 
     fun entryUrl(subappId: String, manager: WorkspaceManager) = "${origin(subappId)}/${entryPath(manager)}"
@@ -156,9 +156,11 @@ open class SubappWebViewClient(
         if (!url.host.equals(SubappWebViews.host(subappId), ignoreCase = true)) return foreignRequest(url)
         if (!url.scheme.equals("https", ignoreCase = true)) return notFound()
         val workspace = manager()
+        if (com.wynh.appapp.workspace.WorkspaceOperations.isBusy(workspace.workspaceDir))
+            return WebResourceResponse("text/plain", "UTF-8", 503, "Unavailable", emptyMap(), "Workspace operation in progress".byteInputStream())
         val path = url.path.orEmpty().removePrefix("/").ifBlank { SubappWebViews.entryPath(workspace) }
-        val file = workspace.getFile(path)
-        if (file.isFile) return served(WorkspaceManager.getMimeType(path), FileInputStream(file))
+        val file = runCatching { workspace.getFile(path) }.getOrNull() ?: return notFound()
+        if (file.isFile) return runCatching { served(WorkspaceManager.getMimeType(path), FileInputStream(file)) }.getOrElse { notFound() }
         log("[WebView Error] Workspace file not found: $path")
         return notFound()
     }
@@ -175,7 +177,7 @@ open class SubappWebViewClient(
         if (scheme != "http" && scheme != "https") return null
         val reason = when {
             !networkAllowed() -> "this app has no internet permission (library: app menu → Permissions)"
-            SubappWebViews.isLocalNetworkHost(url.host) -> "local-network addresses are never reachable from apps"
+            SubappWebViews.isLocalNetworkHost(url.host) -> "local or private host literal is blocked"
             else -> return null
         }
         if (reportedHosts.add(url.host.orEmpty())) log("[Network] Blocked request to ${url.host}: $reason")

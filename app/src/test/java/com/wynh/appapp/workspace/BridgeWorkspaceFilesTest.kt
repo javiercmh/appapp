@@ -18,22 +18,22 @@ class BridgeWorkspaceFilesTest {
     private fun files(root: File) = BridgeWorkspaceFiles(root) { logs += it }
 
     @Test fun keepsHistoricalMappingForOtherCharacters() {
-        assertEquals("my_file.json", BridgeWorkspaceFiles.normalize("my file.json"))
-        assertEquals("data/x.json", BridgeWorkspaceFiles.normalize(" data/x.json"))
-        assertEquals("caf_.json", BridgeWorkspaceFiles.normalize("café.json"))
-        assertEquals("_2e_2e/x", BridgeWorkspaceFiles.normalize("%2e%2e/x"))
-        assertEquals("C_/x", BridgeWorkspaceFiles.normalize("C:/x"))
-        assertEquals("_/x", BridgeWorkspaceFiles.normalize("~/x"))
+        assertEquals("my_file.json", WorkspaceFiles.normalize("my file.json"))
+        assertEquals("data/x.json", WorkspaceFiles.normalize(" data/x.json"))
+        assertEquals("caf_.json", WorkspaceFiles.normalize("café.json"))
+        assertEquals("_2e_2e/x", WorkspaceFiles.normalize("%2e%2e/x"))
+        assertEquals("C_/x", WorkspaceFiles.normalize("C:/x"))
+        assertEquals("_/x", WorkspaceFiles.normalize("~/x"))
     }
 
     @Test fun acceptsConventionalFormsAndNormalizesHarmlessVariants() {
-        assertEquals("data/entries.json", BridgeWorkspaceFiles.normalize("data/entries.json"))
-        assertEquals("data/entries.json", BridgeWorkspaceFiles.normalize("/data/entries.json"))
-        assertEquals("data/entries.json", BridgeWorkspaceFiles.normalize("./data/entries.json"))
-        assertEquals("data/entries.json", BridgeWorkspaceFiles.normalize("data//./entries.json"))
-        assertEquals("photo_1700000000000.jpg", BridgeWorkspaceFiles.normalize("photo_1700000000000.jpg"))
-        assertEquals("app.log", BridgeWorkspaceFiles.normalize("app.log"))
-        assertEquals(".hidden", BridgeWorkspaceFiles.normalize(".hidden"))
+        assertEquals("data/entries.json", WorkspaceFiles.normalize("data/entries.json"))
+        assertEquals("data/entries.json", WorkspaceFiles.normalize("/data/entries.json"))
+        assertEquals("data/entries.json", WorkspaceFiles.normalize("./data/entries.json"))
+        assertEquals("data/entries.json", WorkspaceFiles.normalize("data//./entries.json"))
+        assertEquals("photo_1700000000000.jpg", WorkspaceFiles.normalize("photo_1700000000000.jpg"))
+        assertEquals("app.log", WorkspaceFiles.normalize("app.log"))
+        assertEquals(".hidden", WorkspaceFiles.normalize(".hidden"))
     }
 
     @Test fun rejectsUnsafePaths() {
@@ -43,29 +43,29 @@ class BridgeWorkspaceFilesTest {
         )
         for (path in rejected) {
             var reason: String? = null
-            assertNull("accepted '$path'", BridgeWorkspaceFiles.normalize(path) { reason = it })
+            assertNull("accepted '$path'", WorkspaceFiles.normalize(path) { reason = it })
             assertNotNull(reason)
         }
     }
 
     @Test fun enforcesLengthAndDepthLimits() {
         val segment = "a".repeat(BridgeFileLimits.MAX_SEGMENT_CHARS)
-        assertEquals(segment, BridgeWorkspaceFiles.normalize(segment))
-        assertNull(BridgeWorkspaceFiles.normalize(segment + "a"))
-        assertNull(BridgeWorkspaceFiles.normalize("a/".repeat(300) + "b"))
-        assertNotNull(BridgeWorkspaceFiles.normalize(List(BridgeFileLimits.MAX_SEGMENTS) { "d" }.joinToString("/")))
-        assertNull(BridgeWorkspaceFiles.normalize(List(BridgeFileLimits.MAX_SEGMENTS + 1) { "d" }.joinToString("/")))
+        assertEquals(segment, WorkspaceFiles.normalize(segment))
+        assertNull(WorkspaceFiles.normalize(segment + "a"))
+        assertNull(WorkspaceFiles.normalize("a/".repeat(300) + "b"))
+        assertNotNull(WorkspaceFiles.normalize(List(BridgeFileLimits.MAX_SEGMENTS) { "d" }.joinToString("/")))
+        assertNull(WorkspaceFiles.normalize(List(BridgeFileLimits.MAX_SEGMENTS + 1) { "d" }.joinToString("/")))
     }
 
     @Test fun containmentRequiresAPathBoundary() {
         val root = "/data/subapps/a/workspace"
-        assertTrue(BridgeWorkspaceFiles.isStrictlyInside(root, "$root/data/x.json"))
-        assertFalse(BridgeWorkspaceFiles.isStrictlyInside(root, "$root-evil/x.json"))
-        assertFalse(BridgeWorkspaceFiles.isStrictlyInside(root, "${root}evil"))
-        assertFalse(BridgeWorkspaceFiles.isStrictlyInside(root, root))
-        assertFalse(BridgeWorkspaceFiles.isStrictlyInside(root, "$root/"))
-        assertTrue(BridgeWorkspaceFiles.isWithin(root, root))
-        assertFalse(BridgeWorkspaceFiles.isWithin(root, "/data/subapps/a"))
+        assertTrue(WorkspaceFiles.isStrictlyInside(root, "$root/data/x.json"))
+        assertFalse(WorkspaceFiles.isStrictlyInside(root, "$root-evil/x.json"))
+        assertFalse(WorkspaceFiles.isStrictlyInside(root, "${root}evil"))
+        assertFalse(WorkspaceFiles.isStrictlyInside(root, root))
+        assertFalse(WorkspaceFiles.isStrictlyInside(root, "$root/"))
+        assertTrue(WorkspaceFiles.isWithin(root, root))
+        assertFalse(WorkspaceFiles.isWithin(root, "/data/subapps/a"))
     }
 
     @Test fun siblingPrefixWorkspaceIsNeverReached() {
@@ -135,7 +135,7 @@ class BridgeWorkspaceFilesTest {
         assertEquals("index", File(root, "index.html").readText())
         assertTrue(Files.isSymbolicLink(File(root, "link.json").toPath()))
         assertEquals(listOf("index.html"), bridge.list().map { it.name })
-        assertEquals(5L, BridgeWorkspaceFiles.usedBytes(root))
+        assertEquals(5L, WorkspaceFiles.usedBytes(root))
     }
 
     @Test fun rejectsOversizedWritesAndReads() {

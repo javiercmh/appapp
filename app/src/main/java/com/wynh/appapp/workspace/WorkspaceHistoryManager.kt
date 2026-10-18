@@ -33,6 +33,7 @@ class WorkspaceHistoryManager(
     private val initialSnapshotFile = File(appDirectory, "workspace_initial_snapshot.json")
     private val timeFormat = SimpleDateFormat("HH:mm:ss (MMM d)", Locale.getDefault())
     private val settingsManager = AppSettingsManager(context)
+    private val lock = com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(File(appDirectory, "workspace"))
 
     companion object {
         const val INITIAL_SNAPSHOT_ID = "initial_subapp_snapshot"
@@ -45,8 +46,7 @@ class WorkspaceHistoryManager(
     /**
      * Loads dynamic user snapshots from disk.
      */
-    @Synchronized
-    fun loadUserSnapshots(): List<WorkspaceSnapshot> {
+    fun loadUserSnapshots(): List<WorkspaceSnapshot> = synchronized(lock) {
         if (!historyFile.exists()) return emptyList()
 
         return try {
@@ -86,19 +86,31 @@ class WorkspaceHistoryManager(
             }
             // Sorted newest first
             result.sortedByDescending { it.timestamp }
+        } catch (e: org.json.JSONException) {
+            setAsideDamagedHistory(e)
+            emptyList()
         } catch (e: Exception) {
             log("[History Error] Failed to read snapshots: ${e.message}")
-            emptyList()
+            throw IllegalStateException("Version history could not be read; existing history was kept", e)
         }
     }
 
+    /**
+     * Unparseable history must not block saving, but its bytes are never discarded: the file is
+     * renamed beside the app and a new list starts. Read errors still propagate untouched.
+     */
+    private fun setAsideDamagedHistory(cause: Exception) {
+        val aside = File(appDirectory, "workspace_history.damaged-${System.currentTimeMillis()}.json")
+        check(historyFile.renameTo(aside)) { "Version history is damaged and could not be set aside" }
+        log("[History Error] Version history was unreadable (${cause.message}); kept as ${aside.name} and started a new list")
+    }
+
     /** Captures the immutable first version for this subapp. */
-    @Synchronized
     fun captureInitialVersion(
         workspaceManager: WorkspaceManager,
         label: String,
         replaceExisting: Boolean = false
-    ): Boolean {
+    ): Boolean = synchronized(lock) {
         if (initialSnapshotFile.exists() && !replaceExisting) return true
         return try {
             val files = readWorkspaceFiles(workspaceManager)
@@ -120,16 +132,14 @@ class WorkspaceHistoryManager(
     }
 
     /** Adds a baseline for subapps created before initial versions were persisted. */
-    @Synchronized
-    fun ensureInitialVersion(workspaceManager: WorkspaceManager) {
+    fun ensureInitialVersion(workspaceManager: WorkspaceManager) = synchronized(lock) {
         if (!initialSnapshotFile.exists()) {
             captureInitialVersion(workspaceManager, "Baseline captured for existing app")
         }
     }
 
     /** Returns user snapshots plus this subapp's permanent initial version, when available. */
-    @Synchronized
-    fun getSnapshots(): List<WorkspaceSnapshot> {
+    fun getSnapshots(): List<WorkspaceSnapshot> = synchronized(lock) {
         val initial = readSnapshotFile(initialSnapshotFile)
         return loadUserSnapshots() + listOfNotNull(initial)
     }
@@ -137,8 +147,7 @@ class WorkspaceHistoryManager(
     /**
      * Captures current workspace files and stores a new snapshot (respecting configured max retention limit).
      */
-    @Synchronized
-    fun saveSnapshot(workspaceManager: WorkspaceManager, label: String = "Run Snapshot"): WorkspaceSnapshot? {
+    fun saveSnapshot(workspaceManager: WorkspaceManager, label: String = "Run Snapshot"): WorkspaceSnapshot? = synchronized(lock) {
         return try {
             val filesMap = readWorkspaceFiles(workspaceManager)
             if (filesMap.isEmpty()) return null
@@ -169,7 +178,7 @@ class WorkspaceHistoryManager(
             existing.add(0, snapshot)
 
             // Keep up to max configured snapshots
-            val maxSnapshots = settingsManager.maxHistorySnapshots
+            val maxSnapshots = settingsManager.maxHistorySnapshots.coerceIn(1, 20)
             while (existing.size > maxSnapshots) {
                 existing.removeAt(existing.lastIndex)
             }
@@ -188,11 +197,10 @@ class WorkspaceHistoryManager(
     /**
      * Prunes stored snapshots when the user lowers the retention setting.
      */
-    @Synchronized
-    fun pruneToMax(maxCount: Int) {
+    fun pruneToMax(maxCount: Int) = synchronized(lock) {
         val existing = loadUserSnapshots().toMutableList()
         if (existing.size > maxCount) {
-            while (existing.size > maxCount) {
+            while (existing.size > maxCount.coerceIn(1, 20)) {
                 existing.removeAt(existing.lastIndex)
             }
             writeSnapshotsToDisk(existing)
@@ -203,8 +211,7 @@ class WorkspaceHistoryManager(
     /**
      * Wipes all user snapshots from disk.
      */
-    @Synchronized
-    fun clearAllHistory(): Boolean {
+    fun clearAllHistory(): Boolean = synchronized(lock) {
         return try {
             if (historyFile.exists()) {
                 val deleted = historyFile.delete()
@@ -242,7 +249,6 @@ class WorkspaceHistoryManager(
     /**
      * Reverts all workspace files to the contents in the specified snapshot.
      */
-    @Synchronized
     fun restoreSnapshot(snapshotId: String, workspaceManager: WorkspaceManager): Boolean = synchronized(com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(workspaceManager.workspaceDir)) {
         return@synchronized try {
             val snapshots = getSnapshots()
@@ -255,22 +261,9 @@ class WorkspaceHistoryManager(
                 "Could not save current version before restore"
             }
 
-            // 1. Clean up workspace files that were created after the snapshot. Runtime logs and
-            // binary assets are kept — snapshots never captured them, so deleting would lose data.
-            val currentFiles = workspaceManager.listFiles()
-            for (f in currentFiles) {
-                if (f.name != "app.log" &&
-                    !WorkspaceManager.isBinaryAsset(f.name) &&
-                    !target.files.containsKey(f.name)
-                ) {
-                    workspaceManager.deleteFile(f.name)
-                }
-            }
-
-            // 2. Write all files from snapshot
-            for ((fileName, content) in target.files) {
-                if (fileName != "app.log") check(workspaceManager.writeFile(fileName, content)) { "Could not restore $fileName" }
-            }
+            val result = WorkspaceOperations.restoreText(workspaceManager.workspaceDir, target.files)
+            if (result.keptUnreadable.isNotEmpty()) log("[History] Left untouched (not valid UTF-8 text): ${result.keptUnreadable.joinToString()}")
+            if (result.ignoredEntries.isNotEmpty()) log("[History] Skipped snapshot entries of unsupported types: ${result.ignoredEntries.joinToString()}")
 
             log("[History] Successfully restored snapshot from ${target.formattedTime}")
             true
@@ -282,11 +275,15 @@ class WorkspaceHistoryManager(
 
     private fun readWorkspaceFiles(workspaceManager: WorkspaceManager): Map<String, String> {
         val files = linkedMapOf<String, String>()
-        for (file in workspaceManager.listFiles()) {
+        val root = workspaceManager.workspaceDir
+        for (file in WorkspaceFiles.regularFiles(root)) {
+            val name = file.relativeTo(root).invariantSeparatorsPath
             // History stores text; binary assets remain untouched on disk and outside snapshots.
-            if (file.name != "app.log" && !WorkspaceManager.isBinaryAsset(file.name)) {
-                files[file.name] = workspaceManager.readFile(file.name)
-            }
+            if (!WorkspaceFiles.isHistoryText(name)) continue
+            // A text-named file that is not valid UTF-8 (a Windows-1252 CSV, say) cannot round-trip
+            // through JSON. It stays on disk, and restore leaves it alone, so it must not block saving.
+            val text = if (WorkspaceFiles.normalize(name) == name) WorkspaceFiles.decodeUtf8(file.readBytes()) else null
+            if (text == null) log("[History] Not versioned (not valid UTF-8 text or unsupported name): $name") else files[name] = text
         }
         return files
     }
@@ -330,15 +327,5 @@ class WorkspaceHistoryManager(
         writeAtomically(file, json.toString())
     }
 
-    private fun writeAtomically(file: File, text: String) {
-        val atomic = android.util.AtomicFile(file)
-        val stream = atomic.startWrite()
-        try {
-            stream.write(text.toByteArray(StandardCharsets.UTF_8))
-            atomic.finishWrite(stream)
-        } catch (e: Exception) {
-            atomic.failWrite(stream)
-            throw e
-        }
-    }
+    private fun writeAtomically(file: File, text: String) = WorkspaceFiles.atomicWrite(file, text.toByteArray(StandardCharsets.UTF_8))
 }

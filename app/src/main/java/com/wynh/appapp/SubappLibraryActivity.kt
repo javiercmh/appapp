@@ -63,6 +63,10 @@ import com.wynh.appapp.databinding.LibraryHeaderBinding
 
 class SubappLibraryActivity : AppCompatActivity() {
     private lateinit var repository: SubappRepository
+    private val library by lazy { ViewModelProvider(this)[com.wynh.appapp.workspace.LibraryController::class.java] }
+    private var rowMetadata = emptyMap<String, com.wynh.appapp.workspace.SubappMetadata>()
+    private var operationProgress: AlertDialog? = null
+    private var libraryRecovery: AlertDialog? = null
     private lateinit var binding: ActivitySubappLibraryBinding
     private val settingsManager by lazy { AppSettingsManager(this) }
     private var refreshSettingsPermissions: (() -> Unit)? = null
@@ -90,19 +94,8 @@ class SubappLibraryActivity : AppCompatActivity() {
     private var pendingExportId: String? = null
     private val saveZipLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri: Uri? ->
         val filesToExport = pendingExportFiles
-        val record = pendingExportId?.let(repository::resolve)
-        if (uri != null && filesToExport != null && record != null) {
-            try {
-                (contentResolver.openOutputStream(uri) ?: error("Cannot open destination")).use { os ->
-                    WorkspacePackageManager.exportToOutputStream(WorkspaceManager(this, workspaceDir = record.workspaceDir), filesToExport, os)
-                }
-                android.util.Log.d("AppApp", "[Package] Saved ${filesToExport.size} files to ZIP via Storage Access Framework.")
-                Toast.makeText(this, getString(R.string.export_success, filesToExport.size), Toast.LENGTH_SHORT).show()
-            } catch (e: Exception) {
-                android.util.Log.d("AppApp", "[Package Error] Failed to write ZIP: ${e.message}")
-                Toast.makeText(this, "Save failed: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
+        val id = pendingExportId
+        if (uri != null && filesToExport != null && id != null) library.export(id, filesToExport, uri, "app")
         pendingExportFiles = null
         pendingExportId = null
     }
@@ -226,26 +219,7 @@ class SubappLibraryActivity : AppCompatActivity() {
             val rawName = nameInput.text?.toString() ?: ""
             val customPackageName = WorkspacePackageManager.sanitizePackageName(rawName, "my_app")
 
-            try {
-                val zipFile = WorkspacePackageManager.exportToZipFile(this, workspaceManager, selectedFiles, customPackageName)
-                val contentUri = FileProvider.getUriForFile(
-                    this,
-                    "${packageName}.fileprovider",
-                    zipFile
-                )
-
-                val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                    type = "application/zip"
-                    putExtra(Intent.EXTRA_STREAM, contentUri)
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                }
-
-                startActivity(Intent.createChooser(shareIntent, getString(R.string.action_share_zip)))
-                android.util.Log.d("AppApp", "[Package] Exported ${selectedFiles.size} files to '$customPackageName.zip' and triggered Sharesheet.")
-            } catch (e: Exception) {
-                android.util.Log.d("AppApp", "[Package Error] Export failed: ${e.message}")
-                Toast.makeText(this, "Export failed: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
+            library.export(record.id, selectedFiles.toSet(), null, customPackageName)
         }
 
         btnSaveZip.setOnClickListener {
@@ -284,10 +258,57 @@ class SubappLibraryActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         repository = SubappRepository(this)
-        repository.ensureMigrated()
         pendingExportId = savedInstanceState?.getString("export_app_id")
         pendingExportFiles = savedInstanceState?.getStringArrayList("export_files")?.toSet()
         showLibrary()
+        com.wynh.appapp.runtime.WorkspaceOperationUi.bind(this) { completion ->
+            if (completion.kind == com.wynh.appapp.workspace.WorkspaceActionController.Kind.UPDATED) refreshRows()
+        }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch { library.catalog.collect { value ->
+                    if (value.error != null) {
+                        if (libraryRecovery == null) libraryRecovery = MaterialAlertDialogBuilder(this@SubappLibraryActivity)
+                            .setTitle(R.string.library_recovery_title).setMessage(R.string.library_recovery_message)
+                            .setPositiveButton(R.string.library_recover) { _, _ -> library.recover() }
+                            .setNegativeButton("Retry") { _, _ -> library.refresh() }
+                            .setOnDismissListener { libraryRecovery = null }.show()
+                    } else {
+                        libraryRecovery?.dismiss(); libraryRecovery = null
+                        if (reorderOriginal.isEmpty() && rowsReady) applyCatalog(value)
+                    }
+                } }
+                launch { library.task.collect { task ->
+                    header.newApp.isEnabled = !task.busy
+                    if (task.busy) {
+                        if (operationProgress == null) operationProgress = MaterialAlertDialogBuilder(this@SubappLibraryActivity)
+                            .setTitle(task.message).setMessage(R.string.workspace_working).setCancelable(false)
+                            .setNegativeButton(R.string.cancel) { _, _ -> library.cancel() }.show()
+                        operationProgress?.setTitle(task.message)
+                        operationProgress?.getButton(android.content.DialogInterface.BUTTON_NEGATIVE)?.apply {
+                            visibility = if (task.cancellable) View.VISIBLE else View.GONE
+                            setOnClickListener { library.cancel() }
+                        }
+                    } else {
+                        operationProgress?.dismiss(); operationProgress = null
+                        task.deleted?.let { id ->
+                            ShortcutManagerCompat.disableShortcuts(this@SubappLibraryActivity, listOf("appapp_subapp_$id"), "App no longer available")
+                            SubappSessionRegistry.close(id)
+                        }
+                        if (task.message.isNotEmpty()) {
+                            if (task.created != null) edit(task.created)
+                            else if (task.share != null) {
+                                val uri = FileProvider.getUriForFile(this@SubappLibraryActivity, "$packageName.fileprovider", task.share)
+                                startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                                    type = "application/zip"; putExtra(Intent.EXTRA_STREAM, uri); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }, getString(R.string.action_share_zip)))
+                            } else Toast.makeText(this@SubappLibraryActivity, task.message, Toast.LENGTH_LONG).show()
+                            library.clearTask()
+                        }
+                    }
+                } }
+            }
+        }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 backups.status.collect { status ->
@@ -325,6 +346,7 @@ class SubappLibraryActivity : AppCompatActivity() {
     override fun onDestroy() {
         backupProgress?.dismiss()
         backupProgress = null
+        operationProgress?.dismiss(); libraryRecovery?.dismiss()
         super.onDestroy()
     }
 
@@ -460,9 +482,10 @@ class SubappLibraryActivity : AppCompatActivity() {
             btnExactAlarms?.isEnabled = !allowed
         }
         refreshExactAlarmRow()
-        refreshSettingsPermissions = { refreshNotificationRow(); refreshExactAlarmRow(); Unit }
+        refreshSettingsPermissions = { refreshNotificationRow(); refreshExactAlarmRow() }
         dialog.setOnDismissListener { refreshSettingsPermissions = null }
         btnExactAlarms?.setOnClickListener {
+            if (Build.VERSION.SDK_INT < 31) return@setOnClickListener
             val intent = Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
                 .setData(android.net.Uri.parse("package:$packageName"))
             if (!NativeStorageBridge.canScheduleExact(this) && intent.resolveActivity(packageManager) != null) {
@@ -519,14 +542,29 @@ class SubappLibraryActivity : AppCompatActivity() {
         dialog.window?.setLayout((resources.displayMetrics.widthPixels * 0.94).toInt(), ViewGroup.LayoutParams.WRAP_CONTENT)
     }
 
-    private fun refreshRows() {
-        if (reorderOriginal.isNotEmpty()) return
-        val records = repository.list()
-        displayedRecords.clear()
-        displayedRecords.addAll(records)
-        header.appCount.text = resources.getQuantityString(R.plurals.library_count, records.size, records.size)
-        header.emptyState.visibility = if (records.isEmpty()) View.VISIBLE else View.GONE
-        libraryAdapter.notifyDataSetChanged()
+    private fun refreshRows() { if (reorderOriginal.isEmpty()) library.refresh() }
+
+    private fun applyCatalog(value: com.wynh.appapp.workspace.LibraryController.Catalog) {
+        val previous = displayedRecords.toList()
+        val oldMetadata = rowMetadata
+        val diff = androidx.recyclerview.widget.DiffUtil.calculateDiff(object : androidx.recyclerview.widget.DiffUtil.Callback() {
+            override fun getOldListSize() = previous.size
+            override fun getNewListSize() = value.records.size
+            override fun areItemsTheSame(old: Int, new: Int) = previous[old].id == value.records[new].id
+            override fun areContentsTheSame(old: Int, new: Int): Boolean {
+                val id = previous[old].id
+                return oldMetadata[id]?.stamp == value.metadata[id]?.stamp
+            }
+        })
+        displayedRecords.clear(); displayedRecords.addAll(value.records); rowMetadata = value.metadata
+        header.appCount.text = resources.getQuantityString(R.plurals.library_count, displayedRecords.size, displayedRecords.size)
+        header.emptyState.visibility = if (displayedRecords.isEmpty()) View.VISIBLE else View.GONE
+        diff.dispatchUpdatesTo(object : androidx.recyclerview.widget.ListUpdateCallback {
+            override fun onInserted(position: Int, count: Int) { libraryAdapter.notifyItemRangeInserted(position + 1, count) }
+            override fun onRemoved(position: Int, count: Int) { libraryAdapter.notifyItemRangeRemoved(position + 1, count) }
+            override fun onMoved(from: Int, to: Int) { libraryAdapter.notifyItemMoved(from + 1, to + 1) }
+            override fun onChanged(position: Int, count: Int, payload: Any?) { libraryAdapter.notifyItemRangeChanged(position + 1, count, payload) }
+        })
     }
 
     private class AppHolder(val row: ItemSubappBinding) : RecyclerView.ViewHolder(row.root)
@@ -545,7 +583,7 @@ class SubappLibraryActivity : AppCompatActivity() {
             }
             val holder = AppHolder(row)
             row.appCard.setOnLongClickListener {
-                if (displayedRecords.size < 2 || holder.bindingAdapterPosition == RecyclerView.NO_POSITION) false
+                if (library.task.value.busy || displayedRecords.size < 2 || holder.bindingAdapterPosition == RecyclerView.NO_POSITION) false
                 else { touchHelper.startDrag(holder); true }
             }
             ViewCompat.addAccessibilityAction(row.root, getString(R.string.library_move_up)) { _, _ -> moveByAccessibility(holder, -1) }
@@ -556,19 +594,16 @@ class SubappLibraryActivity : AppCompatActivity() {
             if (holder !is AppHolder) return
             val record = displayedRecords[position - 1]
             val row = holder.row
-            val manager = WorkspaceManager(this@SubappLibraryActivity, workspaceDir = record.workspaceDir)
-            val manifest = try { JSONObject(manager.readFile("manifest.json")) } catch (_: Exception) { JSONObject() }
-            val name = manifest.optString("name").ifBlank { getString(R.string.library_untitled) }
-            val iconName = manifest.optJSONArray("icons")?.optJSONObject(0)?.optString("src")?.takeIf { it.isNotBlank() } ?: "icon.png"
-            val iconFile = manager.getFile(iconName)
-            val bitmap = if (iconFile.isFile) runCatching { BitmapFactory.decodeFile(iconFile.absolutePath) }.getOrNull() else null
+            val metadata = rowMetadata[record.id]
+            val name = metadata?.name?.ifBlank { getString(R.string.library_untitled) } ?: getString(R.string.library_untitled)
+            val bitmap = metadata?.icon
             row.appIcon.shapeAppearanceModel = ShapeAppearanceModel.builder()
                 .setAllCorners(com.google.android.material.shape.CornerFamily.ROUNDED, resources.displayMetrics.density * 12f)
                 .build()
             if (bitmap != null) row.appIcon.setImageBitmap(bitmap)
             else row.appIcon.setImageResource(R.mipmap.ic_launcher_round)
             row.appName.text = name
-            row.appDescription.text = manifest.optString("description").ifBlank { getString(R.string.library_app_fallback) }
+            row.appDescription.text = metadata?.description?.ifBlank { getString(R.string.library_app_fallback) } ?: getString(R.string.library_app_fallback)
             row.appCard.contentDescription = getString(R.string.library_open_app, name)
             row.appCard.setOnClickListener { open(record) }
             row.appMenu.contentDescription = getString(R.string.library_menu, name)
@@ -587,7 +622,7 @@ class SubappLibraryActivity : AppCompatActivity() {
                 }
                 content.findViewById<View>(R.id.update_app).setOnClickListener {
                     popup.dismiss()
-                    com.wynh.appapp.updates.UpdateController(this@SubappLibraryActivity, record) { refreshRows() }.open()
+                    com.wynh.appapp.updates.UpdateController(this@SubappLibraryActivity, record).open()
                 }
                 content.findViewById<View>(R.id.delete_app).setOnClickListener {
                     popup.dismiss()
@@ -637,32 +672,26 @@ class SubappLibraryActivity : AppCompatActivity() {
             return
         }
         if (displayedRecords.map { it.id } == original.map { it.id }) return
-        runCatching { repository.reorder(displayedRecords.map { it.id }) }.onFailure {
-            displayedRecords.clear()
-            displayedRecords.addAll(original)
-            binding.appList.post { libraryAdapter.notifyDataSetChanged() }
-            Toast.makeText(this, R.string.library_reorder_failed, Toast.LENGTH_SHORT).show()
-        }
+        library.reorder(displayedRecords.map { it.id })
     }
 
     private fun moveByAccessibility(holder: AppHolder, delta: Int): Boolean {
-        if (reorderOriginal.isNotEmpty()) return false
+        if (reorderOriginal.isNotEmpty() || library.task.value.busy) return false
         val from = holder.bindingAdapterPosition - 1
         if (from !in displayedRecords.indices) return false
         val to = (from + delta).coerceIn(0, displayedRecords.lastIndex)
         if (from == to) return false
         val item = displayedRecords.removeAt(from)
         displayedRecords.add(to, item)
-        runCatching { repository.reorder(displayedRecords.map { it.id }) }.onFailure {
-            displayedRecords.removeAt(to); displayedRecords.add(from, item)
-            Toast.makeText(this, R.string.library_reorder_failed, Toast.LENGTH_SHORT).show()
-            return false
-        }
+        library.reorder(displayedRecords.map { it.id })
         libraryAdapter.notifyItemMoved(from + 1, to + 1)
         return true
     }
 
     private fun open(record: SubappRecord) {
+        if (com.wynh.appapp.workspace.WorkspaceOperations.isBusy(record.workspaceDir)) {
+            Toast.makeText(this, R.string.workspace_working, Toast.LENGTH_SHORT).show(); return
+        }
         startActivity(Intent(this, SubappRuntimeActivity::class.java).apply {
             action = Intent.ACTION_VIEW
             data = Uri.parse("appapp://subapp/${record.id}")
@@ -677,32 +706,11 @@ class SubappLibraryActivity : AppCompatActivity() {
     private fun confirmDelete(record: SubappRecord, name: String) {
         AlertDialog.Builder(this).setTitle("Delete $name?")
             .setMessage("Its files, data, and history will be removed. App² will disable its shortcut.")
-            .setNegativeButton("Cancel", null).setPositiveButton("Delete") { _, _ ->
-                ShortcutManagerCompat.disableShortcuts(this, listOf("appapp_subapp_${record.id}"), "App no longer available")
-                SubappSessionRegistry.close(record.id)
-                NativeStorageBridge.cancelAllForSubapp(this, record.id)
-                if (repository.delete(record.id)) refreshRows()
-            }.show()
+            // Shortcut, open screens and reminders are only touched once the delete has succeeded.
+            .setNegativeButton("Cancel", null).setPositiveButton("Delete") { _, _ -> library.delete(record.id) }.show()
     }
 
-    private fun importApp(uri: Uri) {
-        val record = repository.createStarter()
-        val manager = WorkspaceManager(this, workspaceDir = record.workspaceDir)
-        val history = com.wynh.appapp.workspace.WorkspaceHistoryManager(this, appDirectory = record.directory)
-        val result = com.wynh.appapp.workspace.WorkspacePackageManager.importFromZip(
-            this, uri, manager, history, savePreImportSnapshot = false
-        )
-        result.onSuccess {
-            val baselineSaved = history.captureInitialVersion(manager, "ZIP Package", replaceExisting = true)
-            refreshRows()
-            Toast.makeText(
-                this,
-                if (baselineSaved) "App imported" else "App imported, but its initial version could not be saved",
-                Toast.LENGTH_SHORT
-            ).show()
-        }
-            .onFailure { repository.delete(record.id); Toast.makeText(this, "Import failed: ${it.message}", Toast.LENGTH_LONG).show() }
-    }
+    private fun importApp(uri: Uri) { library.importZip(uri) }
 
     private fun showNewAppMenu() {
         val content = com.wynh.appapp.databinding.DialogLibraryImportBinding.inflate(layoutInflater)
@@ -711,7 +719,7 @@ class SubappLibraryActivity : AppCompatActivity() {
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
         content.createStarter.setOnClickListener {
             dialog.dismiss()
-            edit(repository.createStarter())
+            library.create()
         }
         content.importClose.setOnClickListener { dialog.dismiss() }
         content.importZip.setOnClickListener {
@@ -735,26 +743,5 @@ class SubappLibraryActivity : AppCompatActivity() {
         dialog.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
     }
 
-    private fun importFromGitHub(url: String) {
-        header.newApp.isEnabled = false
-        Toast.makeText(this, R.string.library_github_downloading, Toast.LENGTH_SHORT).show()
-        Thread {
-            val result = com.wynh.appapp.workspace.GitHubFolderImporter.download(cacheDir, url)
-            runOnUiThread {
-                header.newApp.isEnabled = true
-                result.onSuccess { imported ->
-                    val folder = imported.directory
-                    val record = runCatching { repository.createImportedFrom(folder) }
-                    folder.deleteRecursively()
-                    record.onSuccess {
-                        refreshRows()
-                        val manager = WorkspaceManager(this, workspaceDir = it.workspaceDir)
-                        val name = runCatching { JSONObject(manager.readFile("manifest.json")).optString("name") }
-                            .getOrNull().orEmpty().ifBlank { getString(R.string.library_untitled) }
-                        Toast.makeText(this, getString(R.string.library_imported_app, name) + "\n" + getString(R.string.library_import_offline_note), Toast.LENGTH_LONG).show()
-                    }.onFailure { Toast.makeText(this, "Import failed: ${it.message}", Toast.LENGTH_LONG).show() }
-                }.onFailure { Toast.makeText(this, "GitHub import failed: ${it.message}", Toast.LENGTH_LONG).show() }
-            }
-        }.start()
-    }
+    private fun importFromGitHub(url: String) { library.importGitHub(url) }
 }
