@@ -54,3 +54,10 @@ App² is a developer tool and is not directed at children.
 
 Changes to this policy are published in this file in the App² repository, with a new effective
 date. Questions or requests: open an issue at <https://github.com/Javiercmh/appapp/issues>.
+
+
+### Network-filter limits and recovery metadata
+
+Internet is off for newly imported apps. Enabling it gives the app broad web networking; host-name and literal-IP filtering does not establish complete local-network isolation. Code with Internet allowed can transmit its workspace data to the destinations it contacts. App² does not claim that this filtering controls every DNS, redirect, or request path.
+
+Native GitHub import metadata retains the public repository/folder URL without query or fragment and the pinned commit beside the workspace. It contains no provider credentials and is not part of subapp exports. Recovery rebuilds library registration from existing workspace directories; it does not upload their contents.

@@ -74,7 +74,7 @@ class ServerTest(unittest.TestCase):
         outside = Path(self.temp.name) / 'outside'
         outside.write_text('private')
         (self.root / 'escape').symlink_to(outside)
-        for name in ['../outside', '%2Fetc%2Fpasswd', 'escape']:
+        for name in ['../outside', 'data%5Coutside', 'escape']:
             self.assertEqual(self.call('__bridge/readFile?name=' + name)[0], 403)
             self.assertEqual(self.call('__bridge/writeFile?name=' + name, 'overwrite')[0], 403)
         self.assertEqual(self.call('escape')[0], 403)
@@ -84,6 +84,8 @@ class ServerTest(unittest.TestCase):
         self.assertNotIn('escape', [f['name'] for f in json.loads(self.call('__bridge/listFiles')[1])])
         self.assertEqual(self.call('__bridge/writeFile?name=data/a', 'x', {'Origin': 'https://example.com'})[0], 403)
         self.assertEqual(self.call('__bridge/info', headers={'Host': 'evil.example'})[0], 403)
+        self.assertEqual(self.call('__bridge/writeFile?name=%2Fdata%2Falias.json', '[1]'), (200, 'true'))
+        self.assertEqual((self.root / 'data/alias.json').read_text(), '[1]')
         self.assertEqual(outside.read_text(), 'private')
 
     def test_mock_lifecycle(self):
@@ -108,6 +110,29 @@ class ServerTest(unittest.TestCase):
         self.server.mock_ai = False
         self.assertFalse(json.loads(self.call('__bridge/info')[1])['mockAi'])
         self.assertEqual(self.ai('start', data=data)[0], 400)
+
+
+class StorageContractTest(unittest.TestCase):
+    def test_shared_native_path_fixture(self):
+        fixtures = Path(__file__).resolve().parents[1] / 'app/src/test/resources/workspace-paths.json'
+        for row in json.loads(fixtures.read_text()):
+            with self.subTest(path=row['input']):
+                if row['normalized'] is None:
+                    with self.assertRaises(PermissionError):
+                        module.normalize_workspace_path(row['input'])
+                else:
+                    self.assertEqual(module.normalize_workspace_path(row['input']), row['normalized'])
+
+    def test_failed_publication_keeps_saved_bytes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / 'data.json'
+            target.write_text('saved')
+            def fail():
+                raise OSError('disk failure')
+            with self.assertRaises(OSError):
+                module.atomic_write(target, b'replacement', fail)
+            self.assertEqual(target.read_text(), 'saved')
+            self.assertEqual([p.name for p in Path(directory).iterdir()], ['data.json'])
 
 
 if __name__ == '__main__':

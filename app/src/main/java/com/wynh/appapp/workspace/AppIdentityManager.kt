@@ -58,7 +58,7 @@ class AppIdentityManager(private val context: Context, private val record: Subap
                 }
                 is IconChange.Replace -> {
                     iconFile.parentFile?.let { parent -> if (!parent.exists()) check(parent.mkdirs()) }
-                    iconFile.writeBytes(iconChange.png)
+                    workspace.files.writeBytes("icon.png", iconChange.png)
                     val icons = JSONArray().put(JSONObject()
                         .put("src", "icon.png").put("sizes", "512x512").put("type", "image/png"))
                     json.put("icons", icons)
@@ -70,8 +70,8 @@ class AppIdentityManager(private val context: Context, private val record: Subap
             true
         } catch (_: Exception) {
             runCatching {
-                if (manifestBefore == null) workspace.deleteFile("manifest.json") else manifestFile.writeBytes(manifestBefore)
-                if (iconBefore == null) workspace.deleteFile("icon.png") else iconFile.writeBytes(iconBefore)
+                if (manifestBefore == null) manifestFile.delete() else workspace.files.writeBytes("manifest.json", manifestBefore)
+                if (iconBefore == null) workspace.deleteFile("icon.png") else workspace.files.writeBytes("icon.png", iconBefore)
             }
             false
         }
@@ -80,10 +80,7 @@ class AppIdentityManager(private val context: Context, private val record: Subap
     fun requestInstall(): Boolean {
         if (!ShortcutManagerCompat.isRequestPinShortcutSupported(context)) return false
         val config = load()
-        val iconFile = config.iconPath?.let(workspace::getFile)
-        val icon = iconFile?.takeIf { it.isFile }?.let {
-            runCatching { BitmapFactory.decodeFile(it.absolutePath)?.let(IconCompat::createWithBitmap) }.getOrNull()
-        } ?: appIcon()
+        val icon = SubappMetadataLoader.load(record.workspaceDir).icon?.let(IconCompat::createWithBitmap) ?: appIcon()
         return runCatching {
             ShortcutManagerCompat.requestPinShortcut(context, shortcut(config.name, icon), null)
         }.getOrDefault(false)
@@ -91,10 +88,7 @@ class AppIdentityManager(private val context: Context, private val record: Subap
 
     fun refreshPinnedShortcut() {
         val config = load()
-        val iconFile = config.iconPath?.let(workspace::getFile)
-        val icon = iconFile?.takeIf { it.isFile }?.let {
-            runCatching { BitmapFactory.decodeFile(it.absolutePath)?.let(IconCompat::createWithBitmap) }.getOrNull()
-        } ?: appIcon()
+        val icon = SubappMetadataLoader.load(record.workspaceDir).icon?.let(IconCompat::createWithBitmap) ?: appIcon()
         runCatching { ShortcutManagerCompat.updateShortcuts(context, listOf(shortcut(config.name, icon))) }
     }
 

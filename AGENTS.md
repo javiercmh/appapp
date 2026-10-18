@@ -33,6 +33,8 @@ The Kotlin namespace and installed Android application ID are both `com.wynh.app
 
 ---
 
+Current ownership and transaction rules: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Pending native checks: [docs/DEVICE_CHECKS.md](docs/DEVICE_CHECKS.md).
+
 ## 2. Workspace & Unified Directory Architecture
 
 Each saved app has an isolated internal directory:
@@ -191,7 +193,7 @@ Capabilities are granted per subapp by the user and stored natively outside ever
 | --- | --- | --- |
 | AI | Off | The first `ai.start` shows a native dialog naming the app, the provider, the data sent and the cost source. Allow stores the grant; Don't allow fails with code `permission`. At most 6 starts per app per minute (`usage_limit`). |
 | Notifications | Off | `showNotification`, `showNotificationWithId` and `scheduleNotification` return `false` and a native dialog asks once per page load; `hasNotificationPermission()` is `false` until granted and Android's own permission is also held. Scheduled alarms of an ungranted app are skipped and cancelled on revocation. |
-| Internet | Off | Pages get a `Content-Security-Policy` limiting loads to the app's own origin (plus `data:` and `blob:`), and any request to another host is answered `403` and logged to `app.log` as `[Network] Blocked`. Loopback, private and link-local hosts are refused even with the grant. Changes apply on the next app launch. |
+| Internet | Off | Pages get a `Content-Security-Policy` limiting loads to the app's own origin (plus `data:` and `blob:`), and any request to another host is answered `403` and logged to `app.log` as `[Network] Blocked`. Known local/private host names and literal addresses are filtered even with the grant. This is not complete local-network isolation; see `docs/ARCHITECTURE.md`. Changes apply on the next app launch. |
 
 Apps that existed before grants were introduced keep Internet (and Notifications when reminders were
 already scheduled); AI is never granted automatically. Users review and revoke every capability in
@@ -211,7 +213,7 @@ notifications (`showNotification` / `showNotificationWithId` / `cancelNotificati
 `requestExactNotificationPermission`)**.
 
 `setSelectionMenuSuppressed(Boolean)` hides Android's floating text-selection menu for the current
-page load (handles and selection events remain). Only action modes that contain the standard selection items (copy, cut, paste, select all, share) are emptied; other native menus are left alone. `MainActivity` and `SubappRuntimeActivity` reset it in `onPageStarted`.
+page load (handles and selection events remain). Only action modes that contain the standard selection items (copy, cut, paste, select all, share) are emptied; other native menus are left alone. `RuntimeSession` resets it in `onPageStarted` for both activities.
 
 `openNotificationSettings()` opens this app's notification screen (falling back to the app details
 page). It is the only route left for a user on API 26-32, where no runtime prompt exists, or one who
@@ -227,7 +229,7 @@ and never silently downgrades to an inexact alarm. API 26-30 can schedule exact 
 special access. Android may still throttle exact alarms while the device is idle, and force-stopping
 the app prevents delivery until it is opened again.
 
-`WebChromeClient.onShowFileChooser` is implemented in `MainActivity`, so `<input type="file">` works
+`WebChromeClient.onShowFileChooser` is implemented by the shared `RuntimeSession` and `RuntimeFileChooser`, so `<input type="file">` works
 inside the runtime web app. Pair it with `writeFileBase64` to persist a picked image as a real
 binary file that the current subapp's origin interceptor can then serve via `<img src="...">`.
 
@@ -237,7 +239,7 @@ binary file that the current subapp's origin interceptor can then serve via `<im
 
 - **Gradle Validation**: Use the checked-in Gradle Wrapper for CLI builds, or build/sync in Android Studio. First check `./gradlew --version` so the Gradle version and JVM are known; then run `./gradlew :app:assembleDebug`. Run `./gradlew test` or the relevant module task when JVM tests exist. Include `--warning-mode all` when diagnosing Gradle deprecations; fix the originating build logic/plugin rather than hiding warnings. Do not install or update Gradle outside the wrapper just to build this project.
 - **Persistence Verification**: When modifying storage logic, test by adding items, terminating the process, and verifying that state reloads identically on restart.
-- **History & Snapshots**: Verify that workspace snapshots are taken before "Run" and that snapshot restoration properly updates the editor and runtime.
+- **History & Snapshots**: Known UTF-8 text only; default four recent snapshots plus one baseline. Verify that workspace snapshots are taken before "Run" and that snapshot restoration properly updates the editor and runtime.
 - **Example App Device Tests**: `examples/<app>/` is source code in this repository; it is not automatically copied to an installed App² instance. Before reporting a device test, sync changed app-owned files to the selected app's `filesDir/subapps/<id>/workspace/`, compare source and device hashes, then relaunch that app. Never overwrite `data/`, `app.log`, or other user files just to test code. See `examples/working_hours/AGENTS.md` for the Working Hours sync procedure.
 - **Keyboard-Aware Bottom Bars**: Do not infer that the on-screen keyboard is open from input focus. On Android, use `app2:insets` event `detail.imeVisible`; a hardware keyboard can focus a text field while the IME remains hidden. For browser previews without the host event, compare the viewport height to its pre-keyboard baseline.
 
@@ -293,9 +295,9 @@ binary file that the current subapp's origin interceptor can then serve via `<im
 4. **MIME Resolution & Asset URLs**:
    - Each app's `https://<id>.app.local/` requests are intercepted from its own workspace. Ensure any new file types are registered in `WorkspaceManager.getMimeType()`.
 5. **Workspace Files & Nested Subdirectories**:
-   - `WorkspaceManager` and `NativeStorageBridge` support real nested subdirectories (e.g. `css/style.css`, `js/app.js`, `assets/images/photo.jpg`).
+   - `WorkspaceFiles`, `WorkspaceManager` and `NativeStorageBridge` support real nested subdirectories (e.g. `css/style.css`, `js/app.js`, `assets/images/photo.jpg`).
    - Slashes (`/`) are preserved for subdirectories, while path traversal (`..` escaping root) is strictly prevented. Parent directories are auto-created when writing files.
-   - Bridge file calls go through `workspace/BridgeWorkspaceFiles.kt`, which **rejects** unsafe paths
+   - Bridge file calls go through `workspace/WorkspaceFiles.kt`; `BridgeWorkspaceFiles` adds bridge caps. The shared validator **rejects** unsafe paths
      (empty, `..`, backslash, control characters, over-long paths/segments) and keeps the
      historical `_` mapping for other non-`[A-Za-z0-9._-]` characters so existing files stay
      reachable. It refuses symbolic links anywhere below the workspace root, checks
@@ -304,9 +306,9 @@ binary file that the current subapp's origin interceptor can then serve via `<im
      history, template and import writes are not subject to the quota.
 6. **Binary Files & History Snapshots**:
    - `WorkspaceHistoryManager` stores file contents as JSON strings, so binary assets would be
-     destroyed by a UTF-8 round-trip. `WorkspaceManager.isBinaryAsset()` excludes them from
-     snapshots and from both restore sweeps. Consequence: **images are not version-controlled**,
-     but a code rollback no longer corrupts `icon.png` or the user's photos.
+     destroyed by a UTF-8 round-trip. Only known UTF-8 text extensions are captured and restored; unknown and binary files stay untouched, and so does a text-extension file that is not valid UTF-8 (for example a Windows-1252 CSV): capture skips it and restore neither deletes nor overwrites it. Consequence: **images are not version-controlled**,
+     but a code rollback no longer corrupts `icon.png` or the user's photos. An unparseable `workspace_history.json` is renamed to `workspace_history.damaged-<time>.json` and a new list starts; never delete it.
+   - Destructive actions (delete, overwrite, restore, update, reset) still require their pre-action snapshot. Operations that replace code or data wholesale (restore, update, reset, delete) pass `replacement = true` to `WorkspaceOperations.reserve`/`WorkspaceActionController.execute`, which fences and reloads running pages; single-file saves, run snapshots, settings saves and backups do not.
 7. **Starter Template Assets Are Read As Text**:
    - `DefaultWebApp.getStarterFile()` decodes assets as UTF-8, so **never** place a binary file in
      `assets/starter_template/` — it would be silently corrupted at install time.

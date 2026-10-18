@@ -5,7 +5,6 @@ import java.io.IOException
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.LinkOption
-import java.nio.file.StandardOpenOption
 import java.util.Base64
 
 /**
@@ -38,13 +37,6 @@ object BridgeFileLimits {
 
     /** Total size of all regular files in one workspace after a bridge write completes. */
     const val WORKSPACE_QUOTA_BYTES = 512L * 1024 * 1024
-}
-
-/** Outcome of validating a bridge path. */
-sealed interface BridgePath {
-    /** [relative] is the normalized slash-separated path; [file] lies strictly inside the workspace. */
-    data class Valid(val relative: String, val file: File) : BridgePath
-    data class Invalid(val reason: String) : BridgePath
 }
 
 /**
@@ -125,7 +117,7 @@ class BridgeWorkspaceFiles(
     }
 
     fun exists(rawPath: String): Boolean {
-        val path = resolve(root, rawPath) as? BridgePath.Valid ?: return false
+        val path = WorkspaceFiles.resolve(root, rawPath) as? WorkspacePath.Valid ?: return false
         return Files.isRegularFile(path.file.toPath(), LinkOption.NOFOLLOW_LINKS)
     }
 
@@ -139,7 +131,7 @@ class BridgeWorkspaceFiles(
             log("[Storage] Deleted file '${path.relative}': true")
             val rootFile = root.canonicalFile
             var parent = path.file.parentFile
-            while (parent != null && parent != rootFile && isStrictlyInside(rootFile.path, parent.path)) {
+            while (parent != null && parent != rootFile && WorkspaceFiles.isStrictlyInside(rootFile.path, parent.path)) {
                 val children = parent.list()
                 if (children == null || children.isNotEmpty() || !parent.delete()) break
                 parent = parent.parentFile
@@ -152,20 +144,20 @@ class BridgeWorkspaceFiles(
     }
 
     /** Regular files in the workspace, without following symbolic links. */
-    fun list(): List<WorkspaceEntry> = regularFiles(root).map { file ->
+    fun list(): List<WorkspaceEntry> = WorkspaceFiles.regularFiles(root).map { file ->
         WorkspaceEntry(file.relativeTo(root).invariantSeparatorsPath, file.length(), file.lastModified())
     }.toList()
 
     data class WorkspaceEntry(val name: String, val size: Long, val lastModified: Long)
 
-    private fun store(path: BridgePath.Valid, bytes: ByteArray): Boolean {
+    private fun store(path: WorkspacePath.Valid, bytes: ByteArray): Boolean {
         val target = path.file.toPath()
         return try {
             if (Files.isDirectory(target, LinkOption.NOFOLLOW_LINKS)) {
                 return refuse("write", path.relative, "a directory exists at this path")
             }
             val existing = if (Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS)) Files.size(target) else 0L
-            val usage = usedBytes(root)
+            val usage = WorkspaceFiles.usedBytes(root)
             if (usage - existing + bytes.size > BridgeFileLimits.WORKSPACE_QUOTA_BYTES) {
                 return refuse(
                     "write", path.relative,
@@ -177,11 +169,7 @@ class BridgeWorkspaceFiles(
                     return refuse("write", path.relative, "could not create parent directory")
                 }
             }
-            Files.newOutputStream(
-                target,
-                StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE,
-                LinkOption.NOFOLLOW_LINKS
-            ).use { it.write(bytes) }
+            WorkspaceFiles(root).writeBytes(path.relative, bytes)
             true
         } catch (e: Exception) {
             log("[Storage Error] Failed to write file '${path.relative}': ${e.message}")
@@ -189,7 +177,7 @@ class BridgeWorkspaceFiles(
         }
     }
 
-    private fun load(path: BridgePath.Valid, maxBytes: Long): ByteArray? {
+    private fun load(path: WorkspacePath.Valid, maxBytes: Long): ByteArray? {
         val target = path.file.toPath()
         return try {
             if (!Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS)) {
@@ -201,118 +189,25 @@ class BridgeWorkspaceFiles(
                 log("[Storage Error] '${path.relative}' is $size bytes; exceeds read cap of $maxBytes bytes")
                 return null
             }
-            Files.newInputStream(target, LinkOption.NOFOLLOW_LINKS).use { input ->
-                val bytes = input.readBytes()
-                if (bytes.size > maxBytes) {
-                    log("[Storage Error] '${path.relative}' grew past the read cap of $maxBytes bytes")
-                    null
-                } else bytes
-            }
+            WorkspaceFiles(root).readBytes(path.relative, maxBytes)
         } catch (e: Exception) {
             log("[Storage Error] Failed to read file '${path.relative}': ${e.message}")
             null
         }
     }
 
-    private fun resolveOrLog(operation: String, rawPath: String): BridgePath.Valid? =
-        when (val result = resolve(root, rawPath)) {
-            is BridgePath.Valid -> result
-            is BridgePath.Invalid -> {
+    private fun resolveOrLog(operation: String, rawPath: String): WorkspacePath.Valid? =
+        when (val result = WorkspaceFiles.resolve(root, rawPath)) {
+            is WorkspacePath.Valid -> result
+            is WorkspacePath.Invalid -> {
                 refuse(operation, rawPath, result.reason)
                 null
             }
         }
 
     private fun refuse(operation: String, rawPath: String, reason: String): Boolean {
-        log("[Storage Error] Refused $operation of '${printable(rawPath)}': $reason")
+        log("[Storage Error] Refused $operation of '${WorkspaceFiles.printable(rawPath)}': $reason")
         return false
     }
 
-    companion object {
-        private val UNSAFE_CHARACTER = Regex("[^A-Za-z0-9._-]")
-
-        /**
-         * Validates a bridge path and returns its normalized form, without touching the disk.
-         * Returns null and reports the reason through [onInvalid] when the path is rejected.
-         */
-        fun normalize(rawPath: String, onInvalid: (String) -> Unit = {}): String? {
-            fun invalid(reason: String): String? { onInvalid(reason); return null }
-            if (rawPath.isEmpty()) return invalid("empty path")
-            if (rawPath.length > BridgeFileLimits.MAX_PATH_CHARS) {
-                return invalid("path exceeds ${BridgeFileLimits.MAX_PATH_CHARS} characters")
-            }
-            rawPath.forEach { c ->
-                if (c == '\u0000' || Character.isISOControl(c)) return invalid("control character in path")
-                if (c == '\\') return invalid("backslash in path")
-            }
-            if (rawPath.endsWith('/')) return invalid("path ends with a slash")
-            // Characters outside the safe set keep their historical mapping to `_`, so files that
-            // existing subapps saved under names with spaces or non-ASCII letters stay reachable.
-            val segments = rawPath.split('/')
-                .map { it.trim().replace(UNSAFE_CHARACTER, "_") }
-                .filter { it.isNotEmpty() && it != "." }
-            if (segments.isEmpty()) return invalid("empty path")
-            if (segments.size > BridgeFileLimits.MAX_SEGMENTS) {
-                return invalid("path nests deeper than ${BridgeFileLimits.MAX_SEGMENTS} segments")
-            }
-            for (segment in segments) {
-                if (segment == "..") return invalid("parent-directory segment")
-                if (segment.length > BridgeFileLimits.MAX_SEGMENT_CHARS) {
-                    return invalid("segment exceeds ${BridgeFileLimits.MAX_SEGMENT_CHARS} characters")
-                }
-            }
-            return segments.joinToString("/")
-        }
-
-        /**
-         * Validates [rawPath] against [root]: syntax via [normalize], no symbolic link at any
-         * existing component below the root, and canonical containment on a path boundary.
-         */
-        fun resolve(root: File, rawPath: String): BridgePath {
-            var reason = ""
-            val relative = normalize(rawPath) { reason = it } ?: return BridgePath.Invalid(reason)
-            return try {
-                val rootFile = root.canonicalFile
-                var current = rootFile
-                for (segment in relative.split('/')) {
-                    current = File(current, segment)
-                    if (Files.isSymbolicLink(current.toPath())) {
-                        return BridgePath.Invalid("symbolic link in path")
-                    }
-                }
-                if (!isStrictlyInside(rootFile.path, current.canonicalPath)) {
-                    return BridgePath.Invalid("path resolves outside the workspace")
-                }
-                BridgePath.Valid(relative, current)
-            } catch (e: Exception) {
-                BridgePath.Invalid("path could not be resolved (${e.message})")
-            }
-        }
-
-        /** True when [candidate] is a descendant of [root]; both must be canonical paths. */
-        fun isStrictlyInside(root: String, candidate: String): Boolean {
-            val prefix = if (root.endsWith(File.separator)) root else root + File.separator
-            return candidate.length > prefix.length && candidate.startsWith(prefix)
-        }
-
-        /** True when [candidate] is [root] itself or a descendant; both must be canonical paths. */
-        fun isWithin(root: String, candidate: String): Boolean =
-            candidate == root || isStrictlyInside(root, candidate)
-
-        /** Regular files below [root], skipping symbolic links and never descending through one. */
-        fun regularFiles(root: File): Sequence<File> {
-            if (!root.isDirectory) return emptySequence()
-            return root.walkTopDown()
-                .onEnter { it == root || !Files.isSymbolicLink(it.toPath()) }
-                .filter { Files.isRegularFile(it.toPath(), LinkOption.NOFOLLOW_LINKS) }
-        }
-
-        /** Bytes held by regular files in the workspace, as counted against the quota. */
-        fun usedBytes(root: File): Long = regularFiles(root).sumOf { it.length() }
-
-        private fun printable(rawPath: String): String {
-            val clipped = if (rawPath.length > 120) rawPath.take(120) + "..." else rawPath
-            return clipped.map { if (Character.isISOControl(it)) '?' else it }.joinToString("")
-        }
-    }
 }

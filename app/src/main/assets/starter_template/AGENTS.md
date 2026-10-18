@@ -248,7 +248,7 @@ The user grants capabilities to each app in the library (app menu → Permission
 - **Notifications**: `showNotification`, `showNotificationWithId` and `scheduleNotification` return
   `false` and the host asks the user. `hasNotificationPermission()` stays `false` until allowed.
 - **Internet**: the app runs offline. Everything must come from files in the workspace; remote
-  scripts, fonts, images, `fetch`, WebSockets and links to private-network addresses are blocked
+  scripts, fonts, images, `fetch` and WebSockets are blocked without the grant
   (the reason is written to `app.log`). Bundle libraries and assets inside the app instead. Apps that
   truly need web APIs ask the user to enable Internet in Permissions; it applies on the next launch.
 
@@ -452,3 +452,14 @@ translateButton.addEventListener('click', async () => {
 ```
 
 Existing workspaces must explicitly adopt the updated `js/bridge.js` to use this API.
+
+
+## Workspace operation guarantees
+
+Native text and binary file replacements are atomic: a failed write keeps the previous file. Paths use the same validator in the editor, asset server, and bridge. Temporary names starting with `.app2-write-` are reserved. Existing size limits and public return values are unchanged.
+
+During native save, restore, backup capture, or update operations, the affected document's file calls can return their existing failure values. Keep unsaved content and offer deliberate retry. App² reloads the affected runtime after the operation; a document from an earlier generation cannot write into the replacement workspace. Do not automatically repeat inference.
+
+Text version history covers known UTF-8 text formats only. Binary and unknown files, and files with a text extension that are not valid UTF-8, remain untouched on text-history restore; use full-library backup for all workspace bytes. Preview and standalone execution share single/multiple file selection and renderer recovery.
+
+Internet-granted apps have broad web networking. Known local/private host names and literal IP addresses are filtered, but this is not complete isolation against DNS, redirect, or other networking paths. Do not treat the host's filter as a complete network sandbox.

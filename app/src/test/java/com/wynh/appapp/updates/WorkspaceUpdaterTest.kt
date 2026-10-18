@@ -155,4 +155,14 @@ class WorkspaceUpdaterTest {
         assertEquals("other.publisher", engine.installed()!!.appId)
         assertNull(engine.identityMismatch(renamed))
     }
+    @Test fun permissionResetFailureCannotPublishNewCode() {
+        val root = workspace(); val engine = WorkspaceUpdater(root); val (pkg, files) = packageFiles("1")
+        val result = runCatching { engine.install(pkg, files, sha1, 3, beforeActivation = { error("permission store failed") }) }
+        assertTrue(result.isFailure)
+        assertEquals("old", File(root, "workspace/index.html").readText())
+        assertEquals("saved stories", File(root, "workspace/data/stories.json").readText())
+        assertNull(engine.installed())
+        engine.recover()
+        assertFalse(File(root, "update-next").exists())
+    }
 }

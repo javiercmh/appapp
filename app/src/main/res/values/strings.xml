@@ -33,7 +33,6 @@
     <string name="action_share_zip">Share ZIP</string>
     <string name="action_save_zip">Save to Device</string>
     <string name="export_no_files_selected">Please select at least one file to export.</string>
-    <string name="export_success">Exported %1$d files to ZIP</string>
     <string name="action_deploy">Deploy to Home Screen</string>
     <string name="action_install">Install</string>
     <string name="shortcut_request_failed">Could not open the home screen shortcut prompt on this device.</string>
@@ -60,7 +59,6 @@
     <string name="action_search">Search</string>
     <string name="file_saved_toast">Saved \'%1$s\'</string>
     <string name="config_saved_toast">App configuration updated</string>
-    <string name="app_reloaded">App reloaded successfully!</string>
     <string name="crop_image_title">Crop App Icon</string>
     <string name="crop_image_apply">Crop &amp; Set Icon</string>
     <string name="delete_file_confirm">Delete \'%1$s\'? This action cannot be undone.</string>
@@ -108,8 +106,6 @@
     <string name="library_subtitle">A home for the apps you make. Long press an app to reorder.</string>
     <string name="library_move_up">Move app up</string>
     <string name="library_move_down">Move app down</string>
-    <string name="library_reorder_failed">Could not save app order</string>
-    <string name="library_configure_save_failed">Could not save app configuration. Your changes are still available to retry.</string>
     <string name="library_new">New app</string>
     <string name="library_import">Import</string>
     <string name="library_import_zip">ZIP file</string>
@@ -121,8 +117,6 @@
     <string name="library_github_hint">https://github.com/owner/repo or a folder link</string>
     <string name="library_github_instructions">Paste a public GitHub repository link to import its root, or a folder link to import that folder. The selected location must contain index.html.</string>
     <string name="library_github_required">Enter a GitHub folder URL</string>
-    <string name="library_github_downloading">Downloading app from GitHub…</string>
-    <string name="library_imported_app">Imported %1$s</string>
     <string name="library_open">Open</string>
     <string name="library_configure">Configure app</string>
     <string name="library_install">Add to home screen</string>
@@ -170,4 +164,33 @@
     <string name="library_permission_network">Internet (contact other websites; apps without it can only use their own files; applies the next time the app opens)</string>
     <string name="library_import_offline_note">Imported apps run offline. Allow Internet in the app menu → Permissions if it needs it.</string>
     <string name="library_permissions_done">Done</string>
+    <string name="runtime_stopped_title">App stopped</string>
+    <string name="runtime_stopped_message">The web renderer stopped. Your workspace files are kept. Reload to open the app again.</string>
+    <string name="runtime_reload">Reload app</string>
+    <string name="library_recovery_title">Library needs recovery</string>
+    <string name="library_recovery_message">The app list could not be read. Your app directories are kept. Recover the list from those directories or retry reading it.</string>
+    <string name="library_recover">Recover library</string>
+    <string name="workspace_working">Working…</string>
+    <string name="workspace_failed">Operation failed</string>
+    <string name="history_restored">Version restored</string>
+    <string name="editor_cannot_read">This file could not be opened as UTF-8 text. Its contents were kept.</string>
+    <string name="library_open_runner">Open library</string>
+    <string name="update_permission_reset">AI, Internet, and notification permissions are reset when publisher code changes. AI and notifications will ask again. Enable Internet in the library’s Permissions if needed. Scheduled reminders stop until notifications are allowed again.</string>
+    <string name="library_task_reorder">Saving app order…</string>
+    <string name="library_task_delete">Deleting app…</string>
+    <string name="library_task_recover">Recovering library…</string>
+    <string name="library_task_create">Creating app…</string>
+    <string name="library_task_zip">Importing app…</string>
+    <string name="library_task_github">Downloading app…</string>
+    <string name="library_task_export">Exporting app…</string>
+    <string name="library_deleted_notice">App deleted</string>
+    <string name="library_recovered_notice">Library recovered</string>
+    <string name="library_created_notice">App created</string>
+    <string name="library_packaged_notice">App packaged</string>
+    <string name="library_exported_notice">App exported</string>
+    <string name="library_import_cancelled">Import cancelled</string>
+    <string name="library_import_cancelling">Cancelling import…</string>
+    <string name="library_load_failed">Could not read library</string>
+    <string name="workspace_operation_failed">Operation failed</string>
+    <string name="library_delete_failed">Could not delete app</string>
 </resources>

@@ -113,11 +113,9 @@ object WorkspacePackageManager {
     ): Result<List<String>> = synchronized(com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(workspaceManager.workspaceDir)) {
         return@synchronized try {
             // 1. Capture pre-import snapshot
-            if (savePreImportSnapshot) historyManager.saveSnapshot(workspaceManager, "Pre-Import Backup")
+            if (savePreImportSnapshot) check(historyManager.saveSnapshot(workspaceManager, "Pre-Import Backup") != null) { "Could not save pre-import history" }
             // 2. Extract, validate and atomically replace the workspace
             val importedFileNames = replaceFromZip(inputStream, workspaceManager.workspaceDir)
-            // Ensure core entry point index.html exists
-            workspaceManager.ensureWorkspaceInitialized()
             Result.success(importedFileNames)
         } catch (e: Exception) {
             Result.failure(e)
@@ -132,47 +130,19 @@ object WorkspacePackageManager {
         val timeoutMillis: Long = 60_000
     )
 
-    private fun staging(workspaceDir: File) = File(workspaceDir.parentFile, "workspace_import_staging")
-    private fun previous(workspaceDir: File) = File(workspaceDir.parentFile, "workspace_import_old")
-
-    /**
-     * Replaces [workspaceDir] with the archive contents only after the whole archive validates.
-     * The old workspace is renamed aside and restored if activation fails. Caller holds the workspace lock.
-     */
     internal fun replaceFromZip(
         inputStream: InputStream,
         workspaceDir: File,
         limits: ZipLimits = ZipLimits(),
         rename: (File, File) -> Boolean = File::renameTo
     ): List<String> {
-        recoverImport(workspaceDir)
-        val staged = staging(workspaceDir)
-        val old = previous(workspaceDir)
-        try {
-            check(staged.mkdirs()) { "Could not create import staging" }
-            val importedFileNames = extractZip(inputStream, staged, limits)
-            require(importedFileNames.isNotEmpty()) { "The selected ZIP file contains no readable project files." }
+        var imported = emptyList<String>()
+        WorkspaceOperations.replace(workspaceDir, rename) { staged ->
+            imported = extractZip(inputStream, staged, limits)
+            require(imported.isNotEmpty()) { "The selected ZIP file contains no readable project files." }
             require(File(staged, "index.html").isFile) { "ZIP must contain index.html at its root" }
-            if (workspaceDir.exists()) check(rename(workspaceDir, old)) { "Could not move old workspace aside" }
-            try {
-                check(rename(staged, workspaceDir)) { "Could not activate imported workspace" }
-            } catch (e: Exception) {
-                if (old.exists() && !workspaceDir.exists()) old.renameTo(workspaceDir)
-                throw e
-            }
-            old.deleteRecursively()
-            return importedFileNames
-        } finally {
-            staged.deleteRecursively()
         }
-    }
-
-    /** Restores a workspace left aside by an interrupted swap and removes stale import directories. */
-    internal fun recoverImport(workspaceDir: File) {
-        val old = previous(workspaceDir)
-        if (old.exists() && !workspaceDir.exists()) check(old.renameTo(workspaceDir)) { "Could not restore workspace after interrupted import" }
-        old.deleteRecursively()
-        staging(workspaceDir).deleteRecursively()
+        return imported
     }
 
     /** Extracts into an empty [destination], bounding inflated bytes of every entry and elapsed time. */

@@ -3,7 +3,6 @@ package com.wynh.appapp.updates
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import android.widget.LinearLayout
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -18,7 +17,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 /** Shared native review flow for library, editor and web callers. */
-class UpdateController(private val activity: AppCompatActivity, private val record: SubappRecord, private val finished: () -> Unit = {}) {
+class UpdateController(private val activity: AppCompatActivity, private val record: SubappRecord) {
     private val updater = WorkspaceUpdater(record.directory)
     private val ai get() = (activity.application as AppAiApplication).ai
     private val hostVersion get() = androidx.core.content.pm.PackageInfoCompat.getLongVersionCode(activity.packageManager.getPackageInfo(activity.packageName, 0))
@@ -84,37 +83,34 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
                     append("\nUser records and unowned files are preserved.\n")
                     if (preview.edited.isNotEmpty()) append("\n${preview.edited.size} locally edited or missing code files will be replaced by publisher files.\n")
                     append("\nThe current and updated versions will be saved in Edit → Version history. A recovery backup will also be created.")
-                    append("\n\nAI and notification permissions are reset because the app code changes. The app will ask again; scheduled reminders stop until notifications are allowed again.")
+                    append("\n\n"); append(activity.getString(com.wynh.appapp.R.string.update_permission_reset))
                 }
+                var accepted = false
                 MaterialAlertDialogBuilder(activity).setTitle("Review app update").setMessage(text)
                     .setPositiveButton(if (mismatch != null) "Accept and update" else if (preview.adoption) "Link and update" else "Update") { _, _ ->
-                        applyUpdate("GitHub update ${value.pkg.version} · ${value.commit.take(12)}") { updater.install(value.pkg, value.directory, value.commit, hostVersion, reviewed, acceptMismatch = mismatch != null) }
-                        value.directory.deleteRecursively()
+                        accepted = true
+                        applyUpdate("GitHub update ${value.pkg.version} · ${value.commit.take(12)}", value.directory) { updater.install(value.pkg, value.directory, value.commit, hostVersion, reviewed, acceptMismatch = mismatch != null,
+                            beforeActivation = { com.wynh.appapp.grants.SubappGrants.resetAfterCodeChange(activity.applicationContext, record.id) }) }
                     }.setNegativeButton("Cancel", null)
-                    .setOnDismissListener { value.directory.deleteRecursively() }.show()
+                    .setOnDismissListener { if (!accepted) value.directory.deleteRecursively() }.show()
             } catch (e: Exception) { progress.dismiss(); download?.directory?.deleteRecursively(); error(e) }
         }
     }
 
-    private fun applyUpdate(label: String, operation: () -> Unit) {
-        try {
-            require(!ai.hasRequest(record.id)) { "Finish and save or cancel the AI request before updating." }
-            // Keep the UI thread occupied during the short local transaction so editors cannot race it.
-            SubappSessionRegistry.pause(record.id)
-            try {
-                synchronized(WorkspaceLocks.forWorkspace(record.workspaceDir)) {
-                    val workspace = WorkspaceManager(activity, workspaceDir = record.workspaceDir)
-                    val history = WorkspaceHistoryManager(activity, appDirectory = record.directory)
-                    history.ensureInitialVersion(workspace)
-                    check(history.saveSnapshot(workspace, "Before $label") != null) { "Could not save version history; update cancelled" }
-                    operation()
-                    // New publisher code must ask for capabilities again, even if the snapshot below fails.
-                    try { check(history.saveSnapshot(workspace, label) != null) { "App updated, but version history could not be saved" } }
-                    finally { com.wynh.appapp.grants.SubappGrants.resetAfterCodeChange(activity, record.id) }
-                }
-            } finally { SubappSessionRegistry.resume(record.id) }
-            Toast.makeText(activity, "App code updated; user files preserved", Toast.LENGTH_LONG).show()
-            finished()
-        } catch (e: Exception) { error(e) }
+    private fun applyUpdate(label: String, staged: File, operation: () -> Unit) {
+        if (ai.hasRequest(record.id)) { staged.deleteRecursively(); error(IllegalStateException("Finish and save or cancel the AI request before updating.")); return }
+        if (com.wynh.appapp.workspace.WorkspaceOperations.isBusy(record.workspaceDir)) {
+            staged.deleteRecursively(); error(IllegalStateException("A workspace operation is already in progress.")); return
+        }
+        val controller = androidx.lifecycle.ViewModelProvider(activity)[com.wynh.appapp.workspace.WorkspaceActionController::class.java]
+        // The controller deletes the staged download whether the operation ran, failed or was refused;
+        // the screen that shows the result is whichever one is started when it finishes.
+        controller.execute(record, label, completion = com.wynh.appapp.workspace.WorkspaceActionController.Completion(com.wynh.appapp.workspace.WorkspaceActionController.Kind.UPDATED),
+            cleanup = { staged.deleteRecursively() }) { workspace, history ->
+            history.ensureInitialVersion(workspace)
+            check(history.saveSnapshot(workspace, "Before $label") != null) { "Could not save version history; update cancelled" }
+            operation()
+            check(history.saveSnapshot(workspace, label) != null) { "App updated, but version history could not be saved" }
+        }
     }
 }

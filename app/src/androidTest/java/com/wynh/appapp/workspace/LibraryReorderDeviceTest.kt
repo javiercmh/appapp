@@ -186,6 +186,14 @@ class LibraryReorderDeviceTest {
             val action = info.actionList.first { it.label?.toString() == activity.getString(R.string.library_move_down) }
             assertTrue(card.performAccessibilityAction(action.id, null))
         }
+        // Accessibility actions enqueue persistence on I/O; main-loop idleness is not completion.
+        val deadline = SystemClock.uptimeMillis() + 10_000
+        var busy = true
+        while (busy && SystemClock.uptimeMillis() < deadline) {
+            scenario.onActivity { activity -> busy = androidx.lifecycle.ViewModelProvider(activity)[LibraryController::class.java].task.value.busy }
+            if (busy) SystemClock.sleep(20)
+        }
+        assertFalse("Reorder did not finish", busy)
         assertEquals(listOf(records[1].id, records[0].id), repository.list().take(2).map { it.id })
     }
 }

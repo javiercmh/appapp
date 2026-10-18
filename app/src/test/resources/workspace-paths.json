@@ -1,0 +1,66 @@
+[
+  {
+    "input": "data/entries.json",
+    "normalized": "data/entries.json"
+  },
+  {
+    "input": "/data/entries.json",
+    "normalized": "data/entries.json"
+  },
+  {
+    "input": "./data/entries.json",
+    "normalized": "data/entries.json"
+  },
+  {
+    "input": "data//./x.json",
+    "normalized": "data/x.json"
+  },
+  {
+    "input": "my file.json",
+    "normalized": "my_file.json"
+  },
+  {
+    "input": "café.json",
+    "normalized": "caf_.json"
+  },
+  {
+    "input": "%2e%2e/x",
+    "normalized": "_2e_2e/x"
+  },
+  {
+    "input": "../outside",
+    "normalized": null
+  },
+  {
+    "input": "a/../x",
+    "normalized": null
+  },
+  {
+    "input": "data\\x",
+    "normalized": null
+  },
+  {
+    "input": "x\n.json",
+    "normalized": null
+  },
+  {
+    "input": "data/",
+    "normalized": null
+  },
+  {
+    "input": "",
+    "normalized": null
+  },
+  {
+    "input": ".app2-write-secret",
+    "normalized": null
+  },
+  {
+    "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "normalized": null
+  },
+  {
+    "input": "a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a",
+    "normalized": null
+  }
+]

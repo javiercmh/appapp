@@ -35,6 +35,10 @@ class NativeStorageBridge(
     private val onRequestNotificationPermission: (() -> Unit)? = null,
     private val onSetSelectionMenuSuppressed: ((Boolean) -> Unit)? = null
 ) {
+    @Volatile private var workspaceVersion = com.wynh.appapp.workspace.WorkspaceOperations.version(appWorkspaceDir)
+    private fun workspaceUnavailable(): Boolean = com.wynh.appapp.workspace.WorkspaceOperations.isBusy(appWorkspaceDir) ||
+        workspaceVersion != com.wynh.appapp.workspace.WorkspaceOperations.version(appWorkspaceDir)
+
     private val sharedPrefs: SharedPreferences =
         context.getSharedPreferences("runtime_app_state_$subappId", Context.MODE_PRIVATE)
 
@@ -128,7 +132,9 @@ class NativeStorageBridge(
     private fun bridgeFiles() = BridgeWorkspaceFiles(workspaceDir, ::log)
 
     fun writeFile(fileName: String, content: String): Boolean {
+        if (workspaceUnavailable()) return false
         return synchronized(com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(appWorkspaceDir)) {
+            if (workspaceUnavailable()) return@synchronized false
             try {
                 bridgeFiles().writeText(fileName, content)
             } catch (e: Exception) {
@@ -139,7 +145,9 @@ class NativeStorageBridge(
     }
 
     fun readFile(fileName: String): String {
+        if (workspaceUnavailable()) return ""
         return synchronized(com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(appWorkspaceDir)) {
+            if (workspaceUnavailable()) return@synchronized ""
             try {
                 bridgeFiles().readText(fileName)
             } catch (e: Exception) {
@@ -158,7 +166,9 @@ class NativeStorageBridge(
      * simply reference it: `<img src="assets/photo_123.jpg">`.
      */
     fun writeFileBase64(fileName: String, base64: String): Boolean {
+        if (workspaceUnavailable()) return false
         return synchronized(com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(appWorkspaceDir)) {
+            if (workspaceUnavailable()) return@synchronized false
             try {
                 bridgeFiles().writeBase64(fileName, base64)
             } catch (e: Exception) {
@@ -173,7 +183,9 @@ class NativeStorageBridge(
      * Encoded without line wrapping so the result is safe to hand to `atob()` or embed in a `data:` URL.
      */
     fun readFileBase64(fileName: String): String {
+        if (workspaceUnavailable()) return ""
         return synchronized(com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(appWorkspaceDir)) {
+            if (workspaceUnavailable()) return@synchronized ""
             try {
                 bridgeFiles().readBase64(fileName)
             } catch (e: Exception) {
@@ -184,7 +196,9 @@ class NativeStorageBridge(
     }
 
     fun fileExists(fileName: String): Boolean {
+        if (workspaceUnavailable()) return false
         return synchronized(com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(appWorkspaceDir)) {
+            if (workspaceUnavailable()) return@synchronized false
             try {
                 bridgeFiles().exists(fileName)
             } catch (_: Exception) {
@@ -194,7 +208,9 @@ class NativeStorageBridge(
     }
 
     fun deleteFile(fileName: String): Boolean {
+        if (workspaceUnavailable()) return false
         return synchronized(com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(appWorkspaceDir)) {
+            if (workspaceUnavailable()) return@synchronized false
             try {
                 bridgeFiles().delete(fileName)
             } catch (e: Exception) {
@@ -205,7 +221,9 @@ class NativeStorageBridge(
     }
 
     fun listFiles(): String {
+        if (workspaceUnavailable()) return "[]"
         return synchronized(com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(appWorkspaceDir)) {
+            if (workspaceUnavailable()) return@synchronized "[]"
             try {
                 val jsonArray = JSONArray()
                 for (entry in bridgeFiles().list()) {
@@ -226,7 +244,9 @@ class NativeStorageBridge(
     // --- Storage & System Telemetry ---
 
     fun getStorageStats(): String {
+        if (workspaceUnavailable()) return "{}"
         return synchronized(com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(appWorkspaceDir)) {
+            if (workspaceUnavailable()) return@synchronized "{}"
             val filesDir = context.filesDir
             val freeSpace = filesDir.freeSpace
             val totalSpace = filesDir.totalSpace
@@ -235,7 +255,7 @@ class NativeStorageBridge(
             var appFilesBytes = 0L
             var appFilesCount = 0
             if (workspaceDir.exists()) {
-                for (f in workspaceDir.walkTopDown().filter { it.isFile }) {
+                for (f in com.wynh.appapp.workspace.WorkspaceFiles.regularFiles(workspaceDir)) {
                     appFilesBytes += f.length()
                     appFilesCount++
                 }
@@ -293,7 +313,10 @@ class NativeStorageBridge(
     @Volatile private var notificationGrantAsked = false
 
     /** Call from the WebView's onPageStarted: each page load may ask for the grant once. */
-    fun pageStarted() { notificationGrantAsked = false }
+    fun pageStarted() {
+        workspaceVersion = com.wynh.appapp.workspace.WorkspaceOperations.version(appWorkspaceDir)
+        notificationGrantAsked = false
+    }
 
     /**
      * Shows the native grant dialog on the UI thread, at most once per page load, so a script

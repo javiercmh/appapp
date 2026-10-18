@@ -4,12 +4,49 @@ import argparse
 import base64
 import binascii
 import json
+import os
+import re
+import tempfile
 import shutil
 import time
 import uuid
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
+
+
+MAX_TEXT_BYTES = 16 * 1024 * 1024
+MAX_BINARY_BYTES = 6 * 1024 * 1024
+WORKSPACE_QUOTA_BYTES = 512 * 1024 * 1024
+
+
+def normalize_workspace_path(name):
+    if not name or len(name.encode('utf-16-le')) // 2 > 512 or name.endswith('/'):
+        raise PermissionError('Invalid workspace path')
+    if '\\' in name or any(ord(c) < 32 or 127 <= ord(c) <= 159 for c in name):
+        raise PermissionError('Invalid workspace path')
+    parts = [re.sub(r'[^A-Za-z0-9._-]', '_', p.strip()) for p in name.split('/')]
+    parts = [p for p in parts if p and p != '.']
+    if not parts or len(parts) > 16 or any(p == '..' or len(p) > 255 or p.startswith('.app2-write-') for p in parts):
+        raise PermissionError('Invalid workspace path')
+    return '/'.join(parts)
+
+
+def atomic_write(path, content, before_publish=None):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=path.parent, prefix='.app2-write-', delete=False) as output:
+            temporary = Path(output.name)
+            output.write(content)
+            output.flush()
+            os.fsync(output.fileno())
+        if before_publish:
+            before_publish()
+        os.replace(temporary, path)
+    finally:
+        if temporary:
+            temporary.unlink(missing_ok=True)
 
 
 class DevServer(HTTPServer):
@@ -52,13 +89,19 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_error(403)
 
     def workspace_path(self, name):
-        relative = Path(name)
-        if not name or relative.is_absolute() or '..' in relative.parts:
-            raise PermissionError('Invalid workspace path')
-        path = (self.server.workspace / relative).resolve()
-        if path == self.server.workspace or not path.is_relative_to(self.server.workspace):
+        relative = normalize_workspace_path(name)
+        path = self.server.workspace
+        for part in relative.split('/'):
+            path = path / part
+            if path.is_symlink():
+                raise PermissionError('Symbolic link in workspace path')
+        if not path.resolve().is_relative_to(self.server.workspace):
             raise PermissionError('Path escapes workspace')
         return path
+
+    def translate_path(self, path):
+        name = unquote(urlsplit(path).path).lstrip('/')
+        return str(self.workspace_path(name)) if name else str(self.server.workspace)
 
     def reply(self, value, status=200, raw=False):
         content = value.encode('utf-8') if raw else json.dumps(value).encode('utf-8')
@@ -71,7 +114,7 @@ class Handler(SimpleHTTPRequestHandler):
     def files(self):
         result = []
         for path in sorted(self.server.workspace.rglob('*')):
-            if path.is_file() and path.resolve().is_relative_to(self.server.workspace):
+            if path.is_file() and not path.name.startswith('.app2-write-') and not any(p.is_symlink() for p in [path, *path.parents] if p != self.server.workspace) and path.resolve().is_relative_to(self.server.workspace):
                 stat = path.stat()
                 result.append(dict(name=path.relative_to(self.server.workspace).as_posix(),
                                    size=stat.st_size, lastModified=int(stat.st_mtime * 1000)))
@@ -121,6 +164,8 @@ class Handler(SimpleHTTPRequestHandler):
             if action in {'readFile', 'writeFile', 'writeFileBase64', 'deleteFile'}:
                 path = self.workspace_path(param('name'))
                 if action == 'readFile' and not post:
+                    if path.is_file() and path.stat().st_size > MAX_TEXT_BYTES:
+                        raise ValueError('File exceeds text read limit')
                     return self.reply(path.read_text('utf-8') if path.is_file() else '', raw=True)
                 if action == 'deleteFile' and post:
                     path.unlink(missing_ok=True)
@@ -136,7 +181,14 @@ class Handler(SimpleHTTPRequestHandler):
                     else:
                         body.decode('utf-8')
                     path.parent.mkdir(parents=True, exist_ok=True)
-                    path.write_bytes(body)
+                    limit = MAX_BINARY_BYTES if action == 'writeFileBase64' else MAX_TEXT_BYTES
+                    if len(body) > limit:
+                        raise ValueError('File exceeds write limit')
+                    used = sum(item['size'] for item in self.files())
+                    existing = path.stat().st_size if path.is_file() else 0
+                    if used - existing + len(body) > WORKSPACE_QUOTA_BYTES:
+                        raise ValueError('Workspace quota exceeded')
+                    atomic_write(path, body)
                     return self.reply(True)
             if action in {'loadState', 'saveState', 'removeState'}:
                 path = self.workspace_path('data/dev-preferences.json')
@@ -149,7 +201,7 @@ class Handler(SimpleHTTPRequestHandler):
                     else:
                         prefs.pop(param('key'), None)
                     path.parent.mkdir(parents=True, exist_ok=True)
-                    path.write_text(json.dumps(prefs, indent=2), 'utf-8')
+                    atomic_write(path, json.dumps(prefs, indent=2).encode('utf-8'))
                     return self.reply(True)
             if action == 'listFiles' and not post:
                 return self.reply(self.files())

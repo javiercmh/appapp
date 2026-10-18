@@ -59,7 +59,7 @@ class WorkspaceUpdater(private val directory: File) {
         }
     }
 
-    fun install(pkg: UpdatePackage, files: File, commit: String, hostVersion: Long, reviewed: Map<String, String?>? = null, acceptMismatch: Boolean = false) = synchronized(WorkspaceLocks.forWorkspace(workspace)) {
+    fun install(pkg: UpdatePackage, files: File, commit: String, hostVersion: Long, reviewed: Map<String, String?>? = null, acceptMismatch: Boolean = false, beforeActivation: () -> Unit = {}) = synchronized(WorkspaceLocks.forWorkspace(workspace)) {
         require(pkg.minimumHostVersion <= hostVersion) { "Update App² before installing this package" }
         require(commit.matches(Regex("[a-f0-9]{40}"))) { "Invalid commit" }
         val checked = UpdatePackage.parse(File(files, "manifest.json").readText())
@@ -70,11 +70,12 @@ class WorkspaceUpdater(private val directory: File) {
         val preview = preview(pkg, files, acceptMismatch)
         val hashes = pkg.managed.associateWith { digest(File(files, it)) }
         prepareBackup()
-        workspace.copyRecursively(next, overwrite = false)
+        com.wynh.appapp.workspace.WorkspaceFiles.copyTree(workspace, next)
         preview.removed.forEach { check(!File(next, it).exists() || File(next, it).delete()) { "Could not remove $it" } }
         pkg.managed.forEach { copyManaged(files, next, it) }
         pkg.seeds.forEach { if (!File(next, it).exists()) copyManaged(files, next, it) }
         verifyPreserved(pkg.managed + preview.removed.toSet())
+        beforeActivation()
         commitWorkspace(InstalledUpdate(pkg.appId, pkg.version, pkg.source, commit, hashes, pkg.seeds))
     }
 
@@ -90,7 +91,7 @@ class WorkspaceUpdater(private val directory: File) {
         require(directory.usableSpace > workspace.walkTopDown().filter { it.isFile }.sumOf { it.length() } * 3 + 20 * 1024 * 1024) { "Insufficient free space for recovery backup" }
         val fresh = File(directory, "update-backup-new")
         fresh.deleteRecursively()
-        workspace.copyRecursively(File(fresh, "workspace"))
+        com.wynh.appapp.workspace.WorkspaceFiles.copyTree(workspace, File(fresh, "workspace"))
         if (state.isFile) state.copyTo(File(fresh, "state.json"))
         require(treeHashes(workspace) == treeHashes(File(fresh, "workspace"))) { "Backup verification failed" }
         backup.deleteRecursively()
@@ -125,7 +126,7 @@ class WorkspaceUpdater(private val directory: File) {
             require(File(backup, "workspace/index.html").isFile) { "Update recovery backup is missing" }
             val recovery = File(directory, "update-recover")
             recovery.deleteRecursively()
-            File(backup, "workspace").copyRecursively(recovery)
+            com.wynh.appapp.workspace.WorkspaceFiles.copyTree(File(backup, "workspace"), recovery)
             require(treeHashes(recovery) == treeHashes(File(backup, "workspace"))) { "Recovery verification failed" }
             workspace.deleteRecursively()
             check(recovery.renameTo(workspace)) { "Could not restore workspace" }
@@ -140,5 +141,5 @@ class WorkspaceUpdater(private val directory: File) {
     }
 
     private fun durableWrite(file: File, text: String) { file.outputStream().use { it.write(text.toByteArray()); it.fd.sync() } }
-    private fun treeHashes(root: File): Map<String, String> = root.walkTopDown().filter { it.isFile }.associate { it.relativeTo(root).invariantSeparatorsPath to digest(it) }
+    private fun treeHashes(root: File): Map<String, String> = com.wynh.appapp.workspace.WorkspaceFiles.regularFiles(root).associate { it.relativeTo(root).invariantSeparatorsPath to digest(it) }
 }

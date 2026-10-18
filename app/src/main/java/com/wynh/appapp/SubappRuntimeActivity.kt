@@ -8,8 +8,6 @@ import android.os.Bundle
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
-import android.webkit.ValueCallback
-import android.webkit.WebChromeClient.FileChooserParams
 import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
@@ -19,30 +17,30 @@ import androidx.activity.enableEdgeToEdge
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.wynh.appapp.bridge.NativeStorageBridge
-import com.wynh.appapp.runtime.SubappWebViewClient
 import com.wynh.appapp.runtime.SubappWebViews
 import com.wynh.appapp.workspace.SubappRepository
 import com.wynh.appapp.workspace.WorkspaceManager
-import org.json.JSONObject
 
 /** Standalone document task bound to the app ID encoded in its launch URI. */
 class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
-    private var speechSession: com.wynh.appapp.speech.SpeechSession? = null
-    private var translationSession: com.wynh.appapp.translation.TranslationSession? = null
+    private var runtimeSession: com.wynh.appapp.runtime.RuntimeSession? = null
     private var webView: WebView? = null
     private var activeId: String? = null
     private var historyBackPending = false
     private var didInitialResume = false
-    private var chooserCallback: ValueCallback<Array<Uri>>? = null
-    private val filePicker = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        chooserCallback?.onReceiveValue(if (uri == null) null else arrayOf(uri))
-        chooserCallback = null
+    private val runtimeChooser = com.wynh.appapp.runtime.RuntimeFileChooser(this) { message ->
+        webView?.post { activeId?.let { id ->
+            com.wynh.appapp.workspace.WorkspaceLog.append(applicationContext, java.io.File(filesDir, "subapps/$id/workspace"), message)
+        } }
     }
     private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
-        enableEdgeToEdge()
+        enableEdgeToEdge(
+            statusBarStyle = androidx.activity.SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = androidx.activity.SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+        )
         super.onCreate(savedInstanceState)
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -50,6 +48,7 @@ class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
             }
         })
         NativeStorageBridge.ensureNotificationChannel(this)
+        com.wynh.appapp.runtime.WorkspaceOperationUi.bind(this)
         render(intent.data)
     }
 
@@ -63,8 +62,7 @@ class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
         val id = uri?.lastPathSegment
         val record = id?.let { SubappRepository(this).resolve(it) }
         if (record == null) {
-            speechSession?.close(); speechSession = null
-            translationSession?.close(); translationSession = null
+            runtimeSession?.close(); runtimeSession = null
             webView?.destroy(); webView = null
             setContentView(TextView(this).apply {
                 text = "App no longer available"
@@ -77,8 +75,7 @@ class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
         if (activeId == record.id && webView != null) return
         historyBackPending = false
         activeId?.let { SubappSessionRegistry.unregister(it, this) }
-        speechSession?.close()
-        translationSession?.close()
+        runtimeSession?.close()
         webView?.destroy()
         activeId = record.id
         val manager = WorkspaceManager(this, workspaceDir = record.workspaceDir)
@@ -86,8 +83,6 @@ class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
         SubappSessionRegistry.register(record.id, this)
         val root = FrameLayout(this)
         val web = SelectionAwareWebView(this)
-        speechSession = com.wynh.appapp.speech.SpeechSession(this, web, record.id).also { it.install() }
-        translationSession = com.wynh.appapp.translation.TranslationSession(this, web, record.id).also { it.install() }
         webView = web
         root.addView(web, FrameLayout.LayoutParams(-1, -1))
         setContentView(root)
@@ -98,8 +93,7 @@ class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
             web.evaluateJavascript("""(function(s){s.setProperty('--app-inset-top','${css(insets.top)}');s.setProperty('--app-inset-right','${css(insets.right)}');s.setProperty('--app-inset-bottom','${css(insets.bottom)}');s.setProperty('--app-inset-left','${css(insets.left)}');})(document.documentElement.style);window.dispatchEvent(new CustomEvent('app2:insets',{detail:{imeVisible:${windowInsets.isVisible(WindowInsetsCompat.Type.ime())}}}));""", null)
             windowInsets
         }
-        SubappWebViews.configure(web, WebSettings.LOAD_DEFAULT)
-        val log: (String) -> Unit = { manager.appendToFile("app.log", "$it\n") }
+        val log: (String) -> Unit = { com.wynh.appapp.workspace.WorkspaceLog.append(applicationContext, record.workspaceDir, it) }
         val bridge = NativeStorageBridge(
             this, record.id, record.workspaceDir,
             onRequestNotificationPermission = {
@@ -111,38 +105,8 @@ class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
                 runOnUiThread { web.selectionMenuSuppressed = suppressed }
             }
         )
-        SubappWebViews.installStorageBridge(web, record.id, bridge, log)
-        (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.let {
-            com.wynh.appapp.ai.AiWebMessageBridge(this, web, record.id, taskId, it).install()
-        }
-        com.wynh.appapp.updates.UpdateWebMessageBridge(this, web, record).install()
-        web.webViewClient = object : SubappWebViewClient(this, record.id, { manager }, log, {
-            com.wynh.appapp.grants.SubappGrants.isGranted(this, record.id, com.wynh.appapp.grants.SubappCapability.NETWORK)
-        }) {
-            override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
-                speechSession?.pageChanged()
-                web.selectionMenuSuppressed = false
-                bridge.pageStarted()
-                super.onPageStarted(view, url, favicon)
-            }
-            override fun onPageFinished(view: WebView?, url: String?) {
-                super.onPageFinished(view, url)
-                installWebHistoryTracking(view)
-                ViewCompat.requestApplyInsets(root)
-            }
-        }
-        web.webChromeClient = object : WebChromeClient() {
-            override fun onShowFileChooser(
-                view: WebView?,
-                callback: ValueCallback<Array<Uri>>?,
-                params: FileChooserParams?
-            ): Boolean {
-                chooserCallback?.onReceiveValue(null)
-                chooserCallback = callback
-                filePicker.launch(params?.acceptTypes?.firstOrNull()?.takeIf { it.isNotBlank() } ?: "*/*")
-                return true
-            }
-        }
+        runtimeSession = com.wynh.appapp.runtime.RuntimeSession(this, web, record, manager, bridge, runtimeChooser, log,
+            WebSettings.LOAD_DEFAULT, ready = { view -> installWebHistoryTracking(view); ViewCompat.requestApplyInsets(root) })
         web.loadUrl(SubappWebViews.entryUrl(record.id, manager))
         NativeStorageBridge.reschedulePersistedAlarms(this, record.id)
     }
@@ -169,8 +133,7 @@ class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
     }
 
     override fun onResume() {
-        speechSession?.resume()
-        translationSession?.resume()
+        runtimeSession?.resume()
         super.onResume()
         (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.auth?.setForeground(true)
         if (didInitialResume) {
@@ -185,45 +148,32 @@ class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
     }
 
     override fun onPause() {
-        speechSession?.pause()
-        translationSession?.pause()
+        runtimeSession?.pause()
         (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.auth?.setForeground(false)
         super.onPause()
     }
 
     private fun updateTaskAppearance(manager: WorkspaceManager) {
-        val manifest = try { JSONObject(manager.readFile("manifest.json")) } catch (_: Exception) { JSONObject() }
-        val name = manifest.optString("name", "App²")
+        val metadata = com.wynh.appapp.workspace.SubappMetadataLoader.load(manager.workspaceDir)
+        val name = metadata.name.ifBlank { "App²" }
         title = name
-        val iconPath = manifest.optJSONArray("icons")?.optJSONObject(0)?.optString("src")
-        val iconFile = iconPath?.let(manager::getFile) ?: manager.getFile("icon.png")
-        val taskIcon = if (iconFile.isFile) runCatching { android.graphics.BitmapFactory.decodeFile(iconFile.absolutePath) }.getOrNull() else null
+        val taskIcon = metadata.icon
         setTaskDescription(android.app.ActivityManager.TaskDescription(name, taskIcon, 0xff263238.toInt()))
     }
 
     override fun pauseForUpdate() {
-        speechSession?.pause()
-        translationSession?.pause()
-        webView?.onPause()
-        webView?.pauseTimers()
-        webView?.visibility = android.view.View.INVISIBLE
+        runtimeSession?.suspendForOperation()
     }
 
     override fun resumeAfterUpdate() {
-        speechSession?.resume()
-        translationSession?.resume()
-        webView?.resumeTimers()
-        webView?.onResume()
-        webView?.visibility = android.view.View.VISIBLE
-        webView?.reload()
+        runtimeSession?.resumeAfterOperation()
     }
 
     override fun onDestroy() {
-        speechSession?.close()
-        translationSession?.close()
+        runtimeSession?.close()
         if (isFinishing) (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.cancelTask(taskId)
         activeId?.let { SubappSessionRegistry.unregister(it, this) }
-        chooserCallback?.onReceiveValue(null); chooserCallback = null
+        runtimeChooser.complete(null)
         webView?.destroy(); webView = null; super.onDestroy()
     }
 }
