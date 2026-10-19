@@ -115,7 +115,8 @@ export function createAiDemoSession({ ai, load, save, changed = () => {}, pause 
     state.message = 'Starting example…'; emit();
     try {
       const request = { providerId: state.providerId, model: model.id,
-        instructions: 'Keep the answer concise and use plain language.', input: AI_SAMPLE_PROMPT };
+        instructions: 'Keep the answer concise and use plain language.', input: AI_SAMPLE_PROMPT,
+        title: 'Writing the AI example', body: 'Safe to switch apps. The result is saved when you return.' };
       if (effort) request.reasoningEffort = effort;
       const id = await ai.start(request);
       state.pending = { id, providerId: state.providerId, model: model.id, modelName: model.name,

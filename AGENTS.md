@@ -377,7 +377,7 @@ Import `ai` from `js/bridge.js`. `ai.available` means the native channel exists,
 | --- | --- |
 | `ai.providers()` | `{providers: [{id, name, connected}]}` (one host-selected provider; connection may be false) |
 | `ai.models(providerId)` | `{models: [{id: "provider-model-id", name: "Display name", reasoningLevels: ["low", "medium", "high"]}]}` |
-| `ai.start({providerId, model, instructions, input, reasoningEffort?})` | Request ID string |
+| `ai.start({providerId, model, instructions, input, reasoningEffort?, title?, body?})` | Request ID string |
 | `ai.result(id)` | Pending: `{id, done: false, value: null}`; success: `{id, done: true, value: "completed text"}` |
 | `ai.wait(id)` | Completed text string; only for IDs started by this page instance |
 | `ai.cancel(id)` | `true`; cancels and releases the request |
@@ -419,7 +419,9 @@ The Starter Demo's `js/ai-demo.js` provides the complete recoverable workflow: `
 
 Listen for `app2:ai:connection` with `event.detail = {providerId, connected}` and refresh provider/model discovery. `app2:ai:status` currently reports `{id, status: "running"}`; use result polling for completion/failure, rather than assuming a completion status event. Refresh/recover on `pageshow` and `visibilitychange` when visible. These events expose no account identifiers or credentials.
 
-The native host binds requests to the exact subapp HTTPS origin and main frame and derives subapp/task ownership. Another subapp cannot retrieve, cancel or acknowledge your request. Callers cannot provide arbitrary endpoints or authentication headers. Only one unfinished **or unacknowledged** request per subapp is allowed. Native credentials remain encrypted outside workspaces, snapshots and exports.
+The native host binds requests to the exact subapp HTTPS origin and main frame and derives subapp/task ownership. Another subapp cannot retrieve, cancel or acknowledge your request. Callers cannot provide arbitrary endpoints or authentication headers. Only one unfinished **or unacknowledged** request per subapp is allowed, but different subapps generate concurrently. Native credentials remain encrypted outside workspaces, snapshots and exports.
+
+Each unfinished request has its own ongoing notification from `AiRequestService`, with **Open** and **Cancel** actions; Cancel affects only that request and stale actions are ignored. The service recomputes every notification, the single foreground one (promoted when it finishes) and its own stop from the request ledger (`reconcile`), so overlapping starts and finishes cannot leave stale notifications. The notification shows the app name derived natively from its manifest. `title` (60 characters) and `body` (140) are optional presentation text from the subapp: strings only (otherwise `invalid_request`), control characters removed, defaults "AI request in progress" / "AppApp will continue while you use another app.". They never reach the provider and are not stored in workspaces.
 
 Requests use native Responses streaming with `store:false`; text succeeds only after `response.completed`. Switching apps or opening the sign-in browser allows the active request to continue under a foreground notification. Rotation preserves the native request. Explicit reload, final screen closure, deletion and swiping the owning task from Recent Apps cancel its requests; closing another task does not. Completed results remain available until acknowledgement or task closure. Process death, force-stop and reboot do not restart inference. Persisted IDs can become `not_found`. Web workflows after inference (validation and auto-save) resume when the web app runs again; the foreground service does not execute the whole web app in the background.
 

@@ -35,11 +35,13 @@ Import `ai` from `js/bridge.js`. `ai.available` means the native channel exists,
 | --- | --- |
 | `ai.providers()` | `{providers: [{id, name, connected}]}` (one host-selected provider; connection may be false) |
 | `ai.models(providerId)` | `{models: [{id: "provider-model-id", name: "Display name", reasoningLevels: ["low", "medium", "high"]}]}` |
-| `ai.start({providerId, model, instructions, input, reasoningEffort?})` | Request ID string |
+| `ai.start({providerId, model, instructions, input, reasoningEffort?, title?, body?})` | Request ID string |
 | `ai.result(id)` | Pending: `{id, done: false, value: null}`; success: `{id, done: true, value: "completed text"}` |
 | `ai.wait(id)` | Completed text string; only for IDs started by this page instance |
 | `ai.cancel(id)` | `true`; cancels and releases the request |
 | `ai.acknowledge(id)` | `true`; releases a terminal result after saving or handling failure |
+
+`title` and `body` are optional presentation text for the request's own notification (strings, at most 60 and 140 characters; control characters are removed). Omit them to get "AI request in progress". The host adds the app's name itself and the text never changes the prompt. Each running request has its own notification with Open and Cancel actions, and Cancel affects only that request. Different subapps may generate at the same time; one subapp still has at most one unfinished or unacknowledged request. Non-string values reject with `invalid_request`.
 
 Model lists preserve each source’s server order, with ChatGPT before OpenRouter in Combined mode. Treat IDs as provider-specific; use the returned list rather than hardcoding models. `reasoningLevels` may be empty. Omit `reasoningEffort` for the provider default; explicit efforts must come from the selected model's list. The examples' model IDs and capabilities above are illustrative.
 

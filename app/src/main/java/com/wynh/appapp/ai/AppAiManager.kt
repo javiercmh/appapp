@@ -53,7 +53,9 @@ class AppAiManager(context: Context) {
         AiProvider("openrouter", "OpenRouter", openRouter) { openRouterConnected }
     ), preferences.getString("exposure", "chatgpt")?.takeIf { it in AiProviderRegistry.modes } ?: "chatgpt")
     val exposure: String get() = registry.exposure
-    private val requestLock = Mutex()
+    /** Serializes only the Settings model check; generation requests from different subapps run concurrently. */
+    private val checkLock = Mutex()
+    private val notificationIds = java.util.concurrent.atomic.AtomicInteger()
     /** At most six generation starts per subapp per minute, across all of its tasks. */
     private val startLimiter = AiStartRateLimiter()
     private val ledger = AiRequestLedger()
@@ -136,7 +138,10 @@ class AppAiManager(context: Context) {
 
     suspend fun nextAuthorizationUrl(): String = withTimeout(600_000) { auth.browserRequests.receive() }
 
-    fun start(appId: String, taskId: Int, providerId: String, model: String, instructions: String, input: String, effort: String?): String {
+    fun start(
+        appId: String, taskId: Int, providerId: String, model: String, instructions: String, input: String, effort: String?,
+        title: String? = null, body: String? = null, openIntent: Intent? = null
+    ): String {
         if (com.wynh.appapp.workspace.WorkspaceOperations.isBusy(java.io.File(app.filesDir, "subapps/$appId/workspace")))
             throw com.wynh.appapp.ai.network.ApiFailure(com.wynh.appapp.ai.network.ApiFailure.Kind.INVALID_REQUEST, "The app workspace is being changed. Try again after it finishes.")
         val route = registry.route(providerId, model)
@@ -146,18 +151,21 @@ class AppAiManager(context: Context) {
         if (!startLimiter.tryAcquire(appId))
             throw com.wynh.appapp.ai.network.ApiFailure(com.wynh.appapp.ai.network.ApiFailure.Kind.USAGE_LIMIT, "This app started too many AI requests. Wait a minute, then generate again.")
         val id = UUID.randomUUID().toString()
-        try { ledger.begin(id, AiRequestOwner(appId, taskId, route.provider.id, Job())) }
+        val presentation = AiPresentation(
+            notificationId = AiRequestService.NOTIFICATION_BASE + notificationIds.getAndUpdate { (it + 1) % AiRequestService.NOTIFICATION_SPAN },
+            title = AiNotificationCopy.title(title), body = AiNotificationCopy.body(body),
+            appName = com.wynh.appapp.grants.SubappGrants.displayName(app, appId), open = openIntent)
+        try { ledger.begin(id, AiRequestOwner(appId, taskId, route.provider.id, Job(), presentation)) }
         catch (_: IllegalStateException) { throw com.wynh.appapp.ai.network.ApiFailure(com.wynh.appapp.ai.network.ApiFailure.Kind.INVALID_REQUEST, "A request is already running or awaiting acknowledgement.") }
         try {
-            ContextCompat.startForegroundService(app, Intent(app, AiRequestService::class.java)
-                .putExtra(AiRequestService.EXTRA_TASK_ID, taskId))
+            ContextCompat.startForegroundService(app, Intent(app, AiRequestService::class.java))
         } catch (e: Exception) {
             ledger.finish(AiRequestResult(id, error = "Background request service could not start (${e.javaClass.simpleName}).", errorCode = "background_service", done = true))
             (jobs[id]?.job as? kotlinx.coroutines.CompletableJob)?.complete()
             return id
         }
         val job = scope.launch(Dispatchers.IO, start = kotlinx.coroutines.CoroutineStart.LAZY) {
-            try { requestLock.withLock {
+            try {
                 try {
                     val result = route.provider.inference.generate(route.model, instructions, input, effort)
                     ledger.finish(AiRequestResult(id, text = result, done = true))
@@ -171,7 +179,7 @@ class AppAiManager(context: Context) {
                     }
                     ledger.finish(AiRequestResult(id, error = e.message ?: "The request failed.", errorCode = code, done = true))
                 }
-            } } finally { AiRequestService.requestFinished(app) }
+            } finally { AiRequestService.reconcile() }
         }
         ledger.bind(id, job)
         job.start()
@@ -183,9 +191,16 @@ class AppAiManager(context: Context) {
     fun ownedByApp(id: String, appId: String): Boolean = jobs[id]?.appId == appId
     fun hasRequest(appId: String): Boolean = ledger.hasRequest(appId)
     fun activeRequestCount(): Int = ledger.activeRequestCount()
+    internal fun unfinishedRequests(): List<Pair<String, AiRequestOwner>> = ledger.unfinished()
+    /** Notification Cancel action: acts on exactly this unfinished request and ignores stale IDs. */
+    fun cancelFromNotification(requestId: String): Boolean {
+        if (requests[requestId]?.done != false) return false
+        cancel(requestId)
+        return true
+    }
     fun cancel(id: String) {
         ledger.cancel(id)
-        AiRequestService.requestFinished(app)
+        AiRequestService.reconcile()
     }
     fun acknowledge(id: String) { ledger.acknowledge(id) }
     fun cancelTask(taskId: Int) {
@@ -199,7 +214,7 @@ class AppAiManager(context: Context) {
     fun cancelApp(appId: String) { jobs.filterValues { it.appId == appId }.keys.toList().forEach(::cancel) }
     fun cancelProvider(providerId: String) {
         ledger.cancelProvider(providerId)
-        AiRequestService.requestFinished(app)
+        AiRequestService.reconcile()
     }
     suspend fun signOut(): String {
         cancelProvider("chatgpt")
@@ -209,7 +224,7 @@ class AppAiManager(context: Context) {
 
     suspend fun exposedModels(providerId: String) = registry.models(providerId)
     suspend fun models() = inference.models()
-    suspend fun check(model: String) = requestLock.withLock { inference.check(model) }
+    suspend fun check(model: String) = checkLock.withLock { inference.check(model) }
 
     fun close() { scope.cancel() }
 }

@@ -1,5 +1,7 @@
 package com.wynh.appapp.ai
 
+import android.content.Intent
+import android.net.Uri
 import android.webkit.WebView
 import androidx.webkit.JavaScriptReplyProxy
 import androidx.webkit.WebMessageCompat
@@ -11,7 +13,9 @@ import kotlinx.coroutines.launch
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import androidx.lifecycle.Lifecycle
+import com.wynh.appapp.MainActivity
 import com.wynh.appapp.R
+import com.wynh.appapp.SubappRuntimeActivity
 import com.wynh.appapp.grants.SubappCapability
 import com.wynh.appapp.grants.SubappGrants
 
@@ -60,8 +64,11 @@ class AiWebMessageBridge(
                 val instructions = data.get("instructions")?.asString ?: ""
                 val input = data.get("input")?.asString ?: ""
                 val effort = data.get("reasoningEffort")?.takeUnless { it.isJsonNull }?.asString
+                val title = optionalText(data, "title")
+                val body = optionalText(data, "body")
+                if (title == null || body == null) { fail(reply, id, "invalid_request", "Invalid request."); return }
                 if (model.isBlank() || model.length > 8192 || providerId.length > 32 || input.length > 100_000 || instructions.length > 100_000) { fail(reply, id, "invalid_request", "Invalid request."); return }
-                val begin = { start(reply, id, providerId, model, instructions, input, effort) }
+                val begin = { start(reply, id, providerId, model, instructions, input, effort, title.value, body.value) }
                 if (SubappGrants.isGranted(activity, appId, SubappCapability.AI)) begin()
                 else askForAi(providerId, model) { allowed ->
                     if (!allowed) fail(reply, id, "permission", "AI was not allowed for this app. Allow it in the library: app menu → Permissions.")
@@ -92,8 +99,26 @@ class AiWebMessageBridge(
         }
     }
 
-    private fun start(reply: JavaScriptReplyProxy, id: String, providerId: String, model: String, instructions: String, input: String, effort: String?) {
-        val reqId = try { manager.start(appId, taskId, providerId, model, instructions, input, effort) }
+    private class OptionalText(val value: String?)
+
+    /** Absent or null is allowed; any other non-string value is invalid. Length is bounded natively. */
+    private fun optionalText(data: JsonObject, key: String): OptionalText? {
+        val element = data.get(key)
+        if (element == null || element.isJsonNull) return OptionalText(null)
+        if (!element.isJsonPrimitive || !element.asJsonPrimitive.isString) return null
+        return OptionalText(element.asString)
+    }
+
+    /** Brings this activity's task forward from the notification; derived from the host, never from the page. */
+    private fun openIntent(): Intent =
+        if (activity is MainActivity) Intent(activity, MainActivity::class.java).putExtra(MainActivity.EXTRA_SUBAPP_ID, appId)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        else Intent(activity, SubappRuntimeActivity::class.java).setAction(Intent.ACTION_VIEW)
+            .setData(Uri.parse("appapp://subapp/$appId"))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT or Intent.FLAG_ACTIVITY_RETAIN_IN_RECENTS)
+
+    private fun start(reply: JavaScriptReplyProxy, id: String, providerId: String, model: String, instructions: String, input: String, effort: String?, title: String?, body: String?) {
+        val reqId = try { manager.start(appId, taskId, providerId, model, instructions, input, effort, title, body, openIntent()) }
         catch (e: com.wynh.appapp.ai.network.ApiFailure) { fail(reply, id, e.kind.name.lowercase(), e.userMessage); return }
         respond(reply, id, "result", quote(reqId))
         manager.event(webView, origin, """{"event":"status","id":${quote(reqId)},"data":{"status":"running"}}""")
