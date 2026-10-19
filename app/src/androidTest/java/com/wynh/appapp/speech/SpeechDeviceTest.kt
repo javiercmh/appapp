@@ -77,26 +77,17 @@ class SpeechDeviceTest {
                     val playback = await(web, "window.playResult")
                     println("Stop result: $playback")
                     assertTrue(playback, playback in listOf("\"cancelled\"", "\"completed\"", "\"missing_data\"", "\"language\"", "\"synthesis\"", "\"network\""))
-                    js(web, "window.nativeStopResult=null;testSpeech.speak({text:'Hello. '.repeat(300),language:'en-US'}).then(v=>nativeStopResult=v.status).catch(e=>nativeStopResult=e.code)")
-                    SystemClock.sleep(300)
-                    scenario.onActivity { activity ->
-                        activity.findViewById<android.view.View>(com.google.android.material.R.id.snackbar_action)?.performClick()
-                    }
-                    val nativeStop = await(web, "window.nativeStopResult")
-                    assertEquals("\"cancelled\"", nativeStop)
                     js(web, "window.capabilitiesResult=null;testSpeech.capabilities().then(v=>capabilitiesResult=v.features.join()).catch(e=>capabilitiesResult=e.code)")
-                    assertEquals("\"rate,pitch,showControl\"", await(web, "window.capabilitiesResult"))
-                    js(web, "window.quietResult=null;testSpeech.speak({text:'Hello. '.repeat(300),language:'en-US',showControl:false,rate:1.5}).then(v=>quietResult=v.status).catch(e=>quietResult=e.code)")
+                    assertEquals("\"rate,pitch\"", await(web, "window.capabilitiesResult"))
+                    js(web, "window.quietResult=null;testSpeech.speak({text:'Hello. '.repeat(300),language:'en-US',rate:1.5}).then(v=>quietResult=v.status).catch(e=>quietResult=e.code)")
                     SystemClock.sleep(500)
                     var barVisible = true
                     scenario.onActivity { activity ->
                         barVisible = activity.findViewById<android.view.View>(com.google.android.material.R.id.snackbar_action) != null
                     }
-                    assertFalse("showControl:false must not show the native Speaking bar", barVisible)
+                    assertFalse("Speech must not show a native Speaking bar", barVisible)
                     js(web, "testSpeech.stop()")
                     assertEquals("\"cancelled\"", await(web, "window.quietResult").let { if (it in listOf("\"cancelled\"", "\"missing_data\"", "\"language\"", "\"synthesis\"", "\"network\"")) "\"cancelled\"" else it })
-                    js(web, "window.badFlagResult=null;testSpeech.speak({text:'Hello',language:'en-US',showControl:'no'}).catch(e=>badFlagResult=e.code)")
-                    assertEquals("\"invalid_request\"", await(web, "window.badFlagResult"))
                     js(web, "window.replacedResult=null;testSpeech.speak({text:'Hello. '.repeat(300),language:'en-US'}).then(v=>replacedResult=v.status).catch(e=>replacedResult=e.code);testSpeech.speak({text:'Hello',language:'en-US'}).catch(()=>{})")
                     val replaced = await(web, "window.replacedResult")
                     assertTrue(replaced, replaced in listOf("\"cancelled\"", "\"missing_data\"", "\"language\"", "\"synthesis\"", "\"network\""))

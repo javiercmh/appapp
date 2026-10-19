@@ -7,7 +7,7 @@ Languages and voices depend on the installed engine and its voice data.
 ## Read selected text
 
 Long-press selectable text, select a word or sentence, and choose **Speak** in the Android
-selection menu. Tap the native **Stop** control to interrupt playback.
+selection menu. Use the subapp’s **Stop** control to interrupt playback.
 
 The subapp supplies the pronunciation language through HTML `lang`. Use a document language
 for a single-language page, or annotate individual words and passages on a multilingual page:
@@ -70,15 +70,16 @@ with `unavailable`; the development server does not simulate speech.
 | --- | --- |
 | `speech.available` | Boolean indicating native channel availability. |
 | `await speech.voices()` | `{voices: [{id, name, language, requiresNetwork}]}` for Android's configured engine. |
-| `await speech.speak({text, language, voiceId?, rate?, pitch?, showControl?})` | Resolves after playback with `{status: "completed"}`, or `{status: "cancelled"}` when interrupted by Stop or replacement. |
-| `await speech.capabilities()` | `{features: ["rate", "pitch", "showControl"]}`; hosts without this call reject it with `invalid_request`, so treat that as no optional features. |
+| `await speech.speak({text, language, voiceId?, rate?, pitch?})` | Resolves after playback with `{status: "completed"}`, or `{status: "cancelled"}` when interrupted by Stop or replacement. |
+| `await speech.capabilities()` | `{features: ["rate", "pitch"]}`; hosts without this call reject it with `invalid_request`, so treat that as no optional features. |
 | `await speech.stop()` | Resolves to `true`, including when nothing is playing. |
 
 `text` must be nonempty and fit Android's speech input limit. `language` is a required BCP 47
 tag, such as `fr-FR`, `de-DE`, or `ja-JP`. Regional fallback within the same language is allowed;
 explicit scripts must match. Optional `rate` and `pitch` default to `1` and accept finite values
-from `0.5` through `2`. `showControl` defaults to `true`, which shows the native Speaking bar with Stop;
-with `false` the host shows no bar and the subapp must provide its own Stop control. It must be a boolean.
+from `0.5` through `2`. Subapps provide their own playback controls. App² does not create a
+Speaking bar; the starter template implements a web Speaking/Stop bar in `js/speech-demo.js`.
+The removed `showControl` option is ignored on this host for existing callers.
 
 ## Choose a voice
 

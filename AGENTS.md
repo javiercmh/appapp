@@ -496,7 +496,7 @@ not engine readiness. Browser previews reject calls with `unavailable`.
 
 Subapps provide their own pronunciation buttons using `speech.speak({text, language})`.
 App² does not add a Speak action to Android’s text selection menu.
-A native **Stop** control appears during playback. Speech stops on backgrounding, page reload,
+Subapps supply playback controls; the starter template implements its own web Speaking/Stop bar. Speech stops on backgrounding, page reload,
 navigation, workspace replacement, or closure; it is not persisted or resumed.
 The channel accepts only the owning subapp HTTPS origin and main frame. No AI account is needed.
 Store any subapp voice preferences in plain JSON under `data/`. The Starter Demo includes

@@ -7,7 +7,6 @@ import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.widget.Toast
 import com.google.gson.JsonObject
-import com.google.android.material.snackbar.Snackbar
 import java.util.UUID
 
 /** Foreground speech owned by one WebView session. All state belongs to the main thread. */
@@ -21,7 +20,6 @@ class SpeechController(private val activity: Activity) {
     private var current: String? = null
     private var complete: ((String) -> Unit)? = null
     private var failure: ((String, String) -> Unit)? = null
-    private var control: Snackbar? = null
     private val initTimeout = Runnable { initializationFailed() }
 
     private fun initializationFailed() {
@@ -72,7 +70,6 @@ class SpeechController(private val activity: Activity) {
             val locale = SpeechPolicy.language(options.get("language")?.asString.orEmpty())
             val rate = SpeechPolicy.scalar(options.get("rate")?.asDouble ?: 1.0)
             val pitch = SpeechPolicy.scalar(options.get("pitch")?.asDouble ?: 1.0)
-            val showControl = SpeechPolicy.showControl(options)
             val id = options.get("voiceId")?.takeUnless { it.isJsonNull }?.asString
             stop()
             val voice = if (id != null) {
@@ -89,9 +86,6 @@ class SpeechController(private val activity: Activity) {
             if (tts.setVoice(voice) != TextToSpeech.SUCCESS || tts.setSpeechRate(rate) != TextToSpeech.SUCCESS ||
                 tts.setPitch(pitch) != TextToSpeech.SUCCESS) return error("voice", "The speech engine rejected the voice settings.")
             current = UUID.randomUUID().toString(); complete = done; failure = error
-            control = if (!showControl) null else
-                Snackbar.make(activity.findViewById(android.R.id.content), "Speaking", Snackbar.LENGTH_INDEFINITE)
-                    .setAction("Stop") { stop() }.also { it.show() }
             if (tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, current) != TextToSpeech.SUCCESS)
                 fail("synthesis", "The speech engine could not start playback.")
         } catch (e: Exception) {
@@ -103,7 +97,6 @@ class SpeechController(private val activity: Activity) {
     private fun finish(status: String) {
         val callback = complete
         current = null; complete = null; failure = null
-        control?.dismiss(); control = null
         callback?.invoke(status)
     }
     private fun fail(code: String, message: String) {
