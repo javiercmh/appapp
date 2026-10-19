@@ -68,3 +68,7 @@ package declaring 12, confirm the error names levels 12 and 11 and advises updat
 
 Also inspect the error dialog at normal and narrow widths with large fonts, and
 confirm cancelling update review leaves the disposable workspace unchanged.
+
+## Pending speech controls
+
+Verify speech creates no native Speaking bar in editor and runtime, including old calls with showControl. Verify the starter web Speaking/Stop bar, replacement, errors, backgrounding and navigation; Stop must cancel playback.

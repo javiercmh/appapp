@@ -24,7 +24,7 @@ const voices = speech.voices();
 respond({id:requests[3].id,value:{voices:[{id:'voice',language:'fr-FR',requiresNetwork:true}]}});
 assert.equal((await voices).voices[0].requiresNetwork,true);
 const stop = speech.stop(); respond({id:requests[4].id,value:true}); assert.equal(await stop,true);
-const capabilities = speech.capabilities(); respond({id:requests[5].id,value:{features:['rate','pitch','showControl']}});
-assert.equal(requests[5].action,'capabilities'); assert.deepEqual((await capabilities).features,['rate','pitch','showControl']);
+const capabilities = speech.capabilities(); respond({id:requests[5].id,value:{features:['rate','pitch']}});
+assert.equal(requests[5].action,'capabilities'); assert.deepEqual((await capabilities).features,['rate','pitch']);
 respond({id:requests[0].id,value:{status:'completed'}}); // Late callback is ignored.
 console.log('Speech wrapper tests passed.');
