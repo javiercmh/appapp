@@ -20,7 +20,7 @@ import java.io.File
 class UpdateController(private val activity: AppCompatActivity, private val record: SubappRecord) {
     private val updater = WorkspaceUpdater(record.directory)
     private val ai get() = (activity.application as AppAiApplication).ai
-    private val hostVersion get() = androidx.core.content.pm.PackageInfoCompat.getLongVersionCode(activity.packageManager.getPackageInfo(activity.packageName, 0))
+    private val hostCompatibilityLevel = com.wynh.appapp.BuildConfig.HOST_COMPATIBILITY_LEVEL.toLong()
     private fun error(e: Exception) { if (!activity.isFinishing) MaterialAlertDialogBuilder(activity).setTitle("Update unavailable").setMessage(e.message ?: "Update failed").setPositiveButton("Close", null).show() }
 
     fun open() {
@@ -59,7 +59,7 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
         activity.lifecycleScope.launch {
             var download: GitHubUpdateDownloader.Download? = null
             try {
-                download = withContext(Dispatchers.IO) { GitHubUpdateDownloader(activity.cacheDir).download(source, hostVersion) }
+                download = withContext(Dispatchers.IO) { GitHubUpdateDownloader(activity.cacheDir).download(source, hostCompatibilityLevel) }
                 val value = download
                 val (preview, reviewed, unchanged) = withContext(Dispatchers.IO) {
                     synchronized(WorkspaceLocks.forWorkspace(record.workspaceDir)) {
@@ -89,7 +89,7 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
                 MaterialAlertDialogBuilder(activity).setTitle("Review app update").setMessage(text)
                     .setPositiveButton(if (mismatch != null) "Accept and update" else if (preview.adoption) "Link and update" else "Update") { _, _ ->
                         accepted = true
-                        applyUpdate("GitHub update ${value.pkg.version} · ${value.commit.take(12)}", value.directory) { updater.install(value.pkg, value.directory, value.commit, hostVersion, reviewed, acceptMismatch = mismatch != null,
+                        applyUpdate("GitHub update ${value.pkg.version} · ${value.commit.take(12)}", value.directory) { updater.install(value.pkg, value.directory, value.commit, hostCompatibilityLevel, reviewed, acceptMismatch = mismatch != null,
                             beforeActivation = { com.wynh.appapp.grants.SubappGrants.resetAfterCodeChange(activity.applicationContext, record.id) }) }
                     }.setNegativeButton("Cancel", null)
                     .setOnDismissListener { if (!accepted) value.directory.deleteRecursively() }.show()

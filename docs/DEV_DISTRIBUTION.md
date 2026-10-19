@@ -73,6 +73,10 @@ and `app2-dev.apk.sha256`, pinned to the checked-out commit. `N` is the workflow
 increasing run number, used as the Android version code; the displayed version
 is `1.6.1-dev.N` for the current base version. Keep this workflow's numbering
 continuous. Do not delete/recreate its history or publish a lower version code.
+The run number only orders installs. Subapp update compatibility uses the separate
+`HOST_COMPATIBILITY_LEVEL` build constant, identical in release, Dev and debug
+builds, so a low Dev run number does not make App² Dev reject packages that the
+production app accepts (see [subapp updates](SUBAPP_UPDATES.md)).
 Existing tags are never replaced, so rerunning an already published run fails at
 release creation rather than silently replacing a download.
 

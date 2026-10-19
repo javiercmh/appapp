@@ -25,7 +25,7 @@ jobs:
           log-accepted-android-sdk-licenses: false
       - run: sdkmanager 'platforms;android-37.0' 'build-tools;37.0.0'
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:compileDebugAndroidTestKotlin
+      - run: ./gradlew :app:testDebugUnitTest :app:testDevUnitTest :app:testReleaseUnitTest :app:compileReleaseKotlin :app:lintDebug :app:assembleDebug :app:compileDebugAndroidTestKotlin
       - run: node --test tests/*.test.mjs scripts/tests/*.mjs
       - run: python3 -B -m unittest discover -s tests -p 'test_demo_dev_server.py'
       - uses: actions/upload-artifact@v4
