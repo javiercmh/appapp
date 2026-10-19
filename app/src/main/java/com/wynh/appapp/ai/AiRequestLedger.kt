@@ -4,7 +4,10 @@ import kotlinx.coroutines.Job
 import java.util.concurrent.ConcurrentHashMap
 
 data class AiRequestResult(val id: String, val text: String? = null, val error: String? = null, val errorCode: String? = null, val done: Boolean = false)
-internal data class AiRequestOwner(val appId: String, val taskId: Int, val providerId: String, val job: Job)
+internal data class AiRequestOwner(
+    val appId: String, val taskId: Int, val providerId: String, val job: Job,
+    val presentation: AiPresentation = AiPresentation()
+)
 
 /** Atomic ownership and terminal publication, independent of Android service lifecycle. */
 internal class AiRequestLedger {
@@ -38,4 +41,7 @@ internal class AiRequestLedger {
     }
     fun hasRequest(appId: String): Boolean = owners.any { (id, owner) -> owner.appId == appId && results.containsKey(id) }
     fun activeRequestCount(): Int = owners.values.count { it.job.isActive }
+    /** Requests still generating; a finished result awaiting acknowledgement is not included. */
+    @Synchronized fun unfinished(): List<Pair<String, AiRequestOwner>> =
+        owners.filter { (id, owner) -> results[id]?.done == false && owner.job.isActive }.map { it.key to it.value }
 }

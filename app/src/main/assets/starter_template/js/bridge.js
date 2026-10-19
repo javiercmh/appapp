@@ -118,8 +118,13 @@ export const ai = {
   // -> {models:[{id,name,reasoningLevels}]}. IDs are opaque; Combined names include source.
   models: (providerId = 'chatgpt') => aiCall('models', { providerId }),
   // -> request ID. Omit reasoningEffort for provider default; use advertised levels.
-  start: async ({ providerId = 'chatgpt', model, instructions = '', input, reasoningEffort } = {}) => {
-    const id = await aiCall('start', { data: { providerId, model, instructions, input, reasoningEffort } });
+  // Optional title/body are short text for the native running-request notification, shown beside
+  // the host-derived app name. They never affect the request.
+  start: async ({ providerId = 'chatgpt', model, instructions = '', input, reasoningEffort, title, body } = {}) => {
+    const data = { providerId, model, instructions, input, reasoningEffort };
+    if (title !== undefined) data.title = title;
+    if (body !== undefined) data.body = body;
+    const id = await aiCall('start', { data });
     const request = { id, done: false, value: null, error: null, listeners: new Set() };
     request.notify = (value) => request.listeners.forEach((listener) => listener(value));
     aiResults.set(id, request);
