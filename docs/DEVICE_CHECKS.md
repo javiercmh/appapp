@@ -30,10 +30,18 @@ the Dev library at 1080×2400, and at 900×1600 with 130% fonts. The Dev title f
 the original App² artwork is retained with an amber DEV badge inside the adaptive mask.
 Emulator display overrides and font scale were restored afterwards.
 
-The GitHub prerelease workflow has been parsed as YAML and its shell blocks
-syntax-checked locally. Running it with repository signing secrets, downloading
-the published APK, and upgrading a persistent-key installation remain pending.
-No GitHub release or physical-phone installation was performed for this change.
+The GitHub prerelease workflow passed in [run 39197454905](https://github.com/javiercmh/appapp/actions/runs/39197454905),
+publishing [Dev build 3](https://github.com/javiercmh/appapp/releases/tag/dev-3).
+Downloaded its APK and verified the asset checksum, expected Dev signing
+certificate, package ID, version code 3 and name `App² Dev`. Replaced only the
+emulator's disposable debug-signed Dev installation, installed that published
+APK, recreated two tiny fixtures and verified both survived a same-APK signed
+reinstall. Cold-opened both libraries: production retained its original APK and
+one entry. Inspected the published Dev library screenshot and the final original
+App² artwork with amber DEV badge side by side on the launcher. The Dev Settings
+title also fit at 900×1600 and 130% fonts. No physical-phone installation was
+performed. Upgrading between distinct persistent-key published versions remains
+pending; this check establishes a same-version signed reinstall only.
 
 ## Pending checks
 - With one app open standalone (split screen) and saved from the editor: a plain file save, Run, and settings save must not reload the standalone page or lose its in-memory state; restore, update and factory reset must reload it. Repeat with the standalone app in the background: the page reloads once on return, and speech stays stopped while it is away.
