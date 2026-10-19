@@ -29,7 +29,7 @@ This document provides architectural context, coding standards, and operational 
 | `com.wynh.appapp.bridge.AlarmBootReceiver` | Re-arms persisted scheduled notifications after `BOOT_COMPLETED` / `MY_PACKAGE_REPLACED`, which clear pending alarms. |
 | `com.wynh.appapp.templates.DefaultWebApp` | Loads the starter template files dynamically from standalone assets (`app/src/main/assets/starter_template/`). |
 
-The Kotlin namespace and installed Android application ID are both `com.wynh.appapp`. Use this package for source declarations, ProGuard rules, and ADB package commands such as `pm path`, `run-as`, `force-stop`, and `monkey`.
+The Kotlin namespace is `com.wynh.appapp`. The production installed application ID is `com.wynh.appapp`; the separate Dev variant uses `com.wynh.appapp.dev`. Keep source declarations and ProGuard rules in the Kotlin namespace. Use the actual installed application ID for ADB package commands such as `pm path`, `run-as`, `force-stop`, and `monkey`. Dev shortcut links use `appapp-dev`; production uses `appapp`. See [Dev distribution and signing](docs/DEV_DISTRIBUTION.md).
 
 ---
 

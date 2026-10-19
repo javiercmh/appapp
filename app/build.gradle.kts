@@ -13,6 +13,16 @@ val hasReleaseSigning = listOf(
     releaseKeyPassword
 ).all { !it.isNullOrBlank() }
 
+val devStoreFile = providers.gradleProperty("APPAPP_DEV_STORE_FILE").orNull
+val devStorePassword = providers.gradleProperty("APPAPP_DEV_STORE_PASSWORD").orNull
+val devKeyAlias = providers.gradleProperty("APPAPP_DEV_KEY_ALIAS").orNull
+val devKeyPassword = providers.gradleProperty("APPAPP_DEV_KEY_PASSWORD").orNull
+val hasDevSigning = listOf(devStoreFile, devStorePassword, devKeyAlias, devKeyPassword)
+    .all { !it.isNullOrBlank() }
+val devVersionCode = providers.gradleProperty("APPAPP_DEV_VERSION_CODE").orElse("1").map {
+    it.toInt().also { code -> require(code in 1..2100000000) { "Invalid Dev version code" } }
+}
+
 android {
     namespace = "com.wynh.appapp"
     compileSdk = 37
@@ -23,6 +33,8 @@ android {
         targetSdk = 37
         versionCode = 11
         versionName = "1.6.1"
+        manifestPlaceholders["appLinkScheme"] = "appapp"
+        buildConfigField("String", "APP_LINK_SCHEME", "\"appapp\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -34,6 +46,17 @@ android {
                 storePassword = checkNotNull(releaseStorePassword)
                 keyAlias = checkNotNull(releaseKeyAlias)
                 keyPassword = checkNotNull(releaseKeyPassword)
+            }
+        }
+    }
+
+    if (hasDevSigning) {
+        signingConfigs {
+            create("dev") {
+                storeFile = file(checkNotNull(devStoreFile))
+                storePassword = checkNotNull(devStorePassword)
+                keyAlias = checkNotNull(devKeyAlias)
+                keyPassword = checkNotNull(devKeyPassword)
             }
         }
     }
@@ -50,12 +73,24 @@ android {
             )
         }
     }
+    // A release-like, independently installed preview. Local previews use debug signing;
+    // publishing requires the persistent Dev key through assembleSignedDev.
+    buildTypes.create("dev") {
+        initWith(buildTypes.getByName("release"))
+        applicationIdSuffix = ".dev"
+        versionNameSuffix = "-dev.${devVersionCode.get()}"
+        manifestPlaceholders["appLinkScheme"] = "appapp-dev"
+        buildConfigField("String", "APP_LINK_SCHEME", "\"appapp-dev\"")
+        signingConfig = signingConfigs.getByName(if (hasDevSigning) "dev" else "debug")
+        matchingFallbacks += listOf("release")
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
     buildFeatures {
         viewBinding = true
+        buildConfig = true
     }
 }
 
@@ -100,4 +135,26 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.test.junit)
     androidTestImplementation(libs.androidx.test.espresso)
+}
+
+// Never publish a Dev APK signed with a machine's disposable debug key.
+val verifyDevSigning = tasks.register("verifyDevSigning") {
+    doLast {
+        check(hasDevSigning) {
+            "Dev publishing requires APPAPP_DEV_STORE_FILE, APPAPP_DEV_STORE_PASSWORD, " +
+                "APPAPP_DEV_KEY_ALIAS and APPAPP_DEV_KEY_PASSWORD. See docs/DEV_DISTRIBUTION.md."
+        }
+    }
+}
+tasks.matching { it.name == "assembleDev" }.configureEach { mustRunAfter(verifyDevSigning) }
+tasks.register("assembleSignedDev") {
+    group = "build"
+    description = "Builds App² Dev with the persistent Dev publishing key."
+    dependsOn(verifyDevSigning, "assembleDev")
+}
+
+androidComponents {
+    onVariants(selector().withBuildType("dev")) { variant ->
+        variant.outputs.forEach { it.versionCode.set(devVersionCode) }
+    }
 }
