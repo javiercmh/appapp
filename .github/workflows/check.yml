@@ -25,7 +25,22 @@ jobs:
           log-accepted-android-sdk-licenses: false
       - run: sdkmanager 'platforms;android-37.0' 'build-tools;37.0.0'
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew :app:testDebugUnitTest :app:testDevUnitTest :app:testReleaseUnitTest :app:compileReleaseKotlin :app:lintDebug :app:assembleDebug :app:compileDebugAndroidTestKotlin
+      - run: ./gradlew -PAPPAPP_DEV_VERSION_CODE=3 :app:testDebugUnitTest :app:compileReleaseKotlin :app:assembleDev :app:lintDebug :app:assembleDebug :app:compileDebugAndroidTestKotlin
+      - name: Verify shared compatibility and independent Dev APK counter
+        run: |
+          python3 - <<'PYTHON'
+          import json
+          import pathlib
+          import re
+          root = pathlib.Path('app/build/generated/source/buildConfig')
+          for variant in ('debug', 'dev', 'release'):
+              source = (root / variant / 'com/wynh/appapp/BuildConfig.java').read_text()
+              assert re.search(r'HOST_COMPATIBILITY_LEVEL\s*=\s*11;', source), variant
+          metadata = json.loads(pathlib.Path('app/build/outputs/apk/dev/output-metadata.json').read_text())
+          assert metadata['applicationId'] == 'com.wynh.appapp.dev'
+          assert all(item['versionCode'] == 3 for item in metadata['elements'])
+          print('All variants support compatibility 11; Dev APK counter remains 3.')
+          PYTHON
       - run: node --test tests/*.test.mjs scripts/tests/*.mjs
       - run: python3 -B -m unittest discover -s tests -p 'test_demo_dev_server.py'
       - uses: actions/upload-artifact@v4
