@@ -29,6 +29,10 @@
 
 The Starter Demo includes working examples of file storage, photos, notifications, text-to-speech, and AI, plus a guide to building your own app. App² runs on **Android 8.0 or newer**.
 
+## Try App² Dev
+
+App² Dev installs beside App² with its own data and AI connections. Download its APK from a [Dev prerelease](https://github.com/javiercmh/appapp/releases) when available. See [Dev distribution and signing setup](docs/DEV_DISTRIBUTION.md).
+
 ## For developers
 
 Subapps use standard HTML, CSS, and JavaScript, with a native bridge for Android features. Store app data as JSON or other files under `data/` so it can be inspected, exported, and restored with the workspace.

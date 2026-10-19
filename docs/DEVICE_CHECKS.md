@@ -14,6 +14,27 @@ Medium_Phone, Android 16/API 36, arm64; debug build only. No physical-device ver
 - Rechecked the final editor hub and configuration dialog at normal and narrow widths with 130% fonts. Saved a disposable app name, rotated immediately afterwards, and inspected the closed dialog and retained name. This does not establish every possible rotation timing.
 - Corrected two test synchronization races before the final successful run: the security test no longer accepts the old document as navigation completion, and the accessibility reorder test waits for asynchronous persistence.
 
+## Dev distribution verification
+
+Local Dev builds were checked on Medium_Phone, Android 16/API 36, arm64.
+`assembleDev`, `lintDev`, 133 JVM tests and debug Android-test compilation passed;
+the workflow's 14 JavaScript and 5 Python checks passed too. The configured
+`assembleSignedDev` path was exercised with the existing local debug key solely
+for emulator testing; the missing-Dev-key guard rejected publishing as intended.
+
+App² and App² Dev installed together. Added a disposable Dev subapp and updated
+Dev to a higher version code with `install -r`: its two library entries remained,
+while production retained one entry. Android resolved `appapp://subapp/…` to
+production and `appapp-dev://subapp/…` to Dev. Inspected launcher labels/icons,
+the Dev library at 1080×2400, and at 900×1600 with 130% fonts. The Dev title fits;
+the original App² artwork is retained with an amber DEV badge inside the adaptive mask.
+Emulator display overrides and font scale were restored afterwards.
+
+The GitHub prerelease workflow has been parsed as YAML and its shell blocks
+syntax-checked locally. Running it with repository signing secrets, downloading
+the published APK, and upgrading a persistent-key installation remain pending.
+No GitHub release or physical-phone installation was performed for this change.
+
 ## Pending checks
 - With one app open standalone (split screen) and saved from the editor: a plain file save, Run, and settings save must not reload the standalone page or lose its in-memory state; restore, update and factory reset must reload it. Repeat with the standalone app in the background: the page reloads once on return, and speech stays stopped while it is away.
 - Rotate while a file save, a settings save, a restore, a reset and an update finish: the settings dialog closes and the shortcut refreshes, the editor no longer shows the saved draft as unsaved, and the update toast appears once.

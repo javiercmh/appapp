@@ -114,7 +114,7 @@ class AiWebMessageBridge(
         if (activity is MainActivity) Intent(activity, MainActivity::class.java).putExtra(MainActivity.EXTRA_SUBAPP_ID, appId)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         else Intent(activity, SubappRuntimeActivity::class.java).setAction(Intent.ACTION_VIEW)
-            .setData(Uri.parse("appapp://subapp/$appId"))
+            .setData(Uri.parse("${com.wynh.appapp.BuildConfig.APP_LINK_SCHEME}://subapp/$appId"))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT or Intent.FLAG_ACTIVITY_RETAIN_IN_RECENTS)
 
     private fun start(reply: JavaScriptReplyProxy, id: String, providerId: String, model: String, instructions: String, input: String, effort: String?, title: String?, body: String?) {

@@ -405,7 +405,7 @@ class NativeStorageBridge(
             }
 
             val intent = Intent(context, com.wynh.appapp.SubappRuntimeActivity::class.java).apply {
-                data = Uri.parse("appapp://subapp/$subappId")
+                data = Uri.parse("${com.wynh.appapp.BuildConfig.APP_LINK_SCHEME}://subapp/$subappId")
                 action = Intent.ACTION_VIEW
             }
             val pendingIntent = PendingIntent.getActivity(

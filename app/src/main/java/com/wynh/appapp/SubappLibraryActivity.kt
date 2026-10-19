@@ -694,7 +694,7 @@ class SubappLibraryActivity : AppCompatActivity() {
         }
         startActivity(Intent(this, SubappRuntimeActivity::class.java).apply {
             action = Intent.ACTION_VIEW
-            data = Uri.parse("appapp://subapp/${record.id}")
+            data = Uri.parse("${com.wynh.appapp.BuildConfig.APP_LINK_SCHEME}://subapp/${record.id}")
             addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT or Intent.FLAG_ACTIVITY_RETAIN_IN_RECENTS)
         })
     }

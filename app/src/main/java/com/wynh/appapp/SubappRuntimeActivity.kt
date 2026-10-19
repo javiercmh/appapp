@@ -55,7 +55,7 @@ class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        if (intent.data != Uri.parse("appapp://subapp/$activeId")) render(intent.data)
+        if (intent.data != Uri.parse("${com.wynh.appapp.BuildConfig.APP_LINK_SCHEME}://subapp/$activeId")) render(intent.data)
     }
 
     private fun render(uri: Uri?) {

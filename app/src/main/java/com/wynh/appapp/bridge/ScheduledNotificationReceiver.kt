@@ -36,7 +36,7 @@ class ScheduledNotificationReceiver : BroadcastReceiver() {
         NativeStorageBridge.ensureNotificationChannel(context)
 
         val launchIntent = Intent(context, com.wynh.appapp.SubappRuntimeActivity::class.java).apply {
-            data = android.net.Uri.parse("appapp://subapp/$subappId")
+            data = android.net.Uri.parse("${com.wynh.appapp.BuildConfig.APP_LINK_SCHEME}://subapp/$subappId")
             action = Intent.ACTION_VIEW
         }
         val contentIntent = PendingIntent.getActivity(
