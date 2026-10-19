@@ -57,7 +57,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --verbose app/build/outputs/apk/dev/app-dev.apk
+          "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --verbose --print-certs app/build/outputs/apk/dev/app-dev.apk
+          "$ANDROID_HOME/build-tools/37.0.0/aapt" dump badging app/build/outputs/apk/dev/app-dev.apk
           mkdir -p dist
           cp app/build/outputs/apk/dev/app-dev.apk dist/app2-dev.apk
           cd dist

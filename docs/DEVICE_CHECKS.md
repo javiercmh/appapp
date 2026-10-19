@@ -58,3 +58,13 @@ pending; this check establishes a same-version signed reinstall only.
 - Recover a damaged library index using only disposable apps. Verify preservation of workspace directories, then restart and check registration/order.
 - Force a process exit during staged restore/import and reopen. Verify complete old or complete new bytes, never a mixed workspace.
 - Validate permissions after publisher updates, including Internet reset. Network-filter limits are documented; this list does not claim complete local-network isolation.
+
+## Pending: host compatibility level
+
+Not yet run on a device or emulator. On `Medium_Phone`, with App² Dev
+(low run-number version code) and a disposable app linked to a package declaring
+`minimumHostVersionCode` 4, confirm Update app reaches the review dialog; then with a
+package declaring 12, confirm the error names levels 12 and 11 and advises updating App².
+
+Also inspect the error dialog at normal and narrow widths with large fonts, and
+confirm cancelling update review leaves the disposable workspace unchanged.

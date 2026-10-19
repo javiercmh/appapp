@@ -23,6 +23,18 @@ A public repository's root `manifest.json` must declare:
 }
 ```
 
+`minimumHostVersionCode` is a wire-format name kept for compatibility; its value is
+a **host compatibility level**, not an APK version code. The host compares it with
+`BuildConfig.HOST_COMPATIBILITY_LEVEL` (currently `11`, defined once in
+`defaultConfig` and identical in release, Dev and debug builds). The check is strict:
+a package requiring a higher level than the host supports (for example `12` on a
+level-`11` host) is rejected after reading the manifest, before downloading package assets, with a message naming
+both levels and advising the user to update App². Packages requiring a lower or equal
+level (LingoMage's `4`) install. Dev builds use the run number as `versionCode`, so
+that counter no longer affects update compatibility. Raise the level only when the
+update contract or bridge gains behavior that publishers can require; releases and
+Dev builds do not change it.
+
 Publisher IDs are independent of App²'s stable installed subapp IDs. The host
 resolves the branch to a commit and downloads only declared files at that commit.
 It records commit, source and managed hashes beside the workspace. Private repos,
@@ -55,8 +67,8 @@ Standalone subapp tasks send Android Back through WebView history when an entry 
 available; the app's `popstate` handler can then close an in-app reader and return
 to its shelf. With no WebView history, Back exits the task normally. LingoMage
 keeps its existing history and `popstate` behavior, and release `1.2.7` must set
-`app2Update.minimumHostVersionCode` to `8` so it requires App² host code `8`
-(version name `1.5.1`).
+`app2Update.minimumHostVersionCode` to `8`, a compatibility level introduced with
+App² `1.5.1` (the current host supports level `11`).
 
 ## Recovery
 

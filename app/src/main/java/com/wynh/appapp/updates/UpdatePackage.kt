@@ -46,6 +46,10 @@ data class UpdatePackage(
     }
 }
 
+/** Shown when a package needs a newer host compatibility level than this App² supports. */
+internal fun incompatibleHostMessage(required: Long, supported: Long) =
+    "This update requires App² compatibility level $required, but this App² supports level $supported. Update App² first, then try again."
+
 fun safePath(path: String): String {
     require(path.isNotBlank() && path.length <= 240 && !path.contains('\\') && !path.startsWith('/') &&
         path.split('/').all { it.isNotBlank() && it != "." && it != ".." && !it.startsWith('.') && !it.contains(':') && !it.any(Char::isISOControl) }) { "Unsafe package path: $path" }

@@ -59,8 +59,8 @@ class WorkspaceUpdater(private val directory: File) {
         }
     }
 
-    fun install(pkg: UpdatePackage, files: File, commit: String, hostVersion: Long, reviewed: Map<String, String?>? = null, acceptMismatch: Boolean = false, beforeActivation: () -> Unit = {}) = synchronized(WorkspaceLocks.forWorkspace(workspace)) {
-        require(pkg.minimumHostVersion <= hostVersion) { "Update App² before installing this package" }
+    fun install(pkg: UpdatePackage, files: File, commit: String, hostCompatibilityLevel: Long, reviewed: Map<String, String?>? = null, acceptMismatch: Boolean = false, beforeActivation: () -> Unit = {}) = synchronized(WorkspaceLocks.forWorkspace(workspace)) {
+        require(pkg.minimumHostVersion <= hostCompatibilityLevel) { incompatibleHostMessage(pkg.minimumHostVersion, hostCompatibilityLevel) }
         require(commit.matches(Regex("[a-f0-9]{40}"))) { "Invalid commit" }
         val checked = UpdatePackage.parse(File(files, "manifest.json").readText())
         require(checked == pkg) { "Package metadata changed" }

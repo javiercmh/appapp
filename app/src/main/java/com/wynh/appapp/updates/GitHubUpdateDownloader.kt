@@ -23,7 +23,7 @@ class GitHubUpdateDownloader(private val cache: File, private val connect: (URL)
         return subjects.filter { it.isNotEmpty() }.take(limit)
     }
 
-    fun download(source: GitHubSource, hostVersion: Long): Download {
+    fun download(source: GitHubSource, hostCompatibilityLevel: Long): Download {
         val client = GitHubClient(connect, "AppApp-Updater", MAX_BYTES, timeoutMillis = 5 * 60_000)
         fun get(url: String, limit: Int) = client.get(url, limit.toLong())
         fun encode(value: String) = URLEncoder.encode(value, "UTF-8").replace("+", "%20")
@@ -34,7 +34,7 @@ class GitHubUpdateDownloader(private val cache: File, private val connect: (URL)
         val manifest = get(root + "manifest.json", 256 * 1024)
         val pkg = UpdatePackage.parse(manifest.toString(Charsets.UTF_8))
         require(pkg.source == source) { "Package GitHub source differs from the selected source" }
-        require(pkg.minimumHostVersion <= hostVersion) { "Update App² first (requires host version code ${pkg.minimumHostVersion})" }
+        require(pkg.minimumHostVersion <= hostCompatibilityLevel) { incompatibleHostMessage(pkg.minimumHostVersion, hostCompatibilityLevel) }
         val directory = File(cache, "update-${java.util.UUID.randomUUID()}")
         check(directory.mkdirs())
         try {
