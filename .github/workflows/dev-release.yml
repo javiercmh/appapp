@@ -26,6 +26,9 @@ jobs:
         with:
           python-version: '3.9'
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
       - run: sdkmanager 'platforms;android-37' 'build-tools;37.0.0'
       - uses: gradle/actions/setup-gradle@v4
       - name: Check project
