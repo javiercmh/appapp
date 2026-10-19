@@ -17,6 +17,9 @@ On the setup machine, `~/.local/share/app2-signing/dev.p12` holds the key and
 `dev-signing.properties` in the same directory holds its local signing properties.
 Both files have owner-only permissions. Keep an encrypted backup of both files;
 do not regenerate the key or replace the GitHub secrets for routine releases.
+The Dev certificate SHA-256 fingerprint is
+`c0114c2f0949a8ea0303251f3c51d77d775a9c7e1df210e836f0cf3f6addc30e`.
+Use it to verify downloaded APKs with `apksigner verify --print-certs`.
 The setup instructions below are for a new installation or disaster recovery,
 not steps to repeat for each build.
 
@@ -61,8 +64,7 @@ the decoded keystore from the temporary runner directory even if a step fails.
 
 ## Publish and install
 
-Once the workflow is committed and pushed, open GitHub Actions → **Publish App²
-Dev** → **Run workflow**, selecting `main`. Publishing from other refs is disabled.
+Open GitHub Actions → **Publish App² Dev** → **Run workflow**, selecting `main`. Publishing from other refs is disabled.
 The workflow runs JVM, lint, JavaScript and Python checks and compiles the existing
 Android tests. It does not run an emulator; native checks remain separate.
 
