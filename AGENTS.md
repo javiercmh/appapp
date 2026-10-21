@@ -102,7 +102,10 @@ Each app's `WebView` loads `https://<id>.app.local/index.html`. Requests for tha
 
 1. **Language & JDK**:
    - **Kotlin** with JVM target `17`.
-   - Compatible with **JDK 17** or **JDK 21** (embedded in Android Studio). Do **not** configure Gradle to use JDK 23+ or 25 directly without updating Gradle wrapper.
+   - Compatible with **JDK 17** or **JDK 21**. Do **not** configure Gradle to use JDK 23+ or 25 directly without updating Gradle wrapper.
+   - On the current macOS host use JDK 21 at `/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home`
+     (`env JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradlew …`). Android Studio's
+     bundled JBR is JDK 25 and is unsupported here; do not point Gradle at it.
 2. **Build System**:
    - **Gradle Kotlin DSL** (`*.gradle.kts`).
    - Root project name: `"AppApp"`.
@@ -197,8 +200,12 @@ Capabilities are granted per subapp by the user and stored natively outside ever
 
 Apps that existed before grants were introduced keep Internet (and Notifications when reminders were
 already scheduled); AI is never granted automatically. Users review and revoke every capability in
-the library: app menu → Permissions. Deleting an app, or a GitHub update that changes publisher code,
-clears its grants. ZIP and GitHub imports create a new app ID and therefore start with no grants.
+the library: app menu → Permissions. Deleting an app clears its grants. A GitHub update never changes
+them: they survive ordinary updates, a publisher identity change the user accepts, failed updates and
+recovery, and an update never grants an off capability (AI and notifications still ask on first use;
+Internet stays blocked until enabled). A changed publisher ID or source shows a warning that lists the
+permissions the new code will inherit, with Cancel and Update anyway. ZIP and GitHub imports create a
+new app ID and therefore start with no grants.
 When adding a capability, extend `SubappCapability`, ask through `SubappGrants.ask`, and list the
 default here, in the starter `AGENTS.md`, `PACKAGING.md` and `PRIVACY.md`.
 
@@ -246,12 +253,12 @@ binary file that the current subapp's origin interceptor can then serve via `<im
 ### Android emulator and device testing
 
 - Check `adb devices -l` before starting or installing. Use `-s <serial>` on every ADB command whenever an emulator and an external device may both be connected. Confirm the selected serial is the intended target; never rely on whichever device ADB happens to choose.
-- Emulator tests are the default for flows that create, edit, import, reset, delete, migrate, or otherwise mutate subapp data. The development host's Android SDK is at `/home/melo/Android/Sdk`; its emulator executable is `/home/melo/Android/Sdk/emulator/emulator` and is not on `PATH`. The installed AVD is named `Medium_Phone` (Android 36, x86_64). Do not search for another SDK or install another emulator.
+- Emulator tests are the default for flows that create, edit, import, reset, delete, migrate, or otherwise mutate subapp data. The development host's Android SDK is at `/Users/innolernki/Library/Android/sdk`; its emulator executable is `/Users/innolernki/Library/Android/sdk/emulator/emulator` and is not on `PATH` (`adb` is in `platform-tools` there). The AVD is named `Medium_Phone`; `Medium_Phone_API_37.0` is an alias of the same AVD, so use `Medium_Phone` only. Its configured Android 36 system image is not installed; the AVD boots from the installed Android 37.0 image (arm64-v8a) selected with `-sysdir` below. Do not search for another SDK, install another system image or create another emulator.
 - To start the AVD when it is not running, run this in a terminal and leave it open:
   ```sh
-  /home/melo/Android/Sdk/emulator/emulator -avd Medium_Phone -no-snapshot-load -no-boot-anim -gpu swangle
+  /Users/innolernki/Library/Android/sdk/emulator/emulator -avd Medium_Phone -sysdir /Users/innolernki/Library/Android/sdk/system-images/android-37.0/google_apis_playstore/arm64-v8a -no-snapshot-load -no-snapshot-save -no-boot-anim -gpu swangle
   ```
-  On this host, the default software renderer repeatedly exited with status 139; `-gpu swangle` booted successfully. `-no-snapshot-load` requests a cold boot while preserving AVD data. Do not add `-wipe-data` for routine tests.
+  This is the one canonical command. Without `-sysdir` the AVD looks for its missing Android 36 image and fails to boot. `-gpu swangle` is required for a working renderer on this host. `-no-snapshot-load` requests a cold boot and `-no-snapshot-save` keeps the run from writing a snapshot, both preserving AVD data. Do not add `-wipe-data` for routine tests. The running emulator is API 37, not the Android 36 image named in older validation notes (those records stay as written).
 - Wait for the selected device to be in state `device`, and, for an emulator, wait for `adb -s <serial> shell getprop sys.boot_completed` to print `1`. If the target does not become ready, report that instead of claiming an app test ran. In the examples below, replace `<serial>` with the exact serial shown by `adb devices -l` and `<id>` with the selected test subapp ID.
 - **External-device data protection is mandatory.** Treat a connected physical device as containing valuable user data. Use `Medium_Phone` for every test that creates, edits, imports, reorders, resets, deletes, migrates, or otherwise mutates subapp data. Physical-phone tests should be read-only launch/smoke checks by default. Before any phone update, record the exact ADB serial and model. Phone updates target only the existing AppApp installation in the main profile, user 0. Check that AppApp is already installed in that same user (`pm list packages --user <userId> com.wynh.appapp` and `pm path --user <userId> com.wynh.appapp`). Samsung Secure Folder is outside the work scope and has no AppApp data. Do not access, inspect, launch, install into, or modify Secure Folder, and do not enumerate profiles as part of routine phone checks. Never use another profile as a substitute for the main-profile installation. If the expected package is absent in the intended profile, or the profile cannot be identified, stop. Do not install a fresh copy into another profile as a substitute.
 - **Phone control is user-gated by wireless debugging.** The owner keeps wireless debugging off and enables it only when they want agents to work on the phone. While the phone is connected over ADB, that is standing permission for agents to control its interface (`adb shell input`, `screencap`, `uiautomator dump`) in the main profile, user 0, to run the backup, install the verified release update, and perform the read-only checks described here. It does not relax any other rule in this section: Secure Folder and other profiles stay off limits, and never uninstall, clear data, or alter user subapps. If the phone is not connected, ask the owner to enable wireless debugging rather than working around it.
@@ -289,7 +296,7 @@ binary file that the current subapp's origin interceptor can then serve via `<im
    - The repository includes `./gradlew`, `gradlew.bat`, and `gradle/wrapper/gradle-wrapper.jar`; the selected Gradle distribution is in `gradle/wrapper/gradle-wrapper.properties`.
    - Use `./gradlew` for CLI validation or Android Studio's configured Gradle integration. Do not hunt for or invoke a separate Gradle installation.
 2. **Terminal Sandbox Isolation**:
-   - The execution sandbox isolates filesystem access outside the workspace (`/home/melo/Android/Sdk` etc. cannot be probed from standard sandbox mode).
+   - The execution sandbox isolates filesystem access outside the workspace (`/Users/innolernki/Library/Android/sdk` etc. cannot be probed from standard sandbox mode).
 3. **Resource Binding CamelCase**:
    - XML view IDs like `btn_reset` or `btn_edit_code` map to ViewBinding properties `binding.btnReset` and `binding.btnEditCode`. When updating layouts, ensure all references in `MainActivity.kt` stay synchronized.
 4. **MIME Resolution & Asset URLs**:
