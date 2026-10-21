@@ -9,7 +9,10 @@ Import `ai` from `js/bridge.js`. `ai.available` means the native channel exists,
 | --- | --- |
 | `ai.providers()` | `{providers: [{id: "chatgpt", name: "ChatGPT", connected: true}]}` (connection may be false) |
 | `ai.models("chatgpt")` | `{models: [{id: "provider-model-id", name: "Display name", reasoningLevels: ["low", "medium", "high"]}]}` |
-| `ai.start({providerId, model, instructions, input, reasoningEffort?, title?, body?})` | Request ID string |
+| `ai.start({providerId, model, instructions, input, reasoningEffort?, title?, body?, sessionId?})` | Request ID string |
+| `ai.sessions.supported()` | `true`/`false`; rejects (never `false`) on anything but a confirmed yes or the old-host answer |
+| `ai.sessions.begin({providerId, model, title?, body?})` | `{sessionId}`; see "Operation sessions" in the root `AGENTS.md` |
+| `ai.sessions.end(sessionId)` | `true` |
 | `ai.result(id)` | Pending: `{id, done: false, value: null}`; success: `{id, done: true, value: "completed text"}` |
 | `ai.wait(id)` | Completed text string; only for IDs started by this page instance |
 | `ai.cancel(id)` | `true`; cancels and releases the request |
@@ -19,7 +22,7 @@ Import `ai` from `js/bridge.js`. `ai.available` means the native channel exists,
 
 Model lists are account-specific and preserve server order. Treat IDs as provider-specific; use the returned list rather than hardcoding models. `reasoningLevels` may be empty. Omit `reasoningEffort` for the provider default; explicit efforts must come from the selected model's list. The examples' model IDs and capabilities above are illustrative.
 
-Native command failures reject with `Error`, usually with `.code` and `.message`. A cached terminal failure from `ai.result()` may instead have `{id, done: true, error: {code, message}}` (its `value` is not response text). Handle both forms. Results created in the current page may contain additional wrapper internals; persist your own metadata, not the result object. Common failure codes include `authentication`, `permission`, `usage_limit`, `network`, `service`, `invalid_response`, `models`, `invalid_request`, `provider`, `request_in_progress` and `not_found`. An unavailable browser or command timeout may reject without a code. Show failures and require a deliberate new Generate action; never automatically retry inference.
+Native command failures reject with `Error`, usually with `.code` and `.message`. A cached terminal failure from `ai.result()` may instead have `{id, done: true, error: {code, message}}` (its `value` is not response text). Handle both forms. Results created in the current page may contain additional wrapper internals; persist your own metadata, not the result object. Common failure codes include `authentication`, `permission`, `usage_limit`, `network`, `service`, `invalid_response`, `models`, `invalid_request`, `provider`, `request_in_progress`, `not_found`, `background_service`, `session_ended`, `session_cancelled`, `session_idle` and `session_timeout` (operation sessions are specified in the root `AGENTS.md`). An unavailable browser or command timeout may reject without a code. Show failures and require a deliberate new Generate action; never automatically retry inference.
 
 This runnable module example (placed under `js/`) saves before acknowledging:
 

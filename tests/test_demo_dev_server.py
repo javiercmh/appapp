@@ -88,6 +88,12 @@ class ServerTest(unittest.TestCase):
         self.assertEqual((self.root / 'data/alias.json').read_text(), '[1]')
         self.assertEqual(outside.read_text(), 'private')
 
+    def test_mock_reports_sessions_unsupported_exactly_like_an_old_host(self):
+        status, body = self.ai('capabilities')
+        self.assertEqual((status, body['error']['code'], body['error']['message']),
+                         (400, 'invalid_request', 'Unsupported AI command.'))
+        self.assertEqual(self.server.requests, {})
+
     def test_mock_lifecycle(self):
         self.assertTrue(self.ai('providers')[1]['providers'][0]['connected'])
         model = self.ai('models', providerId='chatgpt')[1]['models'][0]

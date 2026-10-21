@@ -18,11 +18,13 @@ internal data class AiPresentation(
 internal object AiNotificationCopy {
     const val DEFAULT_TITLE = "AI request in progress"
     const val DEFAULT_BODY = "AppApp will continue while you use another app."
+    const val LEASE_BODY = "Waiting for the next step."
     const val MAX_TITLE = 60
     const val MAX_BODY = 140
 
     fun title(value: String?): String = clean(value, MAX_TITLE, DEFAULT_TITLE)
     fun body(value: String?): String = clean(value, MAX_BODY, DEFAULT_BODY)
+    fun leaseBody(value: String?): String = clean(value, MAX_BODY, LEASE_BODY)
 
     /** Single line, control characters become spaces, bounded by code points; blank falls back. */
     private fun clean(value: String?, max: Int, fallback: String): String {

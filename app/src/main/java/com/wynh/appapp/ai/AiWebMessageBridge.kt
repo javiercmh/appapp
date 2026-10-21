@@ -66,15 +66,40 @@ class AiWebMessageBridge(
                 val effort = data.get("reasoningEffort")?.takeUnless { it.isJsonNull }?.asString
                 val title = optionalText(data, "title")
                 val body = optionalText(data, "body")
-                if (title == null || body == null) { fail(reply, id, "invalid_request", "Invalid request."); return }
+                val session = optionalText(data, "sessionId")
+                if (title == null || body == null || session == null || (session.value?.length ?: 0) > 64) { fail(reply, id, "invalid_request", "Invalid request."); return }
                 if (model.isBlank() || model.length > 8192 || providerId.length > 32 || input.length > 100_000 || instructions.length > 100_000) { fail(reply, id, "invalid_request", "Invalid request."); return }
-                val begin = { start(reply, id, providerId, model, instructions, input, effort, title.value, body.value) }
+                val begin = { start(reply, id, providerId, model, instructions, input, effort, title.value, body.value, session.value) }
                 if (SubappGrants.isGranted(activity, appId, SubappCapability.AI)) begin()
                 else askForAi(providerId, model) { allowed ->
                     if (!allowed) fail(reply, id, "permission", "AI was not allowed for this app. Allow it in the library: app menu → Permissions.")
                     else if (manager.hasRequest(appId)) fail(reply, id, "request_in_progress", "A request is already running or awaiting acknowledgement.")
                     else begin()
                 }
+            }
+            // Capability probe: hosts without sessions answer every unknown action with invalid_request.
+            "capabilities" -> respond(reply, id, "result", """{"sessions":1}""")
+            "beginSession" -> {
+                val data = request.getAsJsonObject("data") ?: JsonObject()
+                val providerId = data.get("providerId")?.asString ?: "chatgpt"
+                val model = data.get("model")?.asString ?: ""
+                val title = optionalText(data, "title")
+                val body = optionalText(data, "body")
+                if (title == null || body == null) { fail(reply, id, "invalid_request", "Invalid request."); return }
+                if (model.isBlank() || model.length > 8192 || providerId.length > 32) { fail(reply, id, "invalid_request", "Invalid request."); return }
+                // Checked on this activity at this moment, before any disclosure; no provider is contacted.
+                if (!resumed()) { fail(reply, id, "background_service", "Background work can only be started while the app is on screen."); return }
+                val begin = { beginSession(reply, id, providerId, model, title.value, body.value) }
+                if (SubappGrants.isGranted(activity, appId, SubappCapability.AI)) begin()
+                else askForAi(providerId, model) { allowed ->
+                    if (!allowed) fail(reply, id, "permission", "AI was not allowed for this app. Allow it in the library: app menu → Permissions.")
+                    else begin()
+                }
+            }
+            "endSession" -> {
+                val sessionId = request.getAsJsonObject("data")?.get("sessionId")?.takeIf { it.isJsonPrimitive }?.asString ?: ""
+                if (manager.endSession(appId, taskId, sessionId)) respond(reply, id, "result", "true")
+                else fail(reply, id, "not_found", "Session not found.")
             }
             "result" -> {
                 val requestId = request.get("requestId")?.asString ?: ""
@@ -117,8 +142,17 @@ class AiWebMessageBridge(
             .setData(Uri.parse("${com.wynh.appapp.BuildConfig.APP_LINK_SCHEME}://subapp/$appId"))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT or Intent.FLAG_ACTIVITY_RETAIN_IN_RECENTS)
 
-    private fun start(reply: JavaScriptReplyProxy, id: String, providerId: String, model: String, instructions: String, input: String, effort: String?, title: String?, body: String?) {
-        val reqId = try { manager.start(appId, taskId, providerId, model, instructions, input, effort, title, body, openIntent()) }
+    private fun resumed() = activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+
+    private fun beginSession(reply: JavaScriptReplyProxy, id: String, providerId: String, model: String, title: String?, body: String?) {
+        manager.beginSession(appId, taskId, providerId, model, title, body, resumed(), openIntent()) { sessionId, failure ->
+            if (failure != null) fail(reply, id, failure.kind.name.lowercase(), failure.userMessage)
+            else respond(reply, id, "result", """{"sessionId":${quote(sessionId ?: "")}}""")
+        }
+    }
+
+    private fun start(reply: JavaScriptReplyProxy, id: String, providerId: String, model: String, instructions: String, input: String, effort: String?, title: String?, body: String?, sessionId: String?) {
+        val reqId = try { manager.start(appId, taskId, providerId, model, instructions, input, effort, title, body, openIntent(), sessionId) }
         catch (e: com.wynh.appapp.ai.network.ApiFailure) { fail(reply, id, e.kind.name.lowercase(), e.userMessage); return }
         respond(reply, id, "result", quote(reqId))
         manager.event(webView, origin, """{"event":"status","id":${quote(reqId)},"data":{"status":"running"}}""")

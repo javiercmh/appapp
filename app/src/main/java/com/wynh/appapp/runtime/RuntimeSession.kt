@@ -61,6 +61,8 @@ class RuntimeSession(
         }) {
             override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                 chooser.complete(null); speech.pageChanged(); web.selectionMenuSuppressed = false; storage.pageStarted()
+                // A new page cannot hold the previous page's session; a running request keeps running.
+                (activity.application as? AppAiApplication)?.ai?.releaseTask(activity.taskId)
                 super.onPageStarted(view, url, favicon)
             }
             override fun onPageFinished(view: WebView?, url: String?) { super.onPageFinished(view, url); if (!closed) ready(web) }

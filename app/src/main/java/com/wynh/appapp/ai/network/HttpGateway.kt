@@ -16,7 +16,11 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 class ApiFailure(val kind: Kind, val userMessage: String, val serviceCode: String? = null) : Exception(userMessage) {
-    enum class Kind { AUTHENTICATION, PERMISSION, USAGE_LIMIT, NETWORK, INVALID_RESPONSE, SERVICE, INVALID_REQUEST, PROVIDER }
+    enum class Kind {
+        AUTHENTICATION, PERMISSION, USAGE_LIMIT, NETWORK, INVALID_RESPONSE, SERVICE, INVALID_REQUEST, PROVIDER,
+        /** Bridge codes are the lower-cased names; these serve operation sessions. */
+        BACKGROUND_SERVICE, REQUEST_IN_PROGRESS, NOT_FOUND, SESSION_ENDED, SESSION_CANCELLED, SESSION_IDLE, SESSION_TIMEOUT
+    }
 }
 
 class HttpGateway(val client: OkHttpClient = OkHttpClient.Builder()
