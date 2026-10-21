@@ -1,0 +1,96 @@
+name: Build signed App² production
+run-name: App² production build ${{ github.run_number }}
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: app2-production-build
+  cancel-in-progress: false
+jobs:
+  check:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.9'
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - run: sdkmanager 'platforms;android-37.0' 'build-tools;37.0.0'
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+      - name: Check project without signing credentials
+        run: |
+          ./gradlew :app:testDebugUnitTest :app:lintRelease :app:compileDebugAndroidTestKotlin
+          node --test tests/*.test.mjs scripts/tests/*.mjs
+          python3 -B -m unittest discover -s tests -p 'test_demo_dev_server.py'
+  build:
+    needs: check
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - run: sdkmanager 'platforms;android-37.0' 'build-tools;37.0.0'
+      - name: Load existing production signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.APPAPP_RELEASE_KEYSTORE_BASE64 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KEYSTORE_BASE64" || { echo 'Production signing key is missing; see docs/PRODUCTION_BUILDS.md'; exit 1; }
+          umask 077
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/app2-production.keystore"
+      - name: Build signed production APK
+        env:
+          ORG_GRADLE_PROJECT_APPAPP_RELEASE_STORE_FILE: ${{ runner.temp }}/app2-production.keystore
+          ORG_GRADLE_PROJECT_APPAPP_RELEASE_STORE_PASSWORD: ${{ secrets.APPAPP_RELEASE_STORE_PASSWORD }}
+          ORG_GRADLE_PROJECT_APPAPP_RELEASE_KEY_ALIAS: ${{ secrets.APPAPP_RELEASE_KEY_ALIAS }}
+          ORG_GRADLE_PROJECT_APPAPP_RELEASE_KEY_PASSWORD: ${{ secrets.APPAPP_RELEASE_KEY_PASSWORD }}
+        run: ./gradlew :app:assembleSignedRelease --no-daemon --no-build-cache --no-configuration-cache
+      - name: Verify production identity and prepare download
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=app/build/outputs/apk/release/app-release.apk
+          "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --print-certs "$apk" > "$RUNNER_TEMP/production-certificate.txt"
+          cat "$RUNNER_TEMP/production-certificate.txt"
+          grep -Fxq 'Signer #1 certificate SHA-256 digest: d3a30c1acecc9008f11711c39013353f00fc58b540a26eba95bb3556eb02e89a' "$RUNNER_TEMP/production-certificate.txt"
+          "$ANDROID_HOME/build-tools/37.0.0/aapt" dump badging "$apk" > "$RUNNER_TEMP/production-package.txt"
+          grep -q "^package: name='com.wynh.appapp' " "$RUNNER_TEMP/production-package.txt"
+          mkdir -p dist
+          cp "$apk" dist/app2-production.apk
+          printf '%s\n' "$GITHUB_SHA" > dist/source-commit.txt
+          cd dist
+          sha256sum app2-production.apk > app2-production.apk.sha256
+      - name: Remove signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/app2-production.keystore"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: app2-production-${{ github.run_number }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
