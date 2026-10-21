@@ -43,7 +43,7 @@ The repository must be anonymously readable from the phone; SSH access on the
 development computer alone does not grant phone access. Every package must manage `index.html` and `manifest.json`. File paths must be
 relative, unique, without hidden components or traversal, and cannot overlap as
 files/directories. Update limits: 256 files, 8 MiB per asset, 256 KiB manifest and 32 MiB
-per download. The host rejects redirects. A changed publisher ID or source is shown in the review dialog as a warning and applies only after the user chooses Accept and update. Library ZIP installation
+per download. The host rejects redirects. A changed publisher ID or source is shown in the review dialog as a warning and applies only after the user chooses Update anyway; the warning names the permissions the new code will inherit. Library ZIP installation
 also rejects traversal, duplicate paths, missing root index.html and archives over
 1024 entries, 8 MiB per file or 32 MiB expanded total.
 
@@ -175,6 +175,6 @@ or silently install. Browsers and development mocks report unavailable.
 
 ## Runtime coordination
 
-Update installation runs as an owned background workspace operation. Only sessions of the affected app are suspended; App² does not pause process-wide WebView timers. The affected document reloads after the transaction. Publisher permission revocation persists before new code activates, including Internet permission; if revocation fails, new code is not published. A failed update after revocation may require re-enabling capabilities for the unchanged app.
+Update installation runs as an owned background workspace operation. Only sessions of the affected app are suspended; App² does not pause process-wide WebView timers. The affected document reloads after the transaction. Updates never change the app's permissions (AI, notifications, Internet): decisions are kept after ordinary updates, an accepted publisher identity change, failed updates and recovery, and nothing is granted automatically. Native permission storage is outside the workspace and is not part of the update transaction or recovery backup.
 
 The shared text-history restore now stages a complete replacement and preserves binary/unknown files. It remains a bounded text history, not an all-file backup. See [architecture](ARCHITECTURE.md) and [pending device checks](DEVICE_CHECKS.md).

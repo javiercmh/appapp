@@ -178,7 +178,6 @@
     <string name="history_restored">Version restored</string>
     <string name="editor_cannot_read">This file could not be opened as UTF-8 text. Its contents were kept.</string>
     <string name="library_open_runner">Open library</string>
-    <string name="update_permission_reset">AI, Internet, and notification permissions are reset when publisher code changes. AI and notifications will ask again. Enable Internet in the library’s Permissions if needed. Scheduled reminders stop until notifications are allowed again.</string>
     <string name="library_task_reorder">Saving app order…</string>
     <string name="library_task_delete">Deleting app…</string>
     <string name="library_task_recover">Recovering library…</string>

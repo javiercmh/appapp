@@ -19,9 +19,11 @@ import java.io.File
  * - Revoked from the Permissions dialog. Revoking notifications cancels the subapp's posted
  *   notifications and scheduled alarms; revoking AI cancels its unfinished AI requests.
  * - Cleared when the subapp is deleted ([SubappRepository.delete]).
- * - Reset after a GitHub update installs changed publisher files ([resetAfterCodeChange], called by
- *   UpdateController). ZIP installation and backup restore always create new IDs, which start
- *   without grants.
+ * - Preserved by GitHub updates, including a publisher identity change the user explicitly accepts,
+ *   and by failed updates and their recovery. An update never grants or revokes anything; a
+ *   capability the user has not allowed stays off (AI and notifications ask on first use, Internet
+ *   stays blocked until enabled in Permissions). ZIP installation and backup restore always create
+ *   new IDs, which start without grants.
  */
 object SubappGrants {
     private const val PREFS = "subapp_capability_grants"
@@ -46,11 +48,6 @@ object SubappGrants {
 
     /** Deletion cleanup; the caller already cancels notifications and AI requests. */
     fun clear(context: Context, appId: String) { store(context).clear(appId) }
-
-    /** New publisher code must ask again; revocation side effects apply. */
-    fun resetAfterCodeChange(context: Context, appId: String) {
-        onRevoked(context, appId, store(context).clear(appId))
-    }
 
     private fun onRevoked(context: Context, appId: String, capabilities: Set<SubappCapability>) {
         if (SubappCapability.NOTIFICATIONS in capabilities) NativeStorageBridge.cancelAllForSubapp(context, appId)

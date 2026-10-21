@@ -60,41 +60,71 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
             var download: GitHubUpdateDownloader.Download? = null
             try {
                 download = withContext(Dispatchers.IO) { GitHubUpdateDownloader(activity.cacheDir).download(source, hostCompatibilityLevel) }
-                val value = download
-                val (preview, reviewed, unchanged) = withContext(Dispatchers.IO) {
-                    synchronized(WorkspaceLocks.forWorkspace(record.workspaceDir)) {
-                        Triple(updater.preview(value.pkg, value.directory, acceptMismatch = true), updater.reviewedFiles(value.pkg), updater.publisherUnchanged(value.pkg, value.directory))
-                    }
+                review(download, source) {
+                    runCatching { withContext(Dispatchers.IO) { GitHubUpdateDownloader(activity.cacheDir).recentSubjects(source, updater.installed()?.commit) } }
+                        .getOrDefault(emptyList()).also { progress.dismiss() }
                 }
-                val mismatch = updater.identityMismatch(value.pkg)
-                val subjects = runCatching { withContext(Dispatchers.IO) { GitHubUpdateDownloader(activity.cacheDir).recentSubjects(source, updater.installed()?.commit) } }.getOrDefault(emptyList())
-                progress.dismiss()
-                if (unchanged) {
-                    MaterialAlertDialogBuilder(activity).setTitle("App is up to date")
-                        .setMessage("Version ${value.pkg.version}\n${source.display}\n\nThere are no publisher changes to install. Your local edits and saved data are kept.")
-                        .setPositiveButton("Done", null)
-                        .setOnDismissListener { value.directory.deleteRecursively() }.show()
-                    return@launch
-                }
-                val text = buildString {
-                    append("Version: ${value.pkg.version}\n${source.display}\n")
-                    if (mismatch != null) append("\n⚠ This publisher does not match the installed app:\n$mismatch\nOnly continue if you trust this repository. Updating adopts the new identity.\n")
-                    if (subjects.isNotEmpty()) append("\nLatest commits:\n${subjects.joinToString("\n") { "• $it" }}\n")
-                    append("\nUser records and unowned files are preserved.\n")
-                    if (preview.edited.isNotEmpty()) append("\n${preview.edited.size} locally edited or missing code files will be replaced by publisher files.\n")
-                    append("\nThe current and updated versions will be saved in Edit → Version history. A recovery backup will also be created.")
-                    append("\n\n"); append(activity.getString(com.wynh.appapp.R.string.update_permission_reset))
-                }
-                var accepted = false
-                MaterialAlertDialogBuilder(activity).setTitle("Review app update").setMessage(text)
-                    .setPositiveButton(if (mismatch != null) "Accept and update" else if (preview.adoption) "Link and update" else "Update") { _, _ ->
-                        accepted = true
-                        applyUpdate("GitHub update ${value.pkg.version} · ${value.commit.take(12)}", value.directory) { updater.install(value.pkg, value.directory, value.commit, hostCompatibilityLevel, reviewed, acceptMismatch = mismatch != null,
-                            beforeActivation = { com.wynh.appapp.grants.SubappGrants.resetAfterCodeChange(activity.applicationContext, record.id) }) }
-                    }.setNegativeButton("Cancel", null)
-                    .setOnDismissListener { if (!accepted) value.directory.deleteRecursively() }.show()
             } catch (e: Exception) { progress.dismiss(); download?.directory?.deleteRecursively(); error(e) }
         }
+    }
+
+    /**
+     * Shows the review of a staged package; [check] calls it after downloading. The dialog owns
+     * [value]'s directory and deletes it unless the update is applied. [subjects] supplies the
+     * optional recent commit subjects.
+     */
+    internal suspend fun review(value: GitHubUpdateDownloader.Download, source: GitHubSource, subjects: suspend () -> List<String> = { emptyList() }) {
+        val (preview, reviewed, unchanged) = withContext(Dispatchers.IO) {
+            synchronized(WorkspaceLocks.forWorkspace(record.workspaceDir)) {
+                Triple(updater.preview(value.pkg, value.directory, acceptMismatch = true), updater.reviewedFiles(value.pkg), updater.publisherUnchanged(value.pkg, value.directory))
+            }
+        }
+        val mismatch = updater.identityMismatch(value.pkg)
+        val latest = subjects()
+        if (unchanged) {
+            MaterialAlertDialogBuilder(activity).setTitle("App is up to date")
+                .setMessage("Version ${value.pkg.version}\n${source.display}\n\nThere are no publisher changes to install. Your local edits and saved data are kept.")
+                .setPositiveButton("Done", null)
+                .setOnDismissListener { value.directory.deleteRecursively() }.show()
+            return
+        }
+        val granted = com.wynh.appapp.grants.SubappGrants.store(activity).granted(record.id)
+        val text = buildString {
+            if (mismatch != null) append(UpdateReviewCopy.identityWarning(mismatch, granted)).append("\n\n")
+            append("Version: ${value.pkg.version}\n${source.display}\n")
+            if (latest.isNotEmpty()) append("\nLatest commits:\n${latest.joinToString("\n") { "• $it" }}\n")
+            append("\nUser records and unowned files are preserved.\n")
+            if (preview.edited.isNotEmpty()) append("\n${preview.edited.size} locally edited or missing code files will be replaced by publisher files.\n")
+            append("\nThe current and updated versions will be saved in Edit → Version history. A recovery backup will also be created.")
+            if (mismatch == null) append("\n\n").append(UpdateReviewCopy.permissionSummary(granted))
+        }
+        var accepted = false
+        showReviewDialog(text, if (mismatch != null) "Update anyway" else if (preview.adoption) "Link and update" else "Update",
+            onConfirm = {
+                accepted = true
+                applyUpdate("GitHub update ${value.pkg.version} · ${value.commit.take(12)}", value.directory) { updater.install(value.pkg, value.directory, value.commit, hostCompatibilityLevel, reviewed, acceptMismatch = mismatch != null) }
+            },
+            onDismissed = { if (!accepted) value.directory.deleteRecursively() })
+    }
+
+    /**
+     * The review has a long message and two actions, so it uses its own layout: the message scrolls
+     * independently and both full-width buttons stay visible at narrow widths and large text sizes,
+     * where the platform dialog button bar can clip its last button.
+     */
+    private fun showReviewDialog(message: String, confirmLabel: String, onConfirm: () -> Unit, onDismissed: () -> Unit) {
+        val dialog = android.app.Dialog(activity, com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog)
+        dialog.setContentView(com.wynh.appapp.R.layout.dialog_update_review)
+        dialog.window?.setLayout(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
+        dialog.findViewById<android.widget.TextView>(com.wynh.appapp.R.id.update_review_title).text = "Review app update"
+        dialog.findViewById<android.widget.TextView>(com.wynh.appapp.R.id.update_review_message).text = message
+        dialog.findViewById<android.widget.Button>(com.wynh.appapp.R.id.update_review_confirm).apply {
+            text = confirmLabel
+            setOnClickListener { onConfirm(); dialog.dismiss() }
+        }
+        dialog.findViewById<android.view.View>(com.wynh.appapp.R.id.update_review_cancel).setOnClickListener { dialog.dismiss() }
+        dialog.setOnDismissListener { onDismissed() }
+        dialog.show()
     }
 
     private fun applyUpdate(label: String, staged: File, operation: () -> Unit) {

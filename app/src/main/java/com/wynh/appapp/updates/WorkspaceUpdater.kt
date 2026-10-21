@@ -59,7 +59,7 @@ class WorkspaceUpdater(private val directory: File) {
         }
     }
 
-    fun install(pkg: UpdatePackage, files: File, commit: String, hostCompatibilityLevel: Long, reviewed: Map<String, String?>? = null, acceptMismatch: Boolean = false, beforeActivation: () -> Unit = {}) = synchronized(WorkspaceLocks.forWorkspace(workspace)) {
+    fun install(pkg: UpdatePackage, files: File, commit: String, hostCompatibilityLevel: Long, reviewed: Map<String, String?>? = null, acceptMismatch: Boolean = false) = synchronized(WorkspaceLocks.forWorkspace(workspace)) {
         require(pkg.minimumHostVersion <= hostCompatibilityLevel) { incompatibleHostMessage(pkg.minimumHostVersion, hostCompatibilityLevel) }
         require(commit.matches(Regex("[a-f0-9]{40}"))) { "Invalid commit" }
         val checked = UpdatePackage.parse(File(files, "manifest.json").readText())
@@ -75,7 +75,6 @@ class WorkspaceUpdater(private val directory: File) {
         pkg.managed.forEach { copyManaged(files, next, it) }
         pkg.seeds.forEach { if (!File(next, it).exists()) copyManaged(files, next, it) }
         verifyPreserved(pkg.managed + preview.removed.toSet())
-        beforeActivation()
         commitWorkspace(InstalledUpdate(pkg.appId, pkg.version, pkg.source, commit, hashes, pkg.seeds))
     }
 
