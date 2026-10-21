@@ -85,6 +85,19 @@ may ask you to allow installations from that browser or file manager. App² Dev
 appears beside App². Future Dev APKs update Dev and preserve its data when signed
 with the same Dev key. These prereleases are explicitly not marked Latest.
 
+After each successful publication, the workflow keeps the three highest numbered
+published `dev-N` prereleases and deletes older Dev releases and their download
+assets. Git tags remain, so old build identities cannot be silently reused.
+Production releases, other prereleases and drafts are preserved. Build caches
+are left to GitHub's normal cache management. Production build artifacts have a
+separate 30-day retention period.
+
+Preview the Dev cleanup without deleting anything:
+
+```sh
+python3 scripts/prune_dev_releases.py --repo javiercmh/appapp
+```
+
 ## Local checks
 
 ```sh
