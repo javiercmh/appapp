@@ -99,9 +99,10 @@
                 <EditText
                     android:id="@+id/package_name_input"
                     android:layout_width="0dp"
-                    android:layout_height="40dp"
+                    android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:background="@null"
+                    android:minHeight="48dp"
                     android:fontFamily="monospace"
                     android:hint="@string/package_name_hint"
                     android:importantForAutofill="no"
@@ -121,59 +122,20 @@
                     android:textStyle="bold" />
             </LinearLayout>
 
-            <!-- File Selection Header with Master Checkbox -->
-            <LinearLayout
-                android:id="@+id/package_master_checkbox_row"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="?attr/selectableItemBackground"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:paddingHorizontal="20dp"
-                android:paddingBottom="4dp">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/export_select_files_label"
-                    android:textColor="@color/on_surface_muted"
-                    android:textSize="12sp"
-                    android:textStyle="bold" />
-
-                <com.google.android.material.checkbox.MaterialCheckBox
-                    android:id="@+id/package_master_checkbox"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    app:buttonTint="@color/primary" />
-            </LinearLayout>
-
-            <!-- File List Container -->
-            <LinearLayout
-                android:id="@+id/package_files_container"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="@color/code_editor_bg"
-                android:orientation="vertical"
-                android:paddingVertical="4dp" />
-
             <!-- Export Actions Buttons -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:orientation="horizontal"
+                android:orientation="vertical"
                 android:paddingHorizontal="20dp">
 
                 <!-- Share ZIP Button -->
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/package_btn_share_zip"
                     style="@style/Widget.Material3.Button"
-                    android:layout_width="0dp"
-                    android:layout_height="44dp"
-                    android:layout_weight="1"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="48dp"
                     android:backgroundTint="@color/primary"
                     android:text="@string/action_share_zip"
                     android:textColor="@color/on_primary"
@@ -187,11 +149,11 @@
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/package_btn_save_zip"
                     style="@style/Widget.Material3.Button.TonalButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="44dp"
-                    android:layout_marginStart="8dp"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:minHeight="48dp"
                     android:backgroundTint="@color/surface_variant"
-                    android:paddingHorizontal="14dp"
                     android:text="@string/action_save_zip"
                     android:textColor="@color/on_surface"
                     android:textSize="12sp"
@@ -199,6 +161,84 @@
                     app:iconPadding="6dp"
                     app:iconSize="18dp"
                     app:iconTint="@color/accent_blue" />
+            </LinearLayout>
+
+            <!-- Expandable individual files, collapsed by default -->
+            <LinearLayout
+                android:id="@+id/package_files_toggle_row"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:background="?attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:minHeight="48dp"
+                android:orientation="horizontal"
+                android:paddingHorizontal="20dp">
+
+                <TextView
+                    android:id="@+id/package_files_toggle_label"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:textColor="@color/on_surface_muted"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <ImageView
+                    android:id="@+id/package_files_chevron"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_arrow_down"
+                    app:tint="@color/on_surface_muted" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/package_files_section"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <!-- File Selection Header with Master Checkbox -->
+                <LinearLayout
+                    android:id="@+id/package_master_checkbox_row"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="?attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="20dp"
+                    android:paddingBottom="4dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/export_select_files_label"
+                        android:textColor="@color/on_surface_muted"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <com.google.android.material.checkbox.MaterialCheckBox
+                        android:id="@+id/package_master_checkbox"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        app:buttonTint="@color/primary" />
+                </LinearLayout>
+
+                <!-- File List Container -->
+                <LinearLayout
+                    android:id="@+id/package_files_container"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@color/code_editor_bg"
+                    android:orientation="vertical"
+                    android:paddingVertical="4dp" />
             </LinearLayout>
 
         </LinearLayout>
