@@ -252,7 +252,7 @@ The user grants capabilities to each app in the library (app menu → Permission
   (the reason is written to `app.log`). Bundle libraries and assets inside the app instead. Apps that
   truly need web APIs ask the user to enable Internet in Permissions; it applies on the next launch.
 
-Imported apps, and apps updated from GitHub with changed code, start with no permissions.
+Imported apps start with no permissions. GitHub updates keep the user's existing permission decisions and never grant a capability the user has not allowed.
 
 ## Subapp AI guide
 

@@ -43,6 +43,33 @@ title also fit at 900×1600 and 130% fonts. No physical-phone installation was
 performed. Upgrading between distinct persistent-key published versions remains
 pending; this check establishes a same-version signed reinstall only.
 
+## Sharing and update permissions verification
+
+Medium_Phone, API 37, arm64, emulator-5554; debug build only. The canonical boot
+command in AGENTS.md selects the installed Android 37 image explicitly. No physical
+device or real AI provider was used.
+
+- 139 JVM tests, debug build, debug Android-test build and debug lint passed. The
+  existing 14 JavaScript and 5 Python development-server tests also passed.
+- Five targeted instrumented checks passed: `SharePackageDialogDeviceTest`,
+  `UpdatePermissionDeviceTest` and the three `UpdaterDeviceTest` checks. The real
+  update review used locally staged packages, with no live GitHub download. Cancel
+  preserved code and publisher identity; Update anyway installed the new identity.
+  Existing Notifications/Internet grants and persisted reminder records survived;
+  AI remained off. The updater tests cover file preservation and journal recovery.
+- Inspected collapsed/expanded sharing and identity-review screenshots at
+  1080×2400 with normal text. At 840×1800 (320dp) with 150% text, inspected sharing
+  and identity review and reran the confirmation test successfully. Both update
+  choices remained completely visible and clickable. The message scrolls separately.
+  Review corrected a disappearing Share ZIP label and a clipped native Cancel button.
+- Selected only `index.html`, collapsed the file list and used Save to Device.
+  Pulled the resulting ZIP, checked its integrity and verified that its only entry
+  was `index.html`. The share-dialog test also checks that a partial selection and
+  the master checkbox state survive collapsing and expanding.
+- Restored emulator display size and font scale after checking. Actual alarm
+  delivery, TalkBack speech, and a process kill during an update remain pending;
+  preservation of seeded reminder preferences does not establish alarm delivery.
+
 ## Pending checks
 - With one app open standalone (split screen) and saved from the editor: a plain file save, Run, and settings save must not reload the standalone page or lose its in-memory state; restore, update and factory reset must reload it. Repeat with the standalone app in the background: the page reloads once on return, and speech stays stopped while it is away.
 - Rotate while a file save, a settings save, a restore, a reset and an update finish: the settings dialog closes and the shortcut refreshes, the editor no longer shows the saved draft as unsaved, and the update toast appears once.
@@ -57,7 +84,7 @@ pending; this check establishes a same-version signed reinstall only.
 - Terminate a renderer and use Reload; workspace data must remain unchanged.
 - Recover a damaged library index using only disposable apps. Verify preservation of workspace directories, then restart and check registration/order.
 - Force a process exit during staged restore/import and reopen. Verify complete old or complete new bytes, never a mixed workspace.
-- Validate permissions after publisher updates, including Internet reset. Network-filter limits are documented; this list does not claim complete local-network isolation.
+- Verify scheduled reminder delivery after an accepted publisher update, and force a process exit during a native update to confirm recovery and permission retention. The staged-package confirmation and journal-recovery checks above do not establish those timings. Network-filter limits remain documented; this list does not claim complete local-network isolation.
 
 ## Pending: host compatibility level
 

@@ -9,6 +9,11 @@ Verification: `./gradlew :app:assembleDebug :app:testDebugUnitTest` passes, and 
 No physical device was touched and no real AI provider was called. Release minification is off, so the
 ProGuard keep rule for the bridge has not been exercised.
 
+The update-time grant reset described in S3 below has been superseded by the explicit
+permission-preservation decision in [Subapp updates](SUBAPP_UPDATES.md#runtime-coordination).
+Updates now keep existing grants; a publisher identity or source change requires a warning
+and the user’s choice to proceed. Deletion and deliberate revocation still clear grants.
+
 ## Findings
 
 | ID | Fix | Where |

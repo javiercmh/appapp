@@ -44,7 +44,7 @@ class SubappGrantStore(private val storage: GrantStorage) {
         return true
     }
 
-    /** Removes every grant of [appId]; used on deletion and after code changes. */
+    /** Removes every grant of [appId]; used on deletion. */
     @Synchronized
     fun clear(appId: String): Set<SubappCapability> {
         val previous = granted(appId)
