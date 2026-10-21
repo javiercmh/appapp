@@ -77,7 +77,8 @@ jobs:
           apk=app/build/outputs/apk/release/app-release.apk
           "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --print-certs "$apk" > "$RUNNER_TEMP/production-certificate.txt"
           cat "$RUNNER_TEMP/production-certificate.txt"
-          grep -Fxq 'Signer #1 certificate SHA-256 digest: d3a30c1acecc9008f11711c39013353f00fc58b540a26eba95bb3556eb02e89a' "$RUNNER_TEMP/production-certificate.txt"
+          fingerprint=$(sed -n 's/^.*certificate SHA-256 digest: //p' "$RUNNER_TEMP/production-certificate.txt")
+          test "$fingerprint" = 'd3a30c1acecc9008f11711c39013353f00fc58b540a26eba95bb3556eb02e89a'
           "$ANDROID_HOME/build-tools/37.0.0/aapt" dump badging "$apk" > "$RUNNER_TEMP/production-package.txt"
           grep -q "^package: name='com.wynh.appapp' " "$RUNNER_TEMP/production-package.txt"
           mkdir -p dist
