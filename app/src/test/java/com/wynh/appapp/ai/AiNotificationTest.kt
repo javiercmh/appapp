@@ -11,6 +11,12 @@ class AiNotificationTest {
         assertEquals(AiNotificationCopy.DEFAULT_BODY, AiNotificationCopy.body(""))
     }
 
+    @Test fun `an idle session body falls back to its own honest default and is bounded like other copy`() {
+        assertEquals(AiNotificationCopy.LEASE_BODY, AiNotificationCopy.leaseBody(null))
+        assertEquals("Writing the next chapter", AiNotificationCopy.leaseBody("Writing\n the\u0000 next\tchapter"))
+        assertEquals(AiNotificationCopy.MAX_BODY, AiNotificationCopy.leaseBody("x".repeat(500)).codePointCount(0, AiNotificationCopy.leaseBody("x".repeat(500)).length))
+    }
+
     @Test fun `copy is single line, bounded and keeps whole code points`() {
         assertEquals("Writing the next chapter", AiNotificationCopy.title("Writing\n the\u0000 next\tchapter"))
         val long = AiNotificationCopy.title("x".repeat(500))

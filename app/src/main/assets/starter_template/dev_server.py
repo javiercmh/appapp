@@ -230,6 +230,9 @@ class Handler(SimpleHTTPRequestHandler):
             if command.get('providerId') != 'chatgpt':
                 return fail('provider', 'Unknown provider')
             return self.reply(dict(models=[dict(id='development-mock', name='Development mock (offline)', reasoningLevels=[])]))
+        if action == 'capabilities':
+            # The mock has no operation sessions; this is the exact answer of a host without them.
+            return fail('invalid_request', 'Unsupported AI command.')
         if action == 'start':
             data = command.get('data') or {}
             if not isinstance(data, dict):

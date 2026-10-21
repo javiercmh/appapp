@@ -40,6 +40,42 @@ class AiRequestLedgerTest {
         assertEquals(0, ledger.activeRequestCount())
         assertTrue(ledger.hasRequest("b"))
     }
+    @Test fun `unstarted jobs count as unfinished so the service is not stopped before confirmation`() {
+        val ledger = AiRequestLedger()
+        val lazy = CoroutineScope(Dispatchers.Unconfined).launch(start = CoroutineStart.LAZY) { }
+        ledger.begin("lazy", AiRequestOwner("a", 1, "chatgpt", Job())); ledger.bind("lazy", lazy)
+        assertFalse(lazy.isActive)
+        assertEquals(listOf("lazy"), ledger.unfinished().map { it.first })
+        ledger.fail("lazy", "background_service", "denied")
+        assertTrue(ledger.unfinished().isEmpty()); assertTrue(lazy.isCancelled)
+        assertEquals("background_service", ledger.results["lazy"]?.errorCode)
+    }
+
+    @Test fun `failing a session preserves completed results and terminalizes only unfinished ones`() {
+        val ledger = AiRequestLedger()
+        ledger.begin("done", AiRequestOwner("a", 1, "chatgpt", Job(), sessionId = "s"))
+        ledger.finish(AiRequestResult("done", text = "keep me", done = true))
+        ledger.fail("done", "session_cancelled", "cancelled")
+        assertEquals("keep me", ledger.results["done"]?.text); assertNull(ledger.results["done"]?.errorCode)
+        ledger.acknowledge("done")
+        ledger.begin("run", AiRequestOwner("a", 1, "chatgpt", Job(), sessionId = "s"))
+        assertEquals(listOf("run"), ledger.unfinishedIn("s"))
+        ledger.fail("run", "session_cancelled", "cancelled")
+        assertEquals("session_cancelled", ledger.results["run"]?.errorCode)
+        assertTrue("A terminal error is kept for the page to read", ledger.hasRequest("a"))
+        ledger.finish(AiRequestResult("run", text = "late", done = true))
+        assertNull(ledger.results["run"]?.text)
+    }
+
+    @Test fun `setting and detaching a session only touches unfinished requests of that app and task`() {
+        val ledger = AiRequestLedger()
+        ledger.begin("mine", AiRequestOwner("a", 1, "chatgpt", Job()))
+        ledger.begin("other", AiRequestOwner("b", 1, "chatgpt", Job()))
+        ledger.setSession("a", 1, "s")
+        assertEquals("s", ledger.owners["mine"]?.sessionId); assertNull(ledger.owners["other"]?.sessionId)
+        ledger.detachSession("s"); assertNull(ledger.owners["mine"]?.sessionId)
+    }
+
     @Test fun `removal before job binding prevents job from starting`() {
         val ledger = AiRequestLedger(); ledger.begin("id", AiRequestOwner("a", 1, "chatgpt", Job()))
         ledger.cancel("id")

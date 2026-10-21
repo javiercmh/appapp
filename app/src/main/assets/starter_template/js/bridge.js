@@ -108,6 +108,23 @@ if (AI) {
   };
 }
 
+// Operation sessions need a newer host. The capability answer is cached only when it is confirmed:
+// {sessions:1}, or the exact "unsupported command" response of hosts without sessions. Anything
+// else (timeouts, service or malformed answers) rejects and is never treated as "unsupported".
+let sessionSupport = null;
+const UNSUPPORTED_COMMAND = 'Unsupported AI command.';
+async function aiSessionSupport() {
+  if (sessionSupport !== null) return sessionSupport;
+  try {
+    const value = await aiCall('capabilities');
+    if (value && value.sessions === 1) return (sessionSupport = true);
+    throw Object.assign(new Error('Unexpected AI capabilities response.'), { code: 'invalid_response' });
+  } catch (error) {
+    if (error?.code === 'invalid_request' && error.message === UNSUPPORTED_COMMAND) return (sessionSupport = false);
+    throw error;
+  }
+}
+
 export const ai = {
   // Channel presence only; discover connection separately via providers().
   available: !!AI || !!DEV?.mockAi,
@@ -120,10 +137,12 @@ export const ai = {
   // -> request ID. Omit reasoningEffort for provider default; use advertised levels.
   // Optional title/body are short text for the native running-request notification, shown beside
   // the host-derived app name. They never affect the request.
-  start: async ({ providerId = 'chatgpt', model, instructions = '', input, reasoningEffort, title, body } = {}) => {
+  // Optional sessionId (from sessions.begin) lets the request run under an operation session.
+  start: async ({ providerId = 'chatgpt', model, instructions = '', input, reasoningEffort, title, body, sessionId } = {}) => {
     const data = { providerId, model, instructions, input, reasoningEffort };
     if (title !== undefined) data.title = title;
     if (body !== undefined) data.body = body;
+    if (sessionId !== undefined) data.sessionId = sessionId;
     const id = await aiCall('start', { data });
     const request = { id, done: false, value: null, error: null, listeners: new Set() };
     request.notify = (value) => request.listeners.forEach((listener) => listener(value));
@@ -154,6 +173,22 @@ export const ai = {
     };
     poll();
   }),
+  // Operation sessions: a bounded hold on the host's background service for a multi-request
+  // operation. They start no inference and never promise that this page runs while it is suspended.
+  sessions: {
+    // -> boolean. Rejects on any answer that is not a confirmed yes or a confirmed "unsupported".
+    supported: aiSessionSupport,
+    // Call from a user action while the page is visible, with the first request's real provider/model.
+    // -> {sessionId}. Errors: permission, background_service, authentication, provider, invalid_request.
+    begin: ({ providerId = 'chatgpt', model, title, body } = {}) => {
+      const data = { providerId, model };
+      if (title !== undefined) data.title = title;
+      if (body !== undefined) data.body = body;
+      return aiCall('beginSession', { data });
+    },
+    // -> true. Idempotent for your own session; not_found for an unknown or foreign id.
+    end: (sessionId) => aiCall('endSession', { data: { sessionId } }),
+  },
   // Cancels and releases the native request; subsequent result() may be not_found.
   cancel: async (id) => { const result = await aiCall('cancel', { requestId: id }); aiResults.delete(id); return result; },
   // Release terminal results only after durable save or handled failure. -> true

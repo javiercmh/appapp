@@ -6,7 +6,9 @@ import java.util.concurrent.ConcurrentHashMap
 data class AiRequestResult(val id: String, val text: String? = null, val error: String? = null, val errorCode: String? = null, val done: Boolean = false)
 internal data class AiRequestOwner(
     val appId: String, val taskId: Int, val providerId: String, val job: Job,
-    val presentation: AiPresentation = AiPresentation()
+    val presentation: AiPresentation = AiPresentation(),
+    /** The operation session this request runs under, if any. */
+    val sessionId: String? = null
 )
 
 /** Atomic ownership and terminal publication, independent of Android service lifecycle. */
@@ -30,6 +32,22 @@ internal class AiRequestLedger {
         results.remove(id)
         owners.remove(id)?.job?.cancel()
     }
+    /** Gives an unfinished request a terminal error and stops its job; a completed result is never replaced. */
+    @Synchronized fun fail(id: String, code: String, message: String) {
+        if (results[id]?.done != false) return
+        owners[id]?.job?.cancel()
+        results[id] = AiRequestResult(id, error = message, errorCode = code, done = true)
+    }
+    /** Sets the session of every unfinished request of [appId] in [taskId]. */
+    @Synchronized fun setSession(appId: String, taskId: Int, sessionId: String) {
+        owners.filter { (id, o) -> o.appId == appId && o.taskId == taskId && results[id]?.done == false }
+            .forEach { (id, o) -> owners[id] = o.copy(sessionId = sessionId) }
+    }
+    @Synchronized fun detachSession(sessionId: String) {
+        owners.filter { it.value.sessionId == sessionId }.forEach { (id, o) -> owners[id] = o.copy(sessionId = null) }
+    }
+    @Synchronized fun unfinishedIn(sessionId: String): List<String> =
+        owners.filter { (id, o) -> o.sessionId == sessionId && results[id]?.done == false }.keys.toList()
     @Synchronized fun acknowledge(id: String) {
         if (results[id]?.done == true) { results.remove(id); owners.remove(id) }
     }
@@ -41,7 +59,10 @@ internal class AiRequestLedger {
     }
     fun hasRequest(appId: String): Boolean = owners.any { (id, owner) -> owner.appId == appId && results.containsKey(id) }
     fun activeRequestCount(): Int = owners.values.count { it.job.isActive }
-    /** Requests still generating; a finished result awaiting acknowledgement is not included. */
+    /**
+     * Requests still generating or waiting for the service to reach the foreground (a LAZY job is
+     * not active yet); a finished result awaiting acknowledgement is not included.
+     */
     @Synchronized fun unfinished(): List<Pair<String, AiRequestOwner>> =
-        owners.filter { (id, owner) -> results[id]?.done == false && owner.job.isActive }.map { it.key to it.value }
+        owners.filter { (id, owner) -> results[id]?.done == false && !owner.job.isCompleted && !owner.job.isCancelled }.map { it.key to it.value }
 }
