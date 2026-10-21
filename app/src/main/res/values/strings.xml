@@ -22,12 +22,15 @@
     <string name="keep_editing">Keep Editing</string>
     <string name="clear_logs">Clear Logs</string>
     <string name="package_dialog_title">Share &amp; Package App</string>
-    <string name="package_dialog_subtitle">Export selected workspace files as a ZIP archive or share them.</string>
+    <string name="package_dialog_subtitle">Share or save the whole app as a ZIP archive, or choose individual files.</string>
     <string name="action_package_share">Share &amp; Package</string>
     <string name="export_section_title">EXPORT TO ZIP</string>
     <string name="package_name_label">Package Name</string>
     <string name="package_name_hint">my-awesome-app</string>
-    <string name="export_select_files_label">Select files to include:</string>
+    <string name="export_select_files_label">Select all files</string>
+    <string name="package_files_toggle">Individual files (%1$d of %2$d selected)</string>
+    <string name="package_files_expanded">Expanded</string>
+    <string name="package_files_collapsed">Collapsed</string>
     <string name="action_select_all">Select All</string>
     <string name="action_deselect_all">Deselect All</string>
     <string name="action_share_zip">Share ZIP</string>

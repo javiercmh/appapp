@@ -100,7 +100,7 @@ class SubappLibraryActivity : AppCompatActivity() {
         pendingExportId = null
     }
 
-    private fun showPackageDialog(record: SubappRecord) {
+    internal fun showPackageDialog(record: SubappRecord): Dialog {
         val workspaceManager = WorkspaceManager(this, workspaceDir = record.workspaceDir)
         val dialog = Dialog(this, com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog)
         dialog.setContentView(R.layout.dialog_package)
@@ -116,6 +116,10 @@ class SubappLibraryActivity : AppCompatActivity() {
         val btnShareZip = dialog.findViewById<MaterialButton>(R.id.package_btn_share_zip)
         val btnSaveZip = dialog.findViewById<MaterialButton>(R.id.package_btn_save_zip)
         val btnClose = dialog.findViewById<MaterialButton>(R.id.package_btn_close)
+        val filesToggleRow = dialog.findViewById<LinearLayout>(R.id.package_files_toggle_row)
+        val filesToggleLabel = dialog.findViewById<TextView>(R.id.package_files_toggle_label)
+        val filesChevron = dialog.findViewById<View>(R.id.package_files_chevron)
+        val filesSection = dialog.findViewById<LinearLayout>(R.id.package_files_section)
 
         // Attempt to prefill package name from manifest.json
         val defaultPackageName = try {
@@ -136,7 +140,20 @@ class SubappLibraryActivity : AppCompatActivity() {
                 selectedFiles.size == workspaceFiles.size -> MaterialCheckBox.STATE_CHECKED
                 else -> MaterialCheckBox.STATE_INDETERMINATE
             }
+            filesToggleLabel.text = getString(R.string.package_files_toggle, selectedFiles.size, workspaceFiles.size)
         }
+
+        // The individual files stay collapsed by default; the selection is kept either way.
+        fun setFilesExpanded(expanded: Boolean) {
+            filesSection.visibility = if (expanded) View.VISIBLE else View.GONE
+            filesChevron.rotation = if (expanded) 180f else 0f
+            ViewCompat.setStateDescription(
+                filesToggleRow,
+                getString(if (expanded) R.string.package_files_expanded else R.string.package_files_collapsed)
+            )
+        }
+        setFilesExpanded(false)
+        filesToggleRow.setOnClickListener { setFilesExpanded(filesSection.visibility != View.VISIBLE) }
 
         fun formatFileSize(bytes: Long): String {
             return when {
@@ -241,6 +258,7 @@ class SubappLibraryActivity : AppCompatActivity() {
         }
 
         dialog.show()
+        return dialog
     }
 
     private var rowsReady = false
