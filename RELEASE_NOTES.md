@@ -1,3 +1,37 @@
+# App² 1.7.0
+
+## Permissions and workspace protection
+
+- Grant AI, notifications and Internet access separately for each subapp, and review or revoke access from its Permissions menu. Existing apps retain their prior Internet access; AI requires approval.
+- Preserve permission choices across GitHub updates, including accepted publisher changes. New ZIP and GitHub imports start with no grants.
+- Restrict the native bridge to the owning app origin, validate file paths and storage limits, and bound ZIP extraction and GitHub downloads.
+- Harden workspace publication, recovery and lifecycle handling to protect saved files during imports, restores and updates.
+
+## AI operations
+
+- Give each running AI request its own notification with Open and Cancel actions.
+- Add bounded operation sessions that keep the native AI service available between steps. Subapps can adopt a running request after page recreation and recover completed results.
+- Keep credentials native and preserve completed results until acknowledgement or task closure. Sessions do not keep suspended web JavaScript running.
+
+## Library, speech and distribution
+
+- Put export actions before collapsible file selection.
+- Move speech playback controls into the Starter Demo, where subapps can own their Speaking and Stop interface.
+- Add a separately installed App² Dev build and signed production builds through GitHub Actions. Host compatibility is tracked independently from APK version counters.
+- Include an MIT licence, privacy policy and third-party notices.
+
+## Installation
+
+Download `AppApp-1.7.0.apk` and install it as an update to App². The package uses the existing release signing certificate and application ID `com.wynh.appapp`. Existing subapp workspaces and AI credentials are preserved. Existing workspaces must explicitly adopt updated bridge wrappers to use new APIs.
+
+Version: `1.7.0` (version code `12`). Host compatibility level remains `11`.
+
+## Verification
+
+The release workflow runs JVM tests, release lint, JavaScript and Python checks, compiles Android tests, and builds the signed production APK. Its certificate is checked against the existing production signing identity. Earlier emulator coverage and remaining device checks are recorded in `docs/DEVICE_CHECKS.md`; this release does not claim a new phone installation or complete device coverage.
+
+---
+
 # App² 1.6.1
 
 ## App updates
