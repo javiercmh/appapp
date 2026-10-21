@@ -36,6 +36,7 @@ jobs:
           ./gradlew :app:testDebugUnitTest :app:lintDev :app:compileDebugAndroidTestKotlin
           node --test tests/*.test.mjs scripts/tests/*.mjs
           python3 -B -m unittest discover -s tests -p 'test_demo_dev_server.py'
+          python3 -B -m unittest discover -s tests -p 'test_prune_dev_releases.py'
       - name: Load persistent Dev signing key
         env:
           KEYSTORE_BASE64: ${{ secrets.APPAPP_DEV_KEYSTORE_BASE64 }}
@@ -82,6 +83,11 @@ jobs:
           gh release create "dev-${BUILD_NUMBER}" dist/app2-dev.apk dist/app2-dev.apk.sha256 \
             --target "$SOURCE_SHA" --title "App² Dev — build ${BUILD_NUMBER}" \
             --prerelease --latest=false --notes-file "$RUNNER_TEMP/dev-notes.md"
+      - name: Keep latest three Dev releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: python3 scripts/prune_dev_releases.py --repo "$GH_REPO" --apply
       - name: Remove signing key
         if: always()
         run: rm -f "$RUNNER_TEMP/app2-dev.p12"
