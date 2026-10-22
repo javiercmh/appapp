@@ -95,9 +95,15 @@ android {
         viewBinding = true
         buildConfig = true
     }
+    // The dependency metadata block in the APK signing block is encrypted with a Google Play
+    // key and cannot be inspected; omit it for F-Droid distribution.
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
+    }
 }
 
-// Plain assembleRelease stays buildable without credentials (F-Droid builds and signs itself).
+// Plain assembleRelease stays buildable without credentials for independent rebuild verification.
 // Publishers use assembleSignedRelease, which refuses to run without the release key.
 val verifyReleaseSigning = tasks.register("verifyReleaseSigning") {
     doFirst {
