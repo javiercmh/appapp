@@ -97,3 +97,13 @@ This inventory was generated from the resolved release runtime classpath recorde
 
 `ic_chatgpt.xml` and `ic_openrouter.xml` depict third-party service marks. They identify the
 providers a user connects; they are not covered by App²'s MIT license and imply no endorsement.
+
+## Artwork provenance
+
+- **App² logo.** The owner reports that the App² logo was AI-generated. The generating tool and date
+  were not recorded, and its copyright status has not been assessed. The launcher drawables
+  (`ic_launcher_foreground.xml`, `ic_launcher_background.xml`) and the PNG export derived from them
+  (`fastlane/metadata/android/en-US/images/icon.png`, produced by `scripts/render_fdroid_icon.py`) are
+  the same design. They are offered under the MIT license to the extent the owner holds rights in them.
+- **`ic_chatgpt.xml`.** The OpenAI mark from Simple Icons v14.0.0 (CC0), per its file comment.
+- **`ic_openrouter.xml`.** Provenance not recorded; unresolved.

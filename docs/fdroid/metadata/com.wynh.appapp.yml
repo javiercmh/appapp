@@ -1,0 +1,34 @@
+AntiFeatures:
+  NonFreeNet:
+    en-US: Optional AI features connect to ChatGPT (OpenAI) or OpenRouter, which are
+      proprietary online services. They are off until the user connects an account
+      and allows AI for a subapp; the rest of the app works without them.
+Categories:
+  - Development
+License: MIT
+AuthorName: Javier Melo
+SourceCode: https://github.com/Javiercmh/appapp
+IssueTracker: https://github.com/Javiercmh/appapp/issues
+Changelog: https://github.com/Javiercmh/appapp/blob/HEAD/RELEASE_NOTES.md
+
+AutoName: App²
+
+RepoType: git
+Repo: https://github.com/Javiercmh/appapp.git
+Binaries: https://github.com/javiercmh/appapp/releases/download/v%v/AppApp-%v.apk
+
+Builds:
+  - versionName: 1.7.0
+    versionCode: 12
+    disable: v1.7.0 does not build cleanly for F-Droid; the scanner flags the foojay-resolver
+      plugin in settings.gradle.kts and its APK carries the encrypted dependency metadata
+      block. The next release must remove both (docs/FDROID.md, Gates).
+    commit: 7bca71aa2155645b184b4cfcceace2c9cf5c0cde
+    subdir: app
+    gradle:
+      - yes
+
+AllowedAPKSigningKeys: d3a30c1acecc9008f11711c39013353f00fc58b540a26eba95bb3556eb02e89a
+
+AutoUpdateMode: None
+UpdateCheckMode: Tags ^v[0-9]+\.[0-9]+\.[0-9]+$

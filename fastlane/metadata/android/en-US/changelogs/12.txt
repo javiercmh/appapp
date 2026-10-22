@@ -1,0 +1,5 @@
+• Grant AI, notifications and Internet access separately for each subapp and revoke them from the Permissions menu
+• Bridge access limited to the app's own origin, with path validation, storage limits and bounded ZIP and GitHub imports
+• Each running AI request gets its own notification with Open and Cancel; operation sessions keep multi-step AI work running
+• Speech controls moved into the Starter Demo
+• MIT license, privacy policy and third-party notices included

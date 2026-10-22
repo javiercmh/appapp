@@ -1,0 +1,28 @@
+App² lets you create, edit and run small web apps ("subapps") on your phone. Each subapp is a folder of plain HTML, CSS, JavaScript and JSON files that you can inspect and change in the built-in editor, run in a WebView, add to your home screen and export or import as a ZIP.
+
+<b>Features</b>
+• Library of saved subapps, each with its own isolated workspace and storage
+• Built-in code editor with syntax highlighting, search, file history and snapshots
+• A Starter Demo subapp to begin from
+• Import from a ZIP or a public GitHub repository, and update imported apps from GitHub after reviewing the changes
+• Local data stored as plain JSON files, included in exports
+• Notifications and scheduled reminders for subapps
+• Text to speech through Android's speech engine
+
+<b>Permissions per subapp</b>
+Imported code is not reviewed by F-Droid or by App². New and imported subapps start with AI, notifications and Internet access switched off. You can grant or revoke each one from the library, and subapps can only reach the host through a restricted native bridge.
+
+<b>Optional AI (non-free network services)</b>
+If you connect a ChatGPT account (OAuth) or an OpenRouter API key in Settings, App² contacts OpenAI or OpenRouter to sign in, validate the key and list models. A subapp can send AI prompts to them only after you allow AI for that subapp. These are proprietary online services. Credentials stay encrypted on your device and are never written into a subapp's files. Core local editing and execution work without an AI account.
+
+<b>Privacy</b>
+App² contains no ads, analytics or tracking libraries, and has no developer-operated servers. Subapps and their data are stored on your device. Data leaves it only through things you choose to use:
+• AI requests, if you connect a provider and allow AI for a subapp
+• GitHub import and update, which request the public repository you pick
+• Text to speech, which can use online voices if your Android speech engine does
+• Translation, which hands the text you select to the translation app you choose
+• Exports you save or share
+• Subapps you give Internet access
+See PRIVACY.md in the source repository for details.
+
+App² is free software under the MIT license.
