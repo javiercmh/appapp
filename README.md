@@ -4,10 +4,13 @@
 
 <table>
   <tr>
-    <td align="center"><img src="docs/images/appapp-library-phone.png" width="260" alt="App² library with Hours, Routines, and Starter Demo"><br><strong>Your app library</strong></td>
-    <td align="center"><img src="docs/images/appapp-editor-phone.png" width="260" alt="App² editor showing the Starter Demo’s source and data files"><br><strong>Edit files on your phone</strong></td>
+    <td align="center"><img src="docs/images/appapp-library-phone.png" width="240" alt="App² library with LingoMage and Starter Demo"><br><strong>Your app library</strong></td>
+    <td align="center"><img src="docs/images/appapp-editor-phone.png" width="240" alt="App² editor showing the Starter Demo’s source and data files"><br><strong>Edit files on your phone</strong></td>
+    <td align="center"><img src="docs/images/appapp-runtime-phone.png" width="240" alt="Starter Demo running with file storage and native pronunciation features"><br><strong>Run your apps</strong></td>
   </tr>
 </table>
+
+Captured from App² 1.7.0 on the existing Android 16 emulator, 22 October 2026.
 
 ## What you can do
 
@@ -28,6 +31,13 @@
 3. Choose **Install** to add a home-screen shortcut.
 
 The Starter Demo includes working examples of file storage, photos, notifications, text-to-speech, and AI, plus a guide to building your own app. App² runs on **Android 8.0 or newer**.
+
+## Examples
+
+- **[Working Hours](https://github.com/javiercmh/working-hours)** — track shifts, breaks and overtime, mark entries transferred to a spreadsheet, and set end-of-day reminders. Import its repository URL in App² as a new app.
+- **[Starter Demo](app/src/main/assets/starter_template/)** — the included starting point for storage, photos, notifications, speech and AI features.
+
+Examples maintained separately have their own licences and assets; see each repository.
 
 ## Try App² Dev
 
@@ -55,7 +65,7 @@ The Android host uses Kotlin, Material components, and WebView. Build with JDK 1
 ## License
 
 MIT License; see [`LICENSE`](LICENSE). It covers everything in this repository, including the
-starter template and the examples under `examples/`, unless a file says otherwise. Bundled
+starter template, unless a file says otherwise. Linked example repositories have their own licensing. Bundled
 libraries and third-party marks are listed in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 This means, you can do whatever you want with App².
 Just one personal request: please do not put ads, non-consensual trackers, or other invasive code in your apps.

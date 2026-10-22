@@ -140,6 +140,9 @@ Each app's `WebView` loads `https://<id>.app.local/index.html`. Requests for tha
      patch version instead.
    - Build `:app:assembleSignedRelease`, verify the certificate fingerprint above, and copy the APK to
      `AppApp-x.y.z.apk` with `AppApp-x.y.z.apk.sha256` (`sha256sum` output).
+   - F-Droid verifies that APK against its own unsigned rebuild (`docs/FDROID.md`). Build it with
+     Eclipse Temurin 21, as the production workflow does: a JDK whose zlib is zlib-ng (for example
+     a JBR using Fedora's system zlib) writes different `assets/dexopt/baseline.prof*` bytes.
    - Publish a GitHub release for the tag with both files, marked latest, titled
      `App² x.y.z — Short description`. The release body is the new `RELEASE_NOTES.md` section
      **without its `# App² x.y.z` heading**, since the release title already shows it.
@@ -247,7 +250,7 @@ binary file that the current subapp's origin interceptor can then serve via `<im
 - **Gradle Validation**: Use the checked-in Gradle Wrapper for CLI builds, or build/sync in Android Studio. First check `./gradlew --version` so the Gradle version and JVM are known; then run `./gradlew :app:assembleDebug`. Run `./gradlew test` or the relevant module task when JVM tests exist. Include `--warning-mode all` when diagnosing Gradle deprecations; fix the originating build logic/plugin rather than hiding warnings. Do not install or update Gradle outside the wrapper just to build this project.
 - **Persistence Verification**: When modifying storage logic, test by adding items, terminating the process, and verifying that state reloads identically on restart.
 - **History & Snapshots**: Known UTF-8 text only; default four recent snapshots plus one baseline. Verify that workspace snapshots are taken before "Run" and that snapshot restoration properly updates the editor and runtime.
-- **Example App Device Tests**: `examples/<app>/` is source code in this repository; it is not automatically copied to an installed App² instance. Before reporting a device test, sync changed app-owned files to the selected app's `filesDir/subapps/<id>/workspace/`, compare source and device hashes, then relaunch that app. Never overwrite `data/`, `app.log`, or other user files just to test code. See `examples/working_hours/AGENTS.md` for the Working Hours sync procedure.
+- **Example App Device Tests**: Working Hours is maintained at https://github.com/javiercmh/working-hours; examples are linked in `README.md`. An installed App² subapp runs its own private workspace. Test changed app-owned files only in a separate disposable test subapp and compare source/device hashes before claiming coverage. Never overwrite `data/`, `app.log`, or other user files to test code.
 - **Keyboard-Aware Bottom Bars**: Do not infer that the on-screen keyboard is open from input focus. On Android, use `app2:insets` event `detail.imeVisible`; a hardware keyboard can focus a text field while the IME remains hidden. For browser previews without the host event, compare the viewport height to its pre-keyboard baseline.
 
 ### Android emulator and device testing
