@@ -8,9 +8,12 @@
     <td align="center"><img src="docs/images/appapp-editor-phone.png" width="240" alt="App² editor showing the Starter Demo’s source and data files"><br><strong>Edit files on your phone</strong></td>
     <td align="center"><img src="docs/images/appapp-runtime-phone.png" width="240" alt="Starter Demo running with file storage and native pronunciation features"><br><strong>Run your apps</strong></td>
   </tr>
+  <tr>
+    <td align="center" colspan="3"><img src="docs/images/appapp-settings-phone.png" width="240" alt="App² Settings showing subapp backup and AI provider connections, with account details removed"><br><strong>Manage backups and AI connections</strong></td>
+  </tr>
 </table>
 
-Captured from App² 1.7.0 on the existing Android 16 emulator, 22 October 2026.
+Captured from App² 1.7.0 on the existing Android 16 emulator: library, editor and runtime on 22 October 2026; Settings on 23 October 2026, with account details redacted using AI image editing.
 
 ## What you can do
 
@@ -34,6 +37,7 @@ The Starter Demo includes working examples of file storage, photos, notification
 
 ## Examples
 
+- **[LingoMage](https://github.com/javiercmh/lingomage)** — learn languages through AI-generated stories tailored to your interests and reading level, with contextual explanations and saved stories for offline reading. Import its repository URL in App² as a new app.
 - **[Working Hours](https://github.com/javiercmh/working-hours)** — track shifts, breaks and overtime, mark entries transferred to a spreadsheet, and set end-of-day reminders. Import its repository URL in App² as a new app.
 - **[Starter Demo](app/src/main/assets/starter_template/)** — the included starting point for storage, photos, notifications, speech and AI features.
 
