@@ -1,6 +1,6 @@
-# App² — Import, create, and run your own apps
+# App² — Run web apps on your Android phone
 
-**Import an app from a ZIP or a public GitHub repository and run it on your Android phone.** App² keeps your apps in one library, lets you edit their files, and can add them to your home screen. You can also create your own apps from the included starter.
+**Install, run and manage web apps on your Android phone.** Subapps get native features and even AI capabilities with your own account. Import from GitHub, launch from the home screen. App² keeps your apps in one library, keeps them updated from their repositories, and lets you edit their files on the phone. You can also start your own app from the included Starter Demo.
 
 <table>
   <tr>
@@ -17,14 +17,15 @@ Captured from App² 1.7.0 on the existing Android 16 emulator: library, editor a
 
 ## What you can do
 
-- **Import apps** from ZIP files or public GitHub repositories and folders. Add apps made by others or bring in your own HTML, CSS, and JavaScript projects.
-- **Create your own apps** (called *subapps*) from the included Starter Demo.
+- **Import apps** (called *subapps*) from ZIP files or public GitHub repositories and folders. Add apps made by others or bring in your own HTML, CSS, and JavaScript projects.
+- **Keep apps updated** from their public GitHub repositories, preserving your data.
+- **Create your own** from the included Starter Demo.
 - **Edit on your phone** with a file browser, code highlighting, and search. Customize each app’s name and icon.
 - **Launch from your home screen** with a shortcut that opens the app in its own screen.
 - **Save real files** for notes, settings, photos, and other data. Each app has its own workspace.
 - **Use Android features** including notifications, scheduled reminders, and photo selection.
 - **Read text aloud** using Android text-to-speech. Subapps can pronounce words in different languages or let you select text and tap Speak.
-- **Add AI features** through a shared ChatGPT connection in library Settings → AI. Apps can choose models and reasoning levels, generate text, and cancel requests.
+- **Use AI with your own account.** Connect ChatGPT, OpenRouter, or any OpenAI-compatible custom endpoint once in library Settings → AI, and every app can use it. Credentials stay native and never enter an app’s files. Apps can choose models and reasoning levels, generate text, and cancel requests.
 - **Keep and share your apps** with workspace snapshots, ZIP import/export, and Android sharing.
 
 ## Get started
