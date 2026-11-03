@@ -415,20 +415,24 @@ object AiSettingsController {
         val summary = dialog.findViewById<TextView>(R.id.settings_tv_ai_summary)
         val chevron = dialog.findViewById<ImageView>(R.id.settings_iv_ai_chevron)
         val body = dialog.findViewById<View>(R.id.settings_ai_body)
-        val empty = dialog.findViewById<View>(R.id.settings_tv_ai_empty)
         val add = dialog.findViewById<MaterialButton>(R.id.settings_btn_ai_add)
         val exposure = dialog.findViewById<View>(R.id.settings_group_exposure)
         fun render() {
             val shown = services.filter { it.added() }
             services.forEach { it.group.visibility = if (it in shown) View.VISIBLE else View.GONE }
-            empty.visibility = if (shown.isEmpty()) View.VISIBLE else View.GONE
             add.visibility = if (shown.size < services.size) View.VISIBLE else View.GONE
-            add.text = if (shown.isEmpty()) "Add AI service" else "Add another service"
+            add.text = "Add another service"
             val choices = ai.registry.selectableExposures()
             exposure.visibility = if (choices.size >= 2 || (choices.isNotEmpty() && !ai.registry.exposed().connected))
                 View.VISIBLE else View.GONE
-            body.visibility = if (expanded) View.VISIBLE else View.GONE
-            chevron.setImageResource(if (expanded) R.drawable.ic_arrow_up else R.drawable.ic_arrow_down)
+            // With nothing added there is nothing to expand: the header shows "+" and opens the Add menu.
+            val open = expanded && shown.isNotEmpty()
+            body.visibility = if (open) View.VISIBLE else View.GONE
+            chevron.setImageResource(when {
+                shown.isEmpty() -> R.drawable.ic_add
+                open -> R.drawable.ic_arrow_up
+                else -> R.drawable.ic_arrow_down
+            })
             val connected = ai.registry.providers.filter { it.connected() }.map { it.name }
             val waiting = shown.filter { s -> ai.registry.providers.none { it.id == s.id && it.connected() } }.map { it.name }
             val exposed = ai.registry.exposed()
@@ -442,15 +446,19 @@ object AiSettingsController {
                 ai.exposure == "combined" -> "${connected.joinToString()} · apps see all"
                 else -> "${connected.joinToString()} · apps see ${exposed.name}"
             } + if (connected.isNotEmpty() && waiting.isNotEmpty()) "\n${waiting.joinToString()} needs attention" else ""
-            header.contentDescription = "AI services, ${summary.text}. ${if (expanded) "Collapse" else "Expand"}"
+            header.contentDescription = "AI services, ${summary.text}. " + when {
+                shown.isEmpty() -> "Add a service"
+                open -> "Collapse"
+                else -> "Expand"
+            }
         }
-        header.setOnClickListener { expanded = !expanded; render() }
-        add.setOnClickListener {
-            PopupMenu(activity, add).apply {
+        fun showAddMenu(anchor: View) {
+            PopupMenu(activity, anchor).apply {
                 services.filterNot { it.added() }.forEachIndexed { index, service -> menu.add(0, index, index, service.name) }
                 setOnMenuItemClickListener { item ->
                     val service = services.filterNot { it.added() }.getOrNull(item.itemId) ?: return@setOnMenuItemClickListener true
                     pending += service.id
+                    expanded = true
                     render()
                     service.start()
                     true
@@ -458,6 +466,11 @@ object AiSettingsController {
                 show()
             }
         }
+        header.setOnClickListener {
+            if (services.none { it.added() }) showAddMenu(chevron)
+            else { expanded = !expanded; render() }
+        }
+        add.setOnClickListener { showAddMenu(add) }
         render()
         activity.lifecycleScope.launch { while (dialog.isShowing) { delay(500); render() } }
     }
