@@ -7,6 +7,7 @@ import android.view.View
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
 import androidx.activity.ComponentActivity
 import androidx.appcompat.widget.PopupMenu
 import androidx.core.content.ContextCompat
@@ -14,7 +15,11 @@ import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.wynh.appapp.R
+import com.google.android.material.textfield.TextInputLayout
 import com.wynh.appapp.ai.auth.AuthPhase
+import com.wynh.appapp.ai.network.ApiFailure
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -155,8 +160,8 @@ object AiSettingsController {
                 val state = ai.auth.state.value
                 state.accounts.isNotEmpty() || state.phase != AuthPhase.IDLE || "chatgpt" in pending
             }) { signIn() },
-            bindOpenRouter(activity, dialog, pending),
-            bindCustomEndpoint(activity, dialog, pending)
+            bindOpenRouter(activity, dialog),
+            bindCustomEndpoint(activity, dialog)
         )
         bindShell(activity, dialog, services, pending)
         render()
@@ -168,32 +173,32 @@ object AiSettingsController {
         }
     }
 
-    private fun bindCustomEndpoint(activity: ComponentActivity, dialog: Dialog, pending: MutableSet<String>): Service {
+    private fun bindCustomEndpoint(activity: ComponentActivity, dialog: Dialog): Service {
         val ai = (activity.application as AppAiApplication).ai
         val status = dialog.findViewById<TextView>(R.id.settings_tv_custom_status)
         val connection = dialog.findViewById<TextView>(R.id.settings_tv_custom_connection)
-        val setButton = dialog.findViewById<MaterialButton>(R.id.settings_btn_custom_set)
+        val checkButton = dialog.findViewById<MaterialButton>(R.id.settings_btn_custom_set)
         val more = dialog.findViewById<ImageButton>(R.id.settings_btn_custom_more)
         var busy = false
         var feedback: String? = null
         fun render() {
-            setButton.text = if (ai.customConnected) "Replace custom endpoint" else "Add custom endpoint"
-            setButton.isEnabled = !busy && !ai.customRestoring
+            checkButton.text = if (busy) "Checking…" else "Check connection"
+            checkButton.isEnabled = !busy && ai.customConnected
             more.isEnabled = !busy && !ai.customRestoring
             connection.text = when {
-                busy || ai.customRestoring -> "Connecting…"
+                ai.customRestoring -> "Connecting…"
                 ai.customConnected -> "Connected"
                 else -> "Not connected"
             }
             connection.setTextColor(ContextCompat.getColor(activity,
-                if (ai.customConnected && !busy) R.color.accent_green else R.color.on_surface_muted))
-            status.text = feedback ?: ai.customMessage ?: when {
+                if (ai.customConnected) R.color.accent_green else R.color.on_surface_muted))
+            status.text = when {
                 ai.customRestoring -> "Restoring connection…"
-                ai.customConnected -> "${ai.customUrl}\nAvailable to subapps according to your exposure setting."
-                else -> "Add any OpenAI-compatible service by its HTTPS URL and API key."
+                ai.customConnected -> listOfNotNull(ai.customUrl, feedback).joinToString("\n")
+                else -> feedback ?: ai.customMessage ?: ""
             }
         }
-        fun runOperation(message: String, operation: suspend () -> String) {
+        fun runOperation(message: String, operation: suspend () -> String?) {
             busy = true; feedback = message; render()
             activity.lifecycleScope.launch {
                 try { feedback = operation() }
@@ -202,59 +207,43 @@ object AiSettingsController {
             }
         }
         fun openEntry() {
-            val pad = (20 * activity.resources.displayMetrics.density).toInt()
-            val urlField = com.google.android.material.textfield.TextInputEditText(activity).apply {
-                inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
-                importantForAutofill = android.view.View.IMPORTANT_FOR_AUTOFILL_NO
-                isSingleLine = true
-                setText(ai.customUrl.orEmpty())
-            }
-            val keyField = com.google.android.material.textfield.TextInputEditText(activity).apply {
-                inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-                importantForAutofill = android.view.View.IMPORTANT_FOR_AUTOFILL_NO
-                imeOptions = android.view.inputmethod.EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING
-                isSingleLine = true
-            }
-            fun layout(hint: String, field: android.view.View) = com.google.android.material.textfield.TextInputLayout(activity).apply {
-                this.hint = hint; addView(field)
-            }
+            val editing = ai.customConnected
+            val urlField = textField(activity, password = false).apply { setText(ai.customUrl.orEmpty()) }
+            val keyField = textField(activity, password = true)
+            val urlLayout = fieldLayout(activity, "Base URL (https://…/v1)", urlField)
+            val keyLayout = fieldLayout(activity, if (editing) "API key (leave empty to keep the current key)" else "API key", keyField, password = true)
             val form = android.widget.LinearLayout(activity).apply {
                 orientation = android.widget.LinearLayout.VERTICAL
+                val pad = (20 * activity.resources.displayMetrics.density).toInt()
                 setPadding(pad, 0, pad, 0)
-                addView(layout("Base URL (https://…/v1)", urlField))
-                addView(layout("API key", keyField))
+                addView(urlLayout); addView(keyLayout)
             }
-            val entry = MaterialAlertDialogBuilder(activity).setTitle(setButton.text)
-                .setMessage("The URL and key are stored encrypted on this device. Verification lists the endpoint's models and does not generate text.")
-                .setView(form).setNegativeButton("Cancel", null).setPositiveButton("Verify and save", null).create()
-            var submitted = false
-            entry.setOnDismissListener { if (!submitted) pending.remove("custom") }
-            entry.setOnShowListener {
-                entry.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                    val url = urlField.text?.toString().orEmpty()
-                    val key = keyField.text?.toString().orEmpty()
-                    keyField.text?.clear()
-                    submitted = true
-                    entry.dismiss()
-                    runOperation("Verifying endpoint…") {
-                        val count = ai.saveCustomEndpoint(url, key)
-                        pending.remove("custom")
-                        preferNewlyAdded(ai, "custom")
-                        "Endpoint verified ($count models) and saved."
-                    }
-                }
-            }
-            entry.show()
+            showVerifyDialog(activity,
+                title = if (editing) "Edit custom endpoint" else "Add custom endpoint",
+                message = "Works with any OpenAI-compatible service. The URL and key are verified by listing the service's models, then stored encrypted on this device.",
+                form = form,
+                errorField = { e -> if ((e as? ApiFailure)?.kind == ApiFailure.Kind.AUTHENTICATION) keyLayout else urlLayout },
+                verify = {
+                    val count = ai.saveCustomEndpoint(urlField.text?.toString().orEmpty(), keyField.text?.toString().orEmpty())
+                    preferNewlyAdded(ai, "custom")
+                    "Verified · $count models available."
+                },
+                onSaved = { feedback = it; render() },
+                onClosed = { keyField.text?.clear() })
         }
-        setButton.setOnClickListener { openEntry() }
+        checkButton.setOnClickListener {
+            runOperation("Checking connection…") { "Verified · ${ai.checkCustomEndpoint()} models available." }
+        }
         more.setOnClickListener {
             PopupMenu(activity, more).apply {
-                menu.add("Remove custom endpoint")
-                setOnMenuItemClickListener {
-                    MaterialAlertDialogBuilder(activity).setTitle("Remove custom endpoint?")
+                menu.add(0, 1, 0, "Edit endpoint")
+                menu.add(0, 2, 1, "Remove custom endpoint")
+                setOnMenuItemClickListener { item ->
+                    if (item.itemId == 1) openEntry()
+                    else MaterialAlertDialogBuilder(activity).setTitle("Remove custom endpoint?")
                         .setMessage("Cancels unfinished requests to it. Completed results remain available for saving. The key is not revoked at the service.")
                         .setNegativeButton("Cancel", null).setPositiveButton("Remove") { _, _ ->
-                            runOperation("Removing…") { ai.removeCustomEndpoint(); "Custom endpoint removed." }
+                            runOperation("Removing…") { ai.removeCustomEndpoint(); null }
                         }.show()
                     true
                 }
@@ -263,11 +252,12 @@ object AiSettingsController {
         }
         render()
         activity.lifecycleScope.launch { while (dialog.isShowing) { delay(500); render() } }
+        // Listed only once saved: setup and its errors happen in the dialog, so a failed attempt adds nothing.
         return Service("custom", "Custom endpoint", dialog.findViewById(R.id.settings_group_custom),
-            { ai.customConnected || ai.customRestoring || busy || "custom" in pending }) { openEntry() }
+            { ai.customConnected || ai.customRestoring || busy }) { openEntry() }
     }
 
-    private fun bindOpenRouter(activity: ComponentActivity, dialog: Dialog, pending: MutableSet<String>): Service {
+    private fun bindOpenRouter(activity: ComponentActivity, dialog: Dialog): Service {
         val ai = (activity.application as AppAiApplication).ai
         val status = dialog.findViewById<TextView>(R.id.settings_tv_openrouter_status)
         val keyButton = dialog.findViewById<MaterialButton>(R.id.settings_btn_openrouter_key)
@@ -281,21 +271,21 @@ object AiSettingsController {
         var busy = false
         var feedback: String? = null
         fun render() {
-            keyButton.text = if (ai.openRouterConnected) "Replace OpenRouter key" else "Add OpenRouter key"
-            keyButton.isEnabled = !busy && !ai.openRouterRestoring
+            keyButton.text = if (busy) "Checking…" else "Check connection"
+            keyButton.isEnabled = !busy && ai.openRouterConnected
             more.isEnabled = !busy && !ai.openRouterRestoring
             connection.text = when {
-                busy || ai.openRouterRestoring -> "Connecting…"
+                ai.openRouterRestoring -> "Connecting…"
                 ai.openRouterConnected -> "Connected"
                 else -> "Not connected"
             }
             connection.setTextColor(ContextCompat.getColor(activity,
-                if (ai.openRouterConnected && !busy) R.color.accent_green else R.color.on_surface_muted))
+                if (ai.openRouterConnected) R.color.accent_green else R.color.on_surface_muted))
             paid.isEnabled = !busy && !ai.openRouterRestoring
-            status.text = feedback ?: ai.openRouterMessage ?: when {
+            status.text = feedback ?: when {
                 ai.openRouterRestoring -> "Restoring connection…"
-                ai.openRouterConnected -> "Available to subapps according to your exposure setting."
-                else -> "Add a key from your OpenRouter account."
+                ai.openRouterConnected -> "Key saved. Available to your apps."
+                else -> ai.openRouterMessage.orEmpty()
             }
             val choices = ai.registry.selectableExposures()
             if (choices != exposureChoices) {
@@ -320,7 +310,7 @@ object AiSettingsController {
                 else -> "Subapps see only ${ai.registry.exposed().name}. Other connections stay saved."
             }
         }
-        fun runOperation(message: String, operation: suspend () -> String) {
+        fun runOperation(message: String, operation: suspend () -> String?) {
             busy = true; feedback = message; render()
             activity.lifecycleScope.launch {
                 try { feedback = operation() }
@@ -329,48 +319,35 @@ object AiSettingsController {
             }
         }
         fun openEntry() {
-            val field = com.google.android.material.textfield.TextInputEditText(activity).apply {
-                inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-                importantForAutofill = android.view.View.IMPORTANT_FOR_AUTOFILL_NO
-                imeOptions = android.view.inputmethod.EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING
-                isSingleLine = true
-            }
-            val input = com.google.android.material.textfield.TextInputLayout(activity).apply {
-                hint = "OpenRouter API key"
+            val editing = ai.openRouterConnected
+            val field = textField(activity, password = true)
+            val input = fieldLayout(activity, "OpenRouter API key", field, password = true).apply {
                 val pad = (20 * resources.displayMetrics.density).toInt()
                 setPadding(pad, 0, pad, 0)
-                addView(field)
             }
-            val entry = MaterialAlertDialogBuilder(activity).setTitle(keyButton.text)
-                .setMessage("Stored securely on this device. Verification does not generate text or spend inference credits.")
-                .setView(input).setNeutralButton("Get a key", null)
-                .setNegativeButton("Cancel", null).setPositiveButton("Verify and save", null).create()
-            var submitted = false
-            entry.setOnDismissListener { if (!submitted) pending.remove("openrouter") }
-            entry.setOnShowListener {
-                entry.getButton(androidx.appcompat.app.AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+            showVerifyDialog(activity,
+                title = if (editing) "Replace OpenRouter key" else "Add OpenRouter",
+                message = "Paste a key from your OpenRouter account. It is verified before saving, without generating text or spending credits, and stored securely on this device.",
+                form = input,
+                errorField = { input },
+                neutral = "Get a key" to {
                     try {
                         activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://openrouter.ai/settings/keys")))
                     } catch (_: android.content.ActivityNotFoundException) {
                         input.error = "Install a browser to open OpenRouter."
                     }
-                }
-                entry.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                    val candidate = field.text?.toString().orEmpty()
-                    field.text?.clear()
-                    submitted = true
-                    entry.dismiss()
-                    runOperation("Verifying key…") {
-                        ai.saveOpenRouterKey(candidate)
-                        pending.remove("openrouter")
-                        preferNewlyAdded(ai, "openrouter")
-                        "Key verified and saved."
-                    }
-                }
-            }
-            entry.show()
+                },
+                verify = {
+                    ai.saveOpenRouterKey(field.text?.toString().orEmpty())
+                    preferNewlyAdded(ai, "openrouter")
+                    "Key verified and saved."
+                },
+                onSaved = { feedback = it; render() },
+                onClosed = { field.text?.clear() })
         }
-        keyButton.setOnClickListener { openEntry() }
+        keyButton.setOnClickListener {
+            runOperation("Checking connection…") { ai.checkOpenRouter(); "Connection verified." }
+        }
         paid.isChecked = ai.allowPaidModels
         paid.setOnCheckedChangeListener { _, enabled ->
             ai.setAllowPaid(enabled)
@@ -385,12 +362,14 @@ object AiSettingsController {
         }
         more.setOnClickListener {
             PopupMenu(activity, more).apply {
-                menu.add("Remove saved key")
-                setOnMenuItemClickListener {
-                    MaterialAlertDialogBuilder(activity).setTitle("Remove saved OpenRouter key?")
+                menu.add(0, 1, 0, "Replace key")
+                menu.add(0, 2, 1, "Remove saved key")
+                setOnMenuItemClickListener { item ->
+                    if (item.itemId == 1) openEntry()
+                    else MaterialAlertDialogBuilder(activity).setTitle("Remove saved OpenRouter key?")
                         .setMessage("Cancels unfinished OpenRouter requests. Completed results remain available for saving. The key is not revoked at OpenRouter.")
                         .setNegativeButton("Cancel", null).setPositiveButton("Remove") { _, _ ->
-                            runOperation("Removing key…") { ai.removeOpenRouterKey(); "Saved key removed." }
+                            runOperation("Removing key…") { ai.removeOpenRouterKey(); null }
                         }.show()
                     true
                 }
@@ -400,7 +379,72 @@ object AiSettingsController {
         render()
         activity.lifecycleScope.launch { while (dialog.isShowing) { delay(500); render() } }
         return Service("openrouter", "OpenRouter", dialog.findViewById(R.id.settings_group_openrouter),
-            { ai.openRouterConnected || ai.openRouterRestoring || busy || "openrouter" in pending }) { openEntry() }
+            { ai.openRouterConnected || ai.openRouterRestoring || busy }) { openEntry() }
+    }
+
+    private fun textField(activity: ComponentActivity, password: Boolean) =
+        com.google.android.material.textfield.TextInputEditText(activity).apply {
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or if (password)
+                android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD else android.text.InputType.TYPE_TEXT_VARIATION_URI
+            importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
+            imeOptions = android.view.inputmethod.EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING
+            isSingleLine = true
+        }
+
+    private fun fieldLayout(activity: ComponentActivity, hint: String, field: View, password: Boolean = false) =
+        TextInputLayout(activity).apply {
+            this.hint = hint
+            if (password) endIconMode = TextInputLayout.END_ICON_PASSWORD_TOGGLE
+            addView(field)
+        }
+
+    /**
+     * Entry dialog that verifies before closing. "Verify and save" keeps the dialog open while it checks;
+     * a failure is shown on the field it concerns so the user can correct it in place. Only a verified,
+     * saved service closes the dialog. Cancel (or dismissing) abandons an in-flight check.
+     */
+    private fun showVerifyDialog(
+        activity: ComponentActivity,
+        title: String,
+        message: String,
+        form: View,
+        errorField: (Exception) -> TextInputLayout,
+        neutral: Pair<String, () -> Unit>? = null,
+        verify: suspend () -> String,
+        onSaved: (String) -> Unit,
+        onClosed: () -> Unit
+    ) {
+        val builder = MaterialAlertDialogBuilder(activity).setTitle(title).setMessage(message).setView(form)
+            .setNegativeButton("Cancel", null).setPositiveButton("Verify and save", null)
+        if (neutral != null) builder.setNeutralButton(neutral.first, null)
+        val entry = builder.create()
+        var job: Job? = null
+        var lastError: TextInputLayout? = null
+        entry.setOnDismissListener { job?.cancel(); onClosed() }
+        entry.setOnShowListener {
+            val save = entry.getButton(AlertDialog.BUTTON_POSITIVE)
+            if (neutral != null) entry.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener { neutral.second() }
+            save.setOnClickListener {
+                lastError?.error = null
+                save.isEnabled = false
+                save.text = "Verifying…"
+                job = activity.lifecycleScope.launch {
+                    try {
+                        val result = verify()
+                        job = null
+                        entry.dismiss()
+                        onSaved(result)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        lastError = errorField(e).apply { error = e.message ?: "Verification failed." }
+                        save.isEnabled = true
+                        save.text = "Verify and save"
+                    }
+                }
+            }
+        }
+        entry.show()
     }
 
     /** After the user adds a service, make it the one subapps see if the current choice is not connected. */

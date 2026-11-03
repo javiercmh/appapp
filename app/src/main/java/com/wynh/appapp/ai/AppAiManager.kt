@@ -136,6 +136,12 @@ class AppAiManager(context: Context) {
         broadcastConnection()
     }
 
+    /** Re-verifies the saved OpenRouter key without generating text. */
+    suspend fun checkOpenRouter() {
+        val key = openRouterKey ?: throw ApiFailure(ApiFailure.Kind.AUTHENTICATION, "Add an OpenRouter key first.")
+        openRouter.verifyKey(key)
+    }
+
     suspend fun removeOpenRouterKey() {
         withContext(Dispatchers.IO) { keyStore.reset() }
         cancelProvider("openrouter")
@@ -147,16 +153,33 @@ class AppAiManager(context: Context) {
     suspend fun saveCustomEndpoint(url: String, key: String): Int {
         val base = CustomEndpoint.normalizeUrl(url)
             ?: throw ApiFailure(ApiFailure.Kind.INVALID_REQUEST, "Enter a full https:// URL, such as https://api.example.com/v1, without credentials or a query.")
-        val apiKey = key.trim()
+        // Editing a saved endpoint may leave the key empty to keep the current one.
+        val apiKey = key.trim().ifEmpty { customEndpoint?.apiKey.orEmpty() }
         if (!CustomEndpoint.validKey(apiKey)) throw ApiFailure(ApiFailure.Kind.INVALID_REQUEST, "Enter a valid API key.")
         val candidate = CustomEndpoint(base, apiKey)
-        val count = custom.verify(candidate)
+        val count = verifyCustom(candidate)
         withContext(Dispatchers.IO) { customStore.write(com.google.gson.Gson().toJson(candidate)) }
         cancelProvider("custom")
         customEndpoint = candidate
         customMessage = null
         broadcastConnection()
         return count
+    }
+
+    /** Re-verifies the saved custom endpoint by listing its models. */
+    suspend fun checkCustomEndpoint(): Int =
+        verifyCustom(customEndpoint ?: throw ApiFailure(ApiFailure.Kind.AUTHENTICATION, "Add a custom endpoint first."))
+
+    /** Setup-time wording: the generic request errors talk about models, but here the URL or key is what is wrong. */
+    private suspend fun verifyCustom(candidate: CustomEndpoint): Int = try {
+        custom.verify(candidate)
+    } catch (e: ApiFailure) {
+        throw when (e.kind) {
+            ApiFailure.Kind.AUTHENTICATION -> ApiFailure(e.kind, "The service rejected this API key.")
+            ApiFailure.Kind.INVALID_REQUEST -> ApiFailure(e.kind, "No model list was found at this URL. Check the base URL; it usually ends in /v1.")
+            ApiFailure.Kind.INVALID_RESPONSE -> ApiFailure(e.kind, "This URL did not answer like an OpenAI-compatible API. Check the base URL; it usually ends in /v1.")
+            else -> e
+        }
     }
 
     suspend fun removeCustomEndpoint() {
