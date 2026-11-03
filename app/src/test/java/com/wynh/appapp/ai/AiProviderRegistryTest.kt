@@ -88,4 +88,13 @@ class AiProviderRegistryTest {
         assertTrue(registry.exposed().connected)
     }
 
+    @Test fun `custom provider can be exposed alone or combined`() = runBlocking {
+        val a = Fake(); val c = Fake()
+        val r = AiProviderRegistry(listOf(AiProvider("chatgpt", "ChatGPT", a) { a.connected }, AiProvider("custom", "Custom endpoint", c) { c.connected }))
+        r.setExposure("custom")
+        assertEquals("custom", r.exposed().id)
+        assertEquals("custom", r.route("custom", "same/id:é").provider.id)
+        r.setExposure("combined")
+        assertEquals(listOf("ChatGPT · Model", "Custom endpoint · Model"), r.models("combined").map { it.displayName })
+    }
 }

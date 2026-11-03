@@ -10,7 +10,7 @@ analytics, advertising or crash reporting. The developer does not receive your d
   are stored in App²'s private app storage. Workspace history snapshots and native key-value
   state are stored there too.
 - **Settings and reminders.** App² settings and scheduled notifications are stored locally.
-- **AI credentials.** A ChatGPT sign-in token or an OpenRouter API key is encrypted with an
+- **AI credentials.** A ChatGPT sign-in token, an OpenRouter API key, or a custom endpoint's URL and API key is encrypted with an
   Android Keystore key and kept in no-backup storage. It is never written into a subapp
   workspace, snapshot, export or backup, and subapps cannot read it.
 - **Backups.** App² opts out of Android cloud backup and device transfer. Exports and
@@ -25,6 +25,7 @@ clearing its storage removes everything App² stores.
 | Feature | Sent to | What is sent |
 | --- | --- | --- |
 | ChatGPT connection | OpenAI (`auth.openai.com`, `api.openai.com`) | Sign-in through OpenAI; then, for each generation a subapp starts with your permission, its instructions and input. Requests ask OpenAI not to store responses (`store: false`). OpenAI's own privacy policy applies. |
+| Custom endpoint | The HTTPS service whose URL you entered | Your API key, model catalogue requests, and each generation's instructions and input. That service's own terms apply; App² does not control it. |
 | OpenRouter connection | OpenRouter (`openrouter.ai`) and the model provider it routes to | Your API key, model catalogue requests, and each generation's instructions and input. OpenRouter's and the routed provider's policies apply. |
 | GitHub import and Update app | GitHub (`api.github.com`, `raw.githubusercontent.com`) | Requests for the public repository you choose. No GitHub account is used. |
 | Translation | The Android translation app you pick | The text you chose to translate. That app's policy applies. |

@@ -189,7 +189,8 @@ class AiWebMessageBridge(
         val provider = when (manager.exposure) {
             "chatgpt" -> "ChatGPT"
             "openrouter" -> "OpenRouter"
-            else -> "App² AI (Combined: ChatGPT and OpenRouter)"
+            "custom" -> "your custom AI endpoint (${manager.customUrl ?: "not set"})"
+            else -> "App² AI (Combined: all connected providers)"
         }
         val destination = runCatching { manager.registry.route(providerId, model).provider.name }.getOrNull()
         val openRouterCost = if (paid) "OpenRouter models use your OpenRouter quota and can spend OpenRouter credits, because paid models are enabled."
@@ -197,11 +198,13 @@ class AiWebMessageBridge(
         val cost = when (manager.exposure) {
             "chatgpt" -> "Requests consume your ChatGPT plan usage."
             "openrouter" -> openRouterCost
-            else -> "ChatGPT models consume your ChatGPT plan usage. $openRouterCost"
+            "custom" -> "Requests use whatever quota or billing your custom endpoint applies."
+            else -> "ChatGPT models consume your ChatGPT plan usage. $openRouterCost Custom endpoint requests use that service's own billing."
         }
         return buildString {
             append("$name will send the prompt text and instructions it supplies to $provider, using the account connected in App² Settings → AI.")
-            if (destination != null && manager.exposure == "combined") append(" This request goes to $destination.")
+            if (destination != null && manager.exposure == "combined") append(" This request goes to $destination" +
+                (if (providerId == "combined" && destination == "Custom endpoint") " (${manager.customUrl})" else "") + ".")
             append("\n\n$cost")
             append("\n\nThis permission covers future AI requests from this app. Running requests can be cancelled from their notification. You can revoke it in the library: app menu → Permissions.")
         }

@@ -60,7 +60,7 @@ class AiProviderRegistry(val providers: List<AiProvider>, initialExposure: Strin
         if (!p.connected()) throw ApiFailure(ApiFailure.Kind.AUTHENTICATION, "Connect ${p.name} in App² Settings → AI.")
     }
     companion object {
-        val modes = listOf("chatgpt", "openrouter", "combined")
+        val modes = listOf("chatgpt", "openrouter", "custom", "combined")
         fun combinedId(provider: String, model: String): String = "v1:$provider:" +
             Base64.getUrlEncoder().withoutPadding().encodeToString(model.toByteArray(Charsets.UTF_8))
         private fun invalidModel(): Nothing = throw ApiFailure(ApiFailure.Kind.INVALID_REQUEST, "Choose a model from the current model list.")
