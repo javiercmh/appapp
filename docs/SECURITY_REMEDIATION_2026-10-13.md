@@ -47,7 +47,7 @@ and the user’s choice to proceed. Deletion and deliberate revocation still cle
 - Explicit licence from the LingoMage owner; asset-rights review.
 - AI content reporting and moderation process for Play (not built; depends on which AI features ship).
 - Provider terms and payment-link review (OpenAI, OpenRouter), Play Data safety form, content rating, AAB and Play App Signing, foreground-service declaration, F-Droid `fdroiddata` metadata and signing strategy, reproducible-build check.
-- Dependency verification metadata beyond the wrapper checksum.
+- Dependency verification: `gradle/verification-metadata.xml` (SHA-256) now pins every resolved artifact for debug, release, unit-test and lint. After a dependency or plugin bump, regenerate it with `./gradlew --write-verification-metadata sha256 :app:assembleDebug :app:assembleRelease :app:testDebugUnitTest :app:lintDebug` and review the diff.
 - Editor, asset serving and bridge now share `WorkspaceFiles` path validation and symlink rejection; current ownership is documented in [ARCHITECTURE.md](ARCHITECTURE.md).
 - Library import now stages and verifies copies before registration; native metadata retains the pinned import commit.
 - The development server and native storage policy now share path fixtures and matching file limits. Mock/browser checks still do not establish native isolation.
