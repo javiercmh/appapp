@@ -11,9 +11,15 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-/** Native-only OpenRouter key; never backed up or included in a workspace. */
-class EncryptedApiKeyStore(context: Context, private val keyAlias: String = ALIAS) {
-    private val file = AtomicFile(File(context.noBackupFilesDir, "appapp-openrouter-key.enc"))
+/** Native-only provider secret (API key, or a custom endpoint's URL and key); never backed up or included in a workspace. */
+class EncryptedApiKeyStore(
+    context: Context,
+    private val keyAlias: String = ALIAS,
+    fileName: String = "appapp-openrouter-key.enc",
+    private val label: String = "OpenRouter key",
+    private val aad: ByteArray = AAD
+) {
+    private val file = AtomicFile(File(context.noBackupFilesDir, fileName))
     @Synchronized fun read(): String? {
         if (!file.baseFile.exists()) return null
         try {
@@ -21,19 +27,19 @@ class EncryptedApiKeyStore(context: Context, private val keyAlias: String = ALIA
             require(bytes.size in 30..16_384 && bytes[0].toInt() == 1)
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, bytes.copyOfRange(1, 13)))
-            cipher.updateAAD(AAD)
+            cipher.updateAAD(aad)
             return String(cipher.doFinal(bytes.copyOfRange(13, bytes.size)), Charsets.UTF_8)
-        } catch (_: Exception) { throw AuthFailure("Saved OpenRouter key could not be unlocked. Remove it and add a key again.") }
+        } catch (_: Exception) { throw AuthFailure("Saved $label could not be unlocked. Remove it and add it again.") }
     }
     @Synchronized fun write(value: String) {
         try {
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-            cipher.init(Cipher.ENCRYPT_MODE, key()); cipher.updateAAD(AAD)
+            cipher.init(Cipher.ENCRYPT_MODE, key()); cipher.updateAAD(aad)
             val bytes = byteArrayOf(1) + cipher.iv + cipher.doFinal(value.toByteArray(Charsets.UTF_8))
             val stream = file.startWrite()
             try { stream.write(bytes); file.finishWrite(stream) }
             catch (e: Exception) { file.failWrite(stream); throw e }
-        } catch (_: Exception) { throw AuthFailure("OpenRouter key could not be saved securely.") }
+        } catch (_: Exception) { throw AuthFailure("The $label could not be saved securely.") }
     }
     @Synchronized fun reset() {
         file.delete()
@@ -49,6 +55,8 @@ class EncryptedApiKeyStore(context: Context, private val keyAlias: String = ALIA
         }.generateKey()
     }
     companion object {
+        const val CUSTOM_ALIAS = "appapp.custom.endpoint.v1"
+        val CUSTOM_AAD = "AppApp custom endpoint v1".toByteArray()
         private const val ALIAS = "appapp.openrouter.key.v1"
         private val AAD = "AppApp OpenRouter key v1".toByteArray()
     }

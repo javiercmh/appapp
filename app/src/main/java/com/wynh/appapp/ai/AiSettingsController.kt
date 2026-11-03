@@ -136,6 +136,7 @@ object AiSettingsController {
             }
         }
         bindOpenRouter(activity, dialog)
+        bindCustomEndpoint(activity, dialog)
         render()
         activity.lifecycleScope.launch {
             while (dialog.isShowing) {
@@ -143,6 +144,97 @@ object AiSettingsController {
                 render()
             }
         }
+    }
+
+    private fun bindCustomEndpoint(activity: ComponentActivity, dialog: Dialog) {
+        val ai = (activity.application as AppAiApplication).ai
+        val status = dialog.findViewById<TextView>(R.id.settings_tv_custom_status) ?: return
+        val connection = dialog.findViewById<TextView>(R.id.settings_tv_custom_connection)
+        val setButton = dialog.findViewById<MaterialButton>(R.id.settings_btn_custom_set)
+        val more = dialog.findViewById<ImageButton>(R.id.settings_btn_custom_more)
+        var busy = false
+        var feedback: String? = null
+        fun render() {
+            setButton.text = if (ai.customConnected) "Replace custom endpoint" else "Add custom endpoint"
+            setButton.isEnabled = !busy && !ai.customRestoring
+            more.isEnabled = !busy && !ai.customRestoring
+            connection.text = when {
+                busy || ai.customRestoring -> "Connecting…"
+                ai.customConnected -> "Connected"
+                else -> "Not connected"
+            }
+            connection.setTextColor(ContextCompat.getColor(activity,
+                if (ai.customConnected && !busy) R.color.accent_green else R.color.on_surface_muted))
+            status.text = feedback ?: ai.customMessage ?: when {
+                ai.customRestoring -> "Restoring connection…"
+                ai.customConnected -> "${ai.customUrl}\nAvailable to subapps according to your exposure setting."
+                else -> "Add any OpenAI-compatible service by its HTTPS URL and API key."
+            }
+        }
+        fun runOperation(message: String, operation: suspend () -> String) {
+            busy = true; feedback = message; render()
+            activity.lifecycleScope.launch {
+                try { feedback = operation() }
+                catch (e: Exception) { feedback = e.message ?: "Custom endpoint operation failed." }
+                finally { busy = false; render() }
+            }
+        }
+        setButton.setOnClickListener {
+            val pad = (20 * activity.resources.displayMetrics.density).toInt()
+            val urlField = com.google.android.material.textfield.TextInputEditText(activity).apply {
+                inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
+                importantForAutofill = android.view.View.IMPORTANT_FOR_AUTOFILL_NO
+                isSingleLine = true
+                setText(ai.customUrl.orEmpty())
+            }
+            val keyField = com.google.android.material.textfield.TextInputEditText(activity).apply {
+                inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+                importantForAutofill = android.view.View.IMPORTANT_FOR_AUTOFILL_NO
+                imeOptions = android.view.inputmethod.EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING
+                isSingleLine = true
+            }
+            fun layout(hint: String, field: android.view.View) = com.google.android.material.textfield.TextInputLayout(activity).apply {
+                this.hint = hint; addView(field)
+            }
+            val form = android.widget.LinearLayout(activity).apply {
+                orientation = android.widget.LinearLayout.VERTICAL
+                setPadding(pad, 0, pad, 0)
+                addView(layout("Base URL (https://…/v1)", urlField))
+                addView(layout("API key", keyField))
+            }
+            val entry = MaterialAlertDialogBuilder(activity).setTitle(setButton.text)
+                .setMessage("The URL and key are stored encrypted on this device. Verification lists the endpoint's models and does not generate text.")
+                .setView(form).setNegativeButton("Cancel", null).setPositiveButton("Verify and save", null).create()
+            entry.setOnShowListener {
+                entry.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                    val url = urlField.text?.toString().orEmpty()
+                    val key = keyField.text?.toString().orEmpty()
+                    keyField.text?.clear()
+                    entry.dismiss()
+                    runOperation("Verifying endpoint…") {
+                        val count = ai.saveCustomEndpoint(url, key)
+                        "Endpoint verified ($count models) and saved."
+                    }
+                }
+            }
+            entry.show()
+        }
+        more.setOnClickListener {
+            PopupMenu(activity, more).apply {
+                menu.add("Remove custom endpoint")
+                setOnMenuItemClickListener {
+                    MaterialAlertDialogBuilder(activity).setTitle("Remove custom endpoint?")
+                        .setMessage("Cancels unfinished requests to it. Completed results remain available for saving. The key is not revoked at the service.")
+                        .setNegativeButton("Cancel", null).setPositiveButton("Remove") { _, _ ->
+                            runOperation("Removing…") { ai.removeCustomEndpoint(); "Custom endpoint removed." }
+                        }.show()
+                    true
+                }
+                show()
+            }
+        }
+        render()
+        activity.lifecycleScope.launch { while (dialog.isShowing) { delay(500); render() } }
     }
 
     private fun bindOpenRouter(activity: ComponentActivity, dialog: Dialog) {

@@ -10,6 +10,8 @@ import androidx.webkit.WebMessageCompat
 import androidx.webkit.WebViewCompat
 import com.wynh.appapp.ai.auth.AuthRepository
 import com.wynh.appapp.ai.auth.EncryptedApiKeyStore
+import com.wynh.appapp.ai.network.CustomEndpoint
+import com.wynh.appapp.ai.network.CustomEndpointInferenceRepository
 import com.wynh.appapp.ai.network.OpenRouterInferenceRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
@@ -49,9 +51,20 @@ class AppAiManager(context: Context) {
     val openRouterConnected: Boolean get() = openRouterKey != null
     val allowPaidModels: Boolean get() = preferences.getBoolean("openrouter_allow_paid", false)
     val openRouter = OpenRouterInferenceRepository(http, { openRouterKey }, { allowPaidModels })
+    private val customStore = EncryptedApiKeyStore(app, EncryptedApiKeyStore.CUSTOM_ALIAS, "appapp-custom-endpoint.enc",
+        "custom endpoint", EncryptedApiKeyStore.CUSTOM_AAD)
+    @Volatile private var customEndpoint: CustomEndpoint? = null
+    var customMessage: String? = null
+        private set
+    var customRestoring = true
+        private set
+    val customConnected: Boolean get() = customEndpoint != null
+    val customUrl: String? get() = customEndpoint?.baseUrl
+    val custom = CustomEndpointInferenceRepository(http) { customEndpoint }
     val registry = AiProviderRegistry(listOf(
         AiProvider("chatgpt", "ChatGPT", inference) { auth.state.value.let { state -> state.accounts.firstOrNull { it.clientId == state.activeClientId }?.canInfer == true } },
-        AiProvider("openrouter", "OpenRouter", openRouter) { openRouterConnected }
+        AiProvider("openrouter", "OpenRouter", openRouter) { openRouterConnected },
+        AiProvider("custom", "Custom endpoint", custom) { customConnected }
     ), preferences.getString("exposure", "chatgpt")?.takeIf { it in AiProviderRegistry.modes } ?: "chatgpt")
     val exposure: String get() = registry.exposure
     /** Serializes only the Settings model check; generation requests from different subapps run concurrently. */
@@ -72,6 +85,14 @@ class AppAiManager(context: Context) {
             try { openRouterKey = withContext(Dispatchers.IO) { keyStore.read() } }
             catch (e: Exception) { openRouterMessage = e.message }
             finally { openRouterRestoring = false; broadcastConnection() }
+        }
+        scope.launch {
+            try {
+                customEndpoint = withContext(Dispatchers.IO) { customStore.read() }?.let {
+                    com.google.gson.Gson().fromJson(it, CustomEndpoint::class.java)
+                }?.takeIf { CustomEndpoint.normalizeUrl(it.baseUrl) != null && CustomEndpoint.validKey(it.apiKey) }
+            } catch (e: Exception) { customMessage = (e as? com.wynh.appapp.ai.auth.AuthFailure)?.userMessage ?: "Saved custom endpoint could not be read." }
+            finally { customRestoring = false; broadcastConnection() }
         }
     }
 
@@ -120,6 +141,29 @@ class AppAiManager(context: Context) {
         cancelProvider("openrouter")
         openRouterKey = null
         openRouterMessage = "Saved key removed. It has not been revoked at OpenRouter."
+        broadcastConnection()
+    }
+
+    suspend fun saveCustomEndpoint(url: String, key: String): Int {
+        val base = CustomEndpoint.normalizeUrl(url)
+            ?: throw ApiFailure(ApiFailure.Kind.INVALID_REQUEST, "Enter a full https:// URL, such as https://api.example.com/v1, without credentials or a query.")
+        val apiKey = key.trim()
+        if (!CustomEndpoint.validKey(apiKey)) throw ApiFailure(ApiFailure.Kind.INVALID_REQUEST, "Enter a valid API key.")
+        val candidate = CustomEndpoint(base, apiKey)
+        val count = custom.verify(candidate)
+        withContext(Dispatchers.IO) { customStore.write(com.google.gson.Gson().toJson(candidate)) }
+        cancelProvider("custom")
+        customEndpoint = candidate
+        customMessage = null
+        broadcastConnection()
+        return count
+    }
+
+    suspend fun removeCustomEndpoint() {
+        withContext(Dispatchers.IO) { customStore.reset() }
+        cancelProvider("custom")
+        customEndpoint = null
+        customMessage = "Custom endpoint removed. The key has not been revoked at the service."
         broadcastConnection()
     }
 
