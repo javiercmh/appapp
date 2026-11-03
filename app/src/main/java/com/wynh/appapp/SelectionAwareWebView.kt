@@ -8,6 +8,8 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.webkit.WebView
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 
 /**
  * WebView that can hide Android's floating text-selection menu. An emptied floating menu draws no
@@ -21,6 +23,15 @@ class SelectionAwareWebView @JvmOverloads constructor(
 ) : WebView(context, attrs) {
 
     var selectionMenuSuppressed = false
+
+    // Gboard's language picker (spacebar hold) is an IME dialog that takes window focus. Chromium reacts to
+    // that focus loss by hiding the soft keyboard, which dismisses the picker too. Keep the keyboard while
+    // it is visible; regaining focus is still forwarded.
+    override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
+        val imeVisible = ViewCompat.getRootWindowInsets(this)?.isVisible(WindowInsetsCompat.Type.ime()) == true
+        if (!hasWindowFocus && imeVisible) return
+        super.onWindowFocusChanged(hasWindowFocus)
+    }
 
     override fun startActionMode(callback: ActionMode.Callback?, type: Int): ActionMode? =
         super.startActionMode(callback?.let(::SuppressibleCallback), type)
