@@ -1,3 +1,35 @@
+# App² 1.8.0
+
+## AI services
+
+- Redesign Settings → AI as a collapsible summary. Add services one at a time from an Add another service menu, and see only the services you have connected.
+- Add a custom AI endpoint: any OpenAI-compatible service with an HTTPS base URL and API key. The key is stored natively and encrypted, and subapps see it as provider `custom`.
+- Verify OpenRouter and custom endpoints inside their dialog before saving. Failures appear on the field they concern, and only a verified service is saved.
+- Mask API keys in the entry dialogs and space the custom endpoint fields.
+
+## Settings and keyboard
+
+- Move Backup and restore below Notifications, keeping AI services first.
+- Keep the soft keyboard open when Gboard's language picker takes window focus.
+
+## Build and distribution
+
+- Add Gradle dependency verification metadata, including the macOS aapt2 checksum.
+- Prepare F-Droid metadata and independent release builds.
+- Move examples to README links and refresh app screenshots.
+
+## Installation
+
+Download `AppApp-1.8.0.apk` and install it as an update to App². The package uses the existing release signing certificate and application ID `com.wynh.appapp`. Existing subapp workspaces and AI credentials are preserved. Existing workspaces must explicitly adopt updated bridge wrappers to use new APIs.
+
+Version: `1.8.0` (version code `13`). Host compatibility level remains `11`.
+
+## Verification
+
+The release workflow runs JVM tests, release lint, JavaScript and Python checks, compiles Android tests, and builds the signed production APK. Its certificate is checked against the existing production signing identity. This release does not claim a new phone installation or complete device coverage; pending device checks are recorded in `docs/DEVICE_CHECKS.md`.
+
+---
+
 # App² 1.7.0
 
 ## Permissions and workspace protection
