@@ -216,7 +216,10 @@ object AiSettingsController {
                 orientation = android.widget.LinearLayout.VERTICAL
                 val pad = (20 * activity.resources.displayMetrics.density).toInt()
                 setPadding(pad, 0, pad, 0)
-                addView(urlLayout); addView(keyLayout)
+                addView(urlLayout)
+                addView(keyLayout, android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = (8 * activity.resources.displayMetrics.density).toInt() })
             }
             showVerifyDialog(activity,
                 title = if (editing) "Edit custom endpoint" else "Add custom endpoint",
@@ -384,11 +387,17 @@ object AiSettingsController {
 
     private fun textField(activity: ComponentActivity, password: Boolean) =
         com.google.android.material.textfield.TextInputEditText(activity).apply {
+            // Single-line first: setSingleLine() replaces the transformation method, which would
+            // otherwise undo the password masking that setInputType() installs.
+            isSingleLine = true
             inputType = android.text.InputType.TYPE_CLASS_TEXT or if (password)
                 android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD else android.text.InputType.TYPE_TEXT_VARIATION_URI
+            if (password) {
+                transformationMethod = android.text.method.PasswordTransformationMethod.getInstance()
+                typeface = android.graphics.Typeface.DEFAULT
+            }
             importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
             imeOptions = android.view.inputmethod.EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING
-            isSingleLine = true
         }
 
     private fun fieldLayout(activity: ComponentActivity, hint: String, field: View, password: Boolean = false) =
