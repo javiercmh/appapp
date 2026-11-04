@@ -100,6 +100,24 @@ assets and runtime logs remain untouched. Export current data before restoring i
 it needs to be retained. Installed publisher metadata remains the last GitHub update,
 so restored code is reported as local changes during the next update review.
 
+## Branches and releases
+
+App² itself: day-to-day commits go to `dev`; `main` only moves for a release, by
+fast-forwarding it to `dev` (no merge commits). A release bumps `versionCode` and
+`versionName`, tags `vX.Y.Z` and publishes a GitHub release (see `AGENTS.md`). The
+**Publish App² Dev** workflow can build a `dev-N` prerelease from either `dev`
+(ongoing work) or `main` (see [Dev distribution](DEV_DISTRIBUTION.md)).
+
+Subapps such as LingoMage follow the same model. Installed apps follow `main`, so a
+publisher release bumps `version` in `manifest.json` on `dev` and then fast-forwards
+`main`. Keep `app2Update.github.branch` as `main` on both branches; it is only the
+default suggested when linking. To try unreleased work on a phone, use Update app →
+**Change source** and set the branch to `dev`, then set it back to `main` to return
+to releases. Each switch is a source change that needs **Update anyway**; permissions
+and user data are kept. A version bump on `dev` is optional: App² offers any change
+to managed files and reports **App is up to date** only when the files and version
+match what is installed.
+
 ## Low-token routine
 
 1. Work in the publisher repo. Update version/ownership metadata and keep user
