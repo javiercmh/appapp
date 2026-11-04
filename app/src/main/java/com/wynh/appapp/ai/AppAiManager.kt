@@ -70,8 +70,10 @@ class AppAiManager(context: Context) {
     /** Serializes only the Settings model check; generation requests from different subapps run concurrently. */
     private val checkLock = Mutex()
     private val notificationIds = java.util.concurrent.atomic.AtomicInteger()
-    /** At most six generation starts per subapp per minute, across all of its tasks. */
-    private val startLimiter = AiStartRateLimiter()
+    /** Generation starts per subapp per minute, across all of its tasks; set in Settings → AI (0 = no limit). */
+    private val startLimiter = AiStartRateLimiter(
+        preferences.getInt("start_limit", AiStartRateLimiter.DEFAULT_STARTS).takeIf { it in AiStartRateLimiter.CHOICES } ?: AiStartRateLimiter.DEFAULT_STARTS)
+    val startLimit: Int get() = startLimiter.maxStarts
     private val ledger = AiRequestLedger()
     private val requests = ledger.results
     private val jobs = ledger.owners
@@ -108,6 +110,12 @@ class AppAiManager(context: Context) {
                 false
             }
         } }
+    }
+
+    fun setStartLimit(value: Int) {
+        require(value in AiStartRateLimiter.CHOICES)
+        startLimiter.maxStarts = value
+        preferences.edit().putInt("start_limit", value).apply()
     }
 
     fun setExposure(value: String) {

@@ -357,6 +357,21 @@ object AiSettingsController {
             feedback = if (enabled) "Paid models enabled. Generation can spend OpenRouter credits." else "Only explicitly free models are available."
             render()
         }
+        val limitDropdown = dialog.findViewById<com.google.android.material.textfield.MaterialAutoCompleteTextView>(R.id.settings_dropdown_ai_start_limit)
+        val limitStatus = dialog.findViewById<TextView>(R.id.settings_tv_ai_start_limit)
+        fun renderLimit() {
+            val limit = ai.startLimit
+            limitDropdown.setText(AiStartRateLimiter.label(limit), false)
+            limitStatus.text = if (limit == AiStartRateLimiter.UNLIMITED)
+                "Apps can start any number of AI requests. A faulty app could use your plan or credits quickly."
+            else "Each app can start up to $limit AI requests per minute. Extra starts fail until the minute passes."
+        }
+        limitDropdown.setSimpleItems(AiStartRateLimiter.CHOICES.map(AiStartRateLimiter::label).toTypedArray())
+        renderLimit()
+        limitDropdown.setOnItemClickListener { _, _, index, _ ->
+            AiStartRateLimiter.CHOICES.getOrNull(index)?.let(ai::setStartLimit)
+            renderLimit()
+        }
         exposureDropdown.setOnItemClickListener { _, _, index, _ ->
             val selected = exposureChoices.getOrNull(index) ?: return@setOnItemClickListener
             if (ai.registry.selectableExposures().none { it.id == selected.id }) { render(); return@setOnItemClickListener }

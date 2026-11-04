@@ -41,4 +41,15 @@ class SubappGrantStoreTest {
         now = 1000
         assertTrue(limiter.tryAcquire("a"))
     }
+
+    @Test fun `rate limiter follows a changed setting and can be turned off`() {
+        val limiter = AiStartRateLimiter(maxStarts = 1, windowMillis = 1000) { 0L }
+        assertTrue(limiter.tryAcquire("a")); assertFalse(limiter.tryAcquire("a"))
+        limiter.maxStarts = 3
+        assertTrue(limiter.tryAcquire("a")); assertTrue(limiter.tryAcquire("a")); assertFalse(limiter.tryAcquire("a"))
+        limiter.maxStarts = AiStartRateLimiter.UNLIMITED
+        repeat(100) { assertTrue(limiter.tryAcquire("a")) }
+        assertEquals("No limit", AiStartRateLimiter.label(AiStartRateLimiter.UNLIMITED))
+        assertTrue(AiStartRateLimiter.DEFAULT_STARTS in AiStartRateLimiter.CHOICES)
+    }
 }
