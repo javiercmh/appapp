@@ -121,7 +121,7 @@ class AiRequestNotificationDeviceTest {
     private fun isForeground(sbn: StatusBarNotification) = sbn.notification.flags and Notification.FLAG_FOREGROUND_SERVICE != 0
     private fun finish(input: String, text: String = "done:$input") = fake.gates.getValue(input).complete(text)
 
-    @Test fun twoAppsRunConcurrentlyWithOwnNotificationsAndOneRequestPerApp() {
+    @Test fun twoAppsRunConcurrentlyWithOwnNotificationsAndAnAppMayRunSeveralRequests() {
         val a = newApp("Alpha Reader"); val b = newApp("Beta Writer")
         val first = start(a, 9101, "a1")
         val second = start(b, 9102, "b1", title = "Writing the next chapter", body = "Safe to switch apps.")
@@ -135,16 +135,21 @@ class AiRequestNotificationDeviceTest {
         assertEquals("Writing the next chapter", text(beta, Notification.EXTRA_TITLE))
         assertEquals("exactly one notification is the foreground one", 1, listOf(alpha, beta).count { isForeground(it) })
 
-        val duplicate = assertThrows(ApiFailure::class.java) { start(a, 9101, "a2") }
-        assertEquals(ApiFailure.Kind.INVALID_REQUEST, duplicate.kind)
-        assertEquals("The rejected duplicate did not disturb the running request", false, manager.result(first)?.done)
-        assertTrue(manager.ownedByApp(first, a) && !manager.ownedByApp(first, b) && manager.ownedByApp(second, b))
+        // The same app may start another request while its first one runs; both are tracked separately.
+        val third = start(a, 9101, "a2")
+        assertTrue("The app's second generation runs alongside its first", fake.entered.getValue("a2").await(10, TimeUnit.SECONDS))
+        assertNotEquals(first, third)
+        assertEquals("The second request did not disturb the first", false, manager.result(first)?.done)
+        assertTrue(manager.ownedByApp(first, a) && manager.ownedByApp(third, a) && !manager.ownedByApp(first, b) && manager.ownedByApp(second, b))
 
-        finish("a1"); finish("b1")
+        finish("a1"); finish("b1"); finish("a2")
+        assertEquals("done:a2", eventually("second Alpha result") { manager.result(third)?.takeIf { it.done } }.text)
         assertEquals("done:a1", eventually("first result") { manager.result(first)?.takeIf { it.done } }.text)
         eventually("Alpha cleanup") { gone("Alpha Reader") }; eventually("Beta cleanup") { gone("Beta Writer") }
         assertTrue("Results stay available until acknowledged", manager.hasRequest(a) && manager.hasRequest(b))
         manager.acknowledge(first); manager.acknowledge(second)
+        assertTrue("Alpha still holds its second result", manager.hasRequest(a))
+        manager.acknowledge(third)
         assertFalse(manager.hasRequest(a))
     }
 
