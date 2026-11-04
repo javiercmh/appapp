@@ -12,6 +12,7 @@ import com.wynh.appapp.workspace.SubappRecord
 import com.wynh.appapp.SubappSessionRegistry
 import com.wynh.appapp.ai.AppAiApplication
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
