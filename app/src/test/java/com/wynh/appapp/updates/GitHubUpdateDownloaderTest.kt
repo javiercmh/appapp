@@ -44,6 +44,16 @@ class GitHubUpdateDownloaderTest {
         assertTrue(result.directory.resolve("index.html").isFile)
         assertFalse(result.directory.resolve("android").exists())
     }
+    @Test fun aDevBranchDownloadsEvenThoughItsManifestDeclaresMain() {
+        val urls = mutableListOf<String>()
+        val downloader = GitHubUpdateDownloader(temp.root) { url ->
+            urls.add(url.toString())
+            Response(url, if (url.host == "api.github.com") """{"sha":"$commit"}""".toByteArray() else if (url.path.endsWith("manifest.json")) manifest.toByteArray() else "ok".toByteArray())
+        }
+        val result = downloader.download(GitHubSource("owner", "repo", "dev"), 4)
+        assertTrue(urls.first().endsWith("/repos/owner/repo/commits/dev"))
+        assertEquals(GitHubSource("owner", "repo", "main"), result.pkg.source)
+    }
     @Test fun lingoMageRequirement4IsSupportedByCurrentHostLevel() {
         val level = BuildConfig.HOST_COMPATIBILITY_LEVEL.toLong()
         assertEquals(11L, level)

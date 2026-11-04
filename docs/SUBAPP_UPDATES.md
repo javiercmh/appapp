@@ -35,6 +35,15 @@ that counter no longer affects update compatibility. Raise the level only when t
 update contract or bridge gains behavior that publishers can require; releases and
 Dev builds do not change it.
 
+The `github` block suggests the source when an app is first linked. After that the
+user's chosen source decides where updates come from: Update app → **Change source**
+edits the repository (`owner/repository`, a github.com URL also works) and branch,
+so a phone can follow a `dev` branch or a fork. The downloaded manifest's `github`
+block does not have to match the chosen source; a dev branch can keep the main
+branch's manifest. A new source is saved only when an update from it is installed,
+and like any source change it is shown as a warning that needs **Update anyway**.
+Switching back to `main` works the same way.
+
 Publisher IDs are independent of App²'s stable installed subapp IDs. The host
 resolves the branch to a commit and downloads only declared files at that commit.
 It records commit, source and managed hashes beside the workspace. Private repos,

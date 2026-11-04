@@ -33,7 +33,8 @@ class GitHubUpdateDownloader(private val cache: File, private val connect: (URL)
         val root = "https://raw.githubusercontent.com/$repo/$commit/"
         val manifest = get(root + "manifest.json", 256 * 1024)
         val pkg = UpdatePackage.parse(manifest.toString(Charsets.UTF_8))
-        require(pkg.source == source) { "Package GitHub source differs from the selected source" }
+        // The user's chosen repository and branch decide where updates come from. The manifest's
+        // github block only suggests a source when linking, so a dev branch or a fork can keep it.
         require(pkg.minimumHostVersion <= hostCompatibilityLevel) { incompatibleHostMessage(pkg.minimumHostVersion, hostCompatibilityLevel) }
         val directory = File(cache, "update-${java.util.UUID.randomUUID()}")
         check(directory.mkdirs())

@@ -155,4 +155,29 @@ class WorkspaceUpdaterTest {
         assertEquals("other.publisher", engine.installed()!!.appId)
         assertNull(engine.identityMismatch(renamed))
     }
+
+    @Test fun followedBranchIsRecordedAndASwitchNeedsConfirmation() {
+        val root = workspace(); val engine = WorkspaceUpdater(root); val (pkg, files) = packageFiles("1")
+        engine.install(pkg, files, sha1, 3)
+        val dev = GitHubSource("test", "app", "dev")
+        // Same files from a dev branch whose manifest still declares main: still a change of source.
+        assertFalse(engine.publisherUnchanged(pkg, files, dev))
+        assertTrue(engine.identityMismatch(pkg, dev)!!.contains("app (dev)"))
+        assertThrows(IllegalArgumentException::class.java) { engine.install(pkg, files, sha2, 3, source = dev) }
+        engine.install(pkg, files, sha2, 3, acceptMismatch = true, source = dev)
+        assertEquals(dev, WorkspaceUpdater(root).installed()!!.source)
+        assertNull(engine.identityMismatch(pkg, dev))
+        assertTrue(engine.publisherUnchanged(pkg, files, dev))
+        // Going back to main is a source change again.
+        assertNotNull(engine.identityMismatch(pkg, pkg.source))
+    }
+
+    @Test fun parsesTypedSources() {
+        assertEquals(GitHubSource("javiercmh", "lingomage", "dev"), parseSource(" javiercmh/lingomage ", " dev "))
+        assertEquals(GitHubSource("javiercmh", "lingomage", "main"), parseSource("https://github.com/javiercmh/lingomage.git", "main"))
+        assertEquals(GitHubSource("javiercmh", "lingomage", "main"), parseSource("github.com/javiercmh/lingomage/", "main"))
+        assertThrows(IllegalArgumentException::class.java) { parseSource("lingomage", "main") }
+        assertThrows(IllegalArgumentException::class.java) { parseSource("a/b/c", "main") }
+        assertThrows(IllegalArgumentException::class.java) { parseSource("a/b", " ") }
+    }
 }

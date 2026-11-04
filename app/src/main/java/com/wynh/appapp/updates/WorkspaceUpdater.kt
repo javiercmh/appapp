@@ -23,27 +23,34 @@ class WorkspaceUpdater(private val directory: File) {
         if (value?.isJsonPrimitive == true && value.asJsonPrimitive.isString) value.asString.takeIf { it.isNotBlank() } else null
     }.getOrNull()
 
-    /** Compares publisher content, independently of local edits and unrelated repository commits. */
-    fun publisherUnchanged(pkg: UpdatePackage, files: File): Boolean {
+    /**
+     * Compares publisher content, independently of local edits and unrelated repository commits.
+     * [source] is the repository and branch the user follows, which may differ from the one the
+     * package's manifest declares (a dev branch usually keeps the main branch's manifest).
+     */
+    fun publisherUnchanged(pkg: UpdatePackage, files: File, source: GitHubSource = pkg.source): Boolean {
         val old = installed() ?: return false
-        return old.appId == pkg.appId && old.source == pkg.source &&
+        return old.appId == pkg.appId && old.source == source &&
             currentVersion() == pkg.version && old.version == pkg.version && old.seeds == pkg.seeds &&
             old.hashes == pkg.managed.associateWith { digest(File(files, it)) }
     }
 
-    /** Describes how the package's publisher identity or GitHub source differs from the installed one, or null when they agree. */
-    fun identityMismatch(pkg: UpdatePackage): String? {
+    /**
+     * Describes how the package's publisher identity or the followed GitHub [source] differs from the
+     * installed one, or null when they agree.
+     */
+    fun identityMismatch(pkg: UpdatePackage, source: GitHubSource = pkg.source): String? {
         val old = installed() ?: return null
         return buildList {
             if (old.appId != pkg.appId) add("Publisher ID: installed ${old.appId}, publisher now declares ${pkg.appId}")
-            if (old.source != pkg.source) add("Source: installed ${old.source.display}, package declares ${pkg.source.display}")
+            if (old.source != source) add("Source: installed from ${old.source.display}, this update comes from ${source.display}")
         }.takeIf { it.isNotEmpty() }?.joinToString("\n")
     }
 
     /** A mismatch is rejected unless [acceptMismatch] records the user's explicit confirmation of it. */
-    fun preview(pkg: UpdatePackage, files: File, acceptMismatch: Boolean = false): UpdatePreview {
+    fun preview(pkg: UpdatePackage, files: File, acceptMismatch: Boolean = false, source: GitHubSource = pkg.source): UpdatePreview {
         val old = installed()
-        require(acceptMismatch || identityMismatch(pkg) == null) { "Publisher identity or GitHub source does not match this installation" }
+        require(acceptMismatch || identityMismatch(pkg, source) == null) { "Publisher identity or GitHub source does not match this installation" }
         val added = pkg.managed.filter { !File(workspace, it).exists() }
         val changed = pkg.managed.filter { File(workspace, it).isFile && digest(File(workspace, it)) != digest(File(files, it)) }
         val removed = old?.hashes?.keys.orEmpty().filter { it !in pkg.managed && it !in pkg.seeds }
@@ -59,7 +66,8 @@ class WorkspaceUpdater(private val directory: File) {
         }
     }
 
-    fun install(pkg: UpdatePackage, files: File, commit: String, hostCompatibilityLevel: Long, reviewed: Map<String, String?>? = null, acceptMismatch: Boolean = false) = synchronized(WorkspaceLocks.forWorkspace(workspace)) {
+    /** Records [source] as the installation's followed repository and branch for later checks. */
+    fun install(pkg: UpdatePackage, files: File, commit: String, hostCompatibilityLevel: Long, reviewed: Map<String, String?>? = null, acceptMismatch: Boolean = false, source: GitHubSource = pkg.source) = synchronized(WorkspaceLocks.forWorkspace(workspace)) {
         require(pkg.minimumHostVersion <= hostCompatibilityLevel) { incompatibleHostMessage(pkg.minimumHostVersion, hostCompatibilityLevel) }
         require(commit.matches(Regex("[a-f0-9]{40}"))) { "Invalid commit" }
         val checked = UpdatePackage.parse(File(files, "manifest.json").readText())
@@ -67,7 +75,7 @@ class WorkspaceUpdater(private val directory: File) {
         (pkg.managed + pkg.seeds).forEach { require(File(files, safePath(it)).isFile) { "Missing package file: $it" } }
         recover()
         require(reviewed == null || reviewed == reviewedFiles(pkg)) { "App code changed since review; check the update again" }
-        val preview = preview(pkg, files, acceptMismatch)
+        val preview = preview(pkg, files, acceptMismatch, source)
         val hashes = pkg.managed.associateWith { digest(File(files, it)) }
         prepareBackup()
         com.wynh.appapp.workspace.WorkspaceFiles.copyTree(workspace, next)
@@ -75,7 +83,7 @@ class WorkspaceUpdater(private val directory: File) {
         pkg.managed.forEach { copyManaged(files, next, it) }
         pkg.seeds.forEach { if (!File(next, it).exists()) copyManaged(files, next, it) }
         verifyPreserved(pkg.managed + preview.removed.toSet())
-        commitWorkspace(InstalledUpdate(pkg.appId, pkg.version, pkg.source, commit, hashes, pkg.seeds))
+        commitWorkspace(InstalledUpdate(pkg.appId, pkg.version, source, commit, hashes, pkg.seeds))
     }
 
     private fun copyManaged(source: File, target: File, path: String) {

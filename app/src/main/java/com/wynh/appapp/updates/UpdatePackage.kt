@@ -13,6 +13,17 @@ data class GitHubSource(val owner: String, val repository: String, val branch: S
     val display: String get() = "$owner/$repository ($branch)"
 }
 
+/**
+ * Reads a source typed by the user: "owner/repository" (a github.com URL is accepted too) and a branch.
+ * Surrounding whitespace, a trailing ".git" and a trailing slash are ignored.
+ */
+fun parseSource(repository: String, branch: String): GitHubSource {
+    val path = repository.trim().removePrefix("https://").removePrefix("http://").removePrefix("github.com/").removeSuffix("/").removeSuffix(".git")
+    val parts = path.split('/')
+    require(parts.size == 2 && parts.all { it.isNotBlank() }) { "Enter owner/repository" }
+    return GitHubSource(parts[0], parts[1], branch.trim())
+}
+
 data class UpdatePackage(
     val appId: String, val version: String, val minimumHostVersion: Long,
     val managed: Set<String>, val seeds: Set<String>, val source: GitHubSource

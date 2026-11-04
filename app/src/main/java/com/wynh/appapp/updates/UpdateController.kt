@@ -31,27 +31,34 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
                 val builder = MaterialAlertDialogBuilder(activity).setTitle("Update app")
                     .setMessage("Current version: ${updater.currentVersion() ?: "Unknown"}\nRepository: ${old.source.owner}/${old.source.repository}\nBranch: ${old.source.branch}\n\nCheck for the latest publisher update. You can review file changes before installing.\n\nTo restore an earlier version, open Edit → Version history.")
                     .setPositiveButton("Check GitHub") { _, _ -> check(old.source) }.setNegativeButton("Cancel", null)
+                    .setNeutralButton("Change source") { _, _ ->
+                        chooseSource("Change update source", "Choose the repository and branch this app follows, for example a dev branch. The new source is used from the next update you install from it; nothing changes until you review and confirm.", old.source)
+                    }
                 builder.show()
             } else {
                 val suggested = runCatching { UpdatePackage.parse(File(record.workspaceDir, "manifest.json").readText()).source }.getOrNull()
-                val repo = TextInputEditText(activity).apply { setSingleLine(); setText(suggested?.let { "${it.owner}/${it.repository}" } ?: "") }
-                val branch = TextInputEditText(activity).apply { setSingleLine(); setText(suggested?.branch ?: "main") }
-                val padding = (24 * activity.resources.displayMetrics.density).toInt()
-                val form = LinearLayout(activity).apply {
-                    orientation = LinearLayout.VERTICAL
-                    setPadding(padding, padding / 2, padding, padding / 2)
-                    addView(TextInputLayout(activity).apply { hint = "Repository (owner/repository)"; addView(repo) })
-                    addView(TextInputLayout(activity).apply { hint = "Branch"; addView(branch) })
-                }
-                val dialog = MaterialAlertDialogBuilder(activity).setTitle("Link this app to GitHub")
-                    .setMessage("Choose the publisher repository for this app. No files change until you review and confirm the update.")
-                    .setView(form).setPositiveButton("Check", null).setNegativeButton("Cancel", null).show()
-                dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setOnClickListener {
-                    try { val parts = repo.text.toString().trim().split('/'); require(parts.size == 2) { "Enter owner/repository" }; val source = GitHubSource(parts[0], parts[1], branch.text.toString().trim()); dialog.dismiss(); check(source) }
-                    catch (e: Exception) { repo.error = e.message }
-                }
+                chooseSource("Link this app to GitHub", "Choose the publisher repository for this app. No files change until you review and confirm the update.", suggested)
             }
         } catch (e: Exception) { error(e) }
+    }
+
+    /** Asks for a repository and branch, then checks that source. */
+    private fun chooseSource(title: String, message: String, initial: GitHubSource?) {
+        val repo = TextInputEditText(activity).apply { setSingleLine(); setText(initial?.let { "${it.owner}/${it.repository}" } ?: "") }
+        val branch = TextInputEditText(activity).apply { setSingleLine(); setText(initial?.branch ?: "main") }
+        val padding = (24 * activity.resources.displayMetrics.density).toInt()
+        val form = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(padding, padding / 2, padding, padding / 2)
+            addView(TextInputLayout(activity).apply { hint = "Repository (owner/repository)"; addView(repo) })
+            addView(TextInputLayout(activity).apply { hint = "Branch"; addView(branch) })
+        }
+        val dialog = MaterialAlertDialogBuilder(activity).setTitle(title).setMessage(message)
+            .setView(form).setPositiveButton("Check", null).setNegativeButton("Cancel", null).show()
+        dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setOnClickListener {
+            try { val source = parseSource(repo.text.toString(), branch.text.toString()); dialog.dismiss(); check(source) }
+            catch (e: Exception) { repo.error = e.message }
+        }
     }
 
     private fun check(source: GitHubSource) {
@@ -76,10 +83,10 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
     internal suspend fun review(value: GitHubUpdateDownloader.Download, source: GitHubSource, subjects: suspend () -> List<String> = { emptyList() }) {
         val (preview, reviewed, unchanged) = withContext(Dispatchers.IO) {
             synchronized(WorkspaceLocks.forWorkspace(record.workspaceDir)) {
-                Triple(updater.preview(value.pkg, value.directory, acceptMismatch = true), updater.reviewedFiles(value.pkg), updater.publisherUnchanged(value.pkg, value.directory))
+                Triple(updater.preview(value.pkg, value.directory, acceptMismatch = true, source = source), updater.reviewedFiles(value.pkg), updater.publisherUnchanged(value.pkg, value.directory, source))
             }
         }
-        val mismatch = updater.identityMismatch(value.pkg)
+        val mismatch = updater.identityMismatch(value.pkg, source)
         val latest = subjects()
         if (unchanged) {
             MaterialAlertDialogBuilder(activity).setTitle("App is up to date")
@@ -102,7 +109,7 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
         showReviewDialog(text, if (mismatch != null) "Update anyway" else if (preview.adoption) "Link and update" else "Update",
             onConfirm = {
                 accepted = true
-                applyUpdate("GitHub update ${value.pkg.version} · ${value.commit.take(12)}", value.directory) { updater.install(value.pkg, value.directory, value.commit, hostCompatibilityLevel, reviewed, acceptMismatch = mismatch != null) }
+                applyUpdate("GitHub update ${value.pkg.version} · ${value.commit.take(12)}", value.directory) { updater.install(value.pkg, value.directory, value.commit, hostCompatibilityLevel, reviewed, acceptMismatch = mismatch != null, source = source) }
             },
             onDismissed = { if (!accepted) value.directory.deleteRecursively() })
     }
