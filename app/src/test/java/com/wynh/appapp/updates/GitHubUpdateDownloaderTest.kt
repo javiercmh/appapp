@@ -54,6 +54,13 @@ class GitHubUpdateDownloaderTest {
         assertTrue(urls.first().endsWith("/repos/owner/repo/commits/dev"))
         assertEquals(GitHubSource("owner", "repo", "main"), result.pkg.source)
     }
+    @Test fun listsBranchNamesOfTheRepository() {
+        val urls = mutableListOf<String>()
+        val downloader = GitHubUpdateDownloader(temp.root) { url -> urls.add(url.toString()); Response(url, """[{"name":"dev","commit":{}},{"name":"main","commit":{}}]""".toByteArray()) }
+        assertEquals(listOf("dev", "main"), downloader.branches("owner", "repo"))
+        assertEquals(listOf("https://api.github.com/repos/owner/repo/branches?per_page=100"), urls)
+        assertThrows(IllegalArgumentException::class.java) { downloader.branches("own/er", "repo") }
+    }
     @Test fun lingoMageRequirement4IsSupportedByCurrentHostLevel() {
         val level = BuildConfig.HOST_COMPATIBILITY_LEVEL.toLong()
         assertEquals(11L, level)

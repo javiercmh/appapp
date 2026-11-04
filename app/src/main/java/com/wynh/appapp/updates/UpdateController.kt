@@ -51,13 +51,38 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
             orientation = LinearLayout.VERTICAL
             setPadding(padding, padding / 2, padding, padding / 2)
             addView(TextInputLayout(activity).apply { hint = "Repository (owner/repository)"; addView(repo) })
-            addView(TextInputLayout(activity).apply { hint = "Branch"; addView(branch) })
+            addView(TextInputLayout(activity).apply {
+                hint = "Branch"; addView(branch)
+                endIconMode = TextInputLayout.END_ICON_CUSTOM
+                setEndIconDrawable(com.wynh.appapp.R.drawable.ic_arrow_down)
+                endIconContentDescription = "Choose a branch"
+                setEndIconOnClickListener { pickBranch(repo, branch, this) }
+            })
         }
         val dialog = MaterialAlertDialogBuilder(activity).setTitle(title).setMessage(message)
             .setView(form).setPositiveButton("Check", null).setNegativeButton("Cancel", null).show()
         dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setOnClickListener {
             try { val source = parseSource(repo.text.toString(), branch.text.toString()); dialog.dismiss(); check(source) }
             catch (e: Exception) { repo.error = e.message }
+        }
+    }
+
+    /** Loads the repository's branches from GitHub and fills [branch] with the one the user picks. */
+    private fun pickBranch(repo: TextInputEditText, branch: TextInputEditText, layout: TextInputLayout) {
+        val target = try { parseSource(repo.text.toString(), "main") } catch (e: Exception) { repo.error = e.message; return }
+        layout.error = null
+        layout.helperText = "Loading branches…"
+        activity.lifecycleScope.launch {
+            val names = runCatching { withContext(Dispatchers.IO) { GitHubUpdateDownloader(activity.cacheDir).branches(target.owner, target.repository) } }
+            layout.helperText = null
+            if (activity.isFinishing) return@launch
+            names.onFailure { layout.error = it.message ?: "Could not load branches" }.onSuccess { list ->
+                if (list.isEmpty()) { layout.error = "No branches found"; return@onSuccess }
+                val current = list.indexOf(branch.text.toString().trim())
+                MaterialAlertDialogBuilder(activity).setTitle("Branches of ${target.owner}/${target.repository}")
+                    .setSingleChoiceItems(list.toTypedArray(), current) { dialog, which -> branch.setText(list[which]); dialog.dismiss() }
+                    .setNegativeButton("Cancel", null).show()
+            }
         }
     }
 

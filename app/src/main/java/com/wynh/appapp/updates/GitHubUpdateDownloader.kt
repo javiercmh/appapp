@@ -23,6 +23,14 @@ class GitHubUpdateDownloader(private val cache: File, private val connect: (URL)
         return subjects.filter { it.isNotEmpty() }.take(limit)
     }
 
+    /** Branch names of a public repository, in GitHub's order (up to 100). */
+    fun branches(owner: String, repository: String): List<String> {
+        GitHubSource(owner, repository, "main") // validates the names before they reach the URL
+        val text = GitHubClient(connect, "AppApp-Updater", MAX_BYTES)
+            .get("https://api.github.com/repos/$owner/$repository/branches?per_page=100", 1024 * 1024).toString(Charsets.UTF_8)
+        return JsonParser.parseString(text).asJsonArray.mapNotNull { it.asJsonObject.get("name")?.asString?.takeIf(String::isNotBlank) }
+    }
+
     fun download(source: GitHubSource, hostCompatibilityLevel: Long): Download {
         val client = GitHubClient(connect, "AppApp-Updater", MAX_BYTES, timeoutMillis = 5 * 60_000)
         fun get(url: String, limit: Int) = client.get(url, limit.toLong())

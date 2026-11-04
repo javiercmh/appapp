@@ -37,7 +37,8 @@ Dev builds do not change it.
 
 The `github` block suggests the source when an app is first linked. After that the
 user's chosen source decides where updates come from: Update app → **Change source**
-edits the repository (`owner/repository`, a github.com URL also works) and branch,
+edits the repository (`owner/repository`, a github.com URL also works) and branch
+(type it, or tap the arrow to pick from the repository's branches on GitHub),
 so a phone can follow a `dev` branch or a fork. The downloaded manifest's `github`
 block does not have to match the chosen source; a dev branch can keep the main
 branch's manifest. A new source is saved only when an update from it is installed,
