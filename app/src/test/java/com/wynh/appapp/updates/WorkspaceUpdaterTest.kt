@@ -180,4 +180,9 @@ class WorkspaceUpdaterTest {
         assertThrows(IllegalArgumentException::class.java) { parseSource("a/b/c", "main") }
         assertThrows(IllegalArgumentException::class.java) { parseSource("a/b", " ") }
     }
+
+    @Test fun manifestBranchIsOptionalAndDefaultsToMain() {
+        val manifest = """{"version":"1","app2Update":{"appId":"test.publisher","minimumHostVersionCode":3,"github":{"owner":"test","repository":"app"},"managedFiles":["index.html","manifest.json"],"seedFiles":[]}}"""
+        assertEquals(GitHubSource("test", "app", "main"), UpdatePackage.parse(manifest).source)
+    }
 }

@@ -52,7 +52,7 @@ data class UpdatePackage(
             val minimum = update.get("minimumHostVersionCode").asLong
             require(minimum > 0) { "Invalid minimum host version" }
             return UpdatePackage(id, version, minimum, managed, seeds,
-                GitHubSource(source.get("owner").asString, source.get("repository").asString, source.get("branch").asString))
+                GitHubSource(source.get("owner").asString, source.get("repository").asString, source.get("branch")?.takeUnless { it.isJsonNull }?.asString ?: "main"))
         }
     }
 }
