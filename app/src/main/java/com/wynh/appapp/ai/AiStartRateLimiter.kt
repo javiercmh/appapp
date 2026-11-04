@@ -2,7 +2,7 @@ package com.wynh.appapp.ai
 
 /**
  * Sliding-window cap on generation starts per subapp, so a scripted loop cannot burn usage.
- * [maxStarts] is the user's setting (Settings → AI → Start limit); [UNLIMITED] turns the cap off.
+ * [maxStarts] is the user's setting (Settings → AI → Request limit per app); [UNLIMITED] turns the cap off.
  */
 class AiStartRateLimiter(
     maxStarts: Int = DEFAULT_STARTS,
@@ -16,8 +16,8 @@ class AiStartRateLimiter(
         val CHOICES = listOf(DEFAULT_STARTS, 12, 30, 60, UNLIMITED)
         fun label(value: Int): String = when (value) {
             UNLIMITED -> "No limit"
-            DEFAULT_STARTS -> "$value per minute (default)"
-            else -> "$value per minute"
+            DEFAULT_STARTS -> "$value (default)"
+            else -> "$value"
         }
     }
 

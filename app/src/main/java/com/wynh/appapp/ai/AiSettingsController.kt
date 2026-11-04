@@ -363,8 +363,8 @@ object AiSettingsController {
             val limit = ai.startLimit
             limitDropdown.setText(AiStartRateLimiter.label(limit), false)
             limitStatus.text = if (limit == AiStartRateLimiter.UNLIMITED)
-                "Apps can start any number of AI requests. A faulty app could use your plan or credits quickly."
-            else "Each app can start up to $limit AI requests per minute. Extra starts fail until the minute passes."
+                "Without a limit, a faulty app could use up your plan or credits quickly."
+            else "Stops a faulty app from using up your plan or credits."
         }
         limitDropdown.setSimpleItems(AiStartRateLimiter.CHOICES.map(AiStartRateLimiter::label).toTypedArray())
         renderLimit()

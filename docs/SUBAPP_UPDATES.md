@@ -39,8 +39,9 @@ The `github` block suggests the source when an app is first linked. Its optional
 `branch` defaults to `main`; leave it out, because the branch belongs to each
 installation (App² builds before Dev build 11 still require it, so keep it on a
 release branch until phones have a newer App²). After that the
-user's chosen source decides where updates come from: Update app → **Change source**
-edits the repository (`owner/repository`, a github.com URL also works) and branch
+user's chosen source decides where updates come from. Tapping Update on a linked
+app checks its source right away; **Change source** on the result (up to date,
+review, or a failed check) edits the repository (`owner/repository`, a github.com URL also works) and branch
 (type it, or tap the arrow to pick from the repository's branches on GitHub),
 so a phone can follow a `dev` branch or a fork. The downloaded manifest's `github`
 block does not have to match the chosen source; a dev branch can keep the main
@@ -116,7 +117,7 @@ Subapps such as LingoMage follow the same model. Installed apps follow `main`, s
 publisher release bumps `version` in `manifest.json` on `dev` and then fast-forwards
 `main`. Leave `app2Update.github.branch` out (it defaults to `main`); dev branches
 already do. Before a release fast-forwards a manifest without it to `main`, make sure
-an App² release that accepts it (Dev build 11 or later) is out. To try unreleased work on a phone, use Update app →
+an App² release that accepts it (Dev build 11 or later) is out. To try unreleased work on a phone, tap Update, then
 **Change source** and set the branch to `dev`, then set it back to `main` to return
 to releases. Each switch is a source change that needs **Update anyway**; permissions
 and user data are kept. A version bump on `dev` is optional: App² offers any change
@@ -134,7 +135,7 @@ match what is installed.
    The script uses declared empty seed defaults, excludes unlisted files, and
    emits a deterministic ZIP plus `.checks.json` with source revision and hashes.
    `buildDirty` distinguishes a local preview from a published revision.
-3. For a published update, open Update app and Check GitHub, review source,
+3. For a published update, tap Update (it checks GitHub at once), review source,
    commit and file changes, then confirm. If managed code changes after review, check again. Reload occurs
    after installation.
    No APK rebuild is needed for subapp-only changes.
