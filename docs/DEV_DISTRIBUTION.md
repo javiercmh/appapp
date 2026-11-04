@@ -64,7 +64,7 @@ the decoded keystore from the temporary runner directory even if a step fails.
 
 ## Publish and install
 
-Open GitHub Actions → **Publish App² Dev** → **Run workflow**, selecting `main`. Publishing from other refs is disabled.
+Open GitHub Actions → **Publish App² Dev** → **Run workflow**, selecting `dev` for a preview of ongoing work or `main` for a release. Publishing from other refs is disabled.
 The workflow runs JVM, lint, JavaScript and Python checks and compiles the existing
 Android tests. It does not run an emulator; native checks remain separate.
 

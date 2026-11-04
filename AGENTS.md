@@ -130,8 +130,13 @@ Each app's `WebView` loads `https://<id>.app.local/index.html`. Requests for tha
    - Material Design 3 components.
    - **ViewBinding** enabled (`buildFeatures { viewBinding = true }`).
 5. **Version Control**:
-   - Commit only when asked, and commit to the **current** branch — `main` included.
-   - Do **not** create a branch for the work unless the request explicitly asks for one.
+   - Commit only when asked. Day-to-day work goes to the long-lived `dev` branch; `main` only
+     moves for a release, by fast-forwarding it to `dev` (no merge commits).
+   - Do **not** create other branches for the work unless the request explicitly asks for one.
+   - Before pushing a native change, run `./gradlew :app:testDebugUnitTest` and the instrumented
+     tests (`./gradlew :app:connectedDebugAndroidTest` on the `Medium_Phone` emulator with
+     animations off, see the emulator section). GitHub Checks then cover lint, the release and
+     Dev builds and the rest on every branch.
    - Keep commits focused: split unrelated fixes into separate commits rather than one omnibus change.
 6. **Releasing**:
    - Only on the user's request. Bump `versionCode` (+1) and `versionName` in `app/build.gradle.kts`.
