@@ -156,7 +156,7 @@ class LibraryReorderDeviceTest {
         try {
             settings()
             androidx.test.espresso.Espresso.onView(androidx.test.espresso.matcher.ViewMatchers.withId(R.id.settings_backup_export)).inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog())
-                .perform(androidx.test.espresso.action.ViewActions.click())
+                .perform(androidx.test.espresso.action.ViewActions.scrollTo(), androidx.test.espresso.action.ViewActions.click())
             completion()
             assertEquals(1, export.hits)
             assertTrue(file.length() > 0)
@@ -165,7 +165,7 @@ class LibraryReorderDeviceTest {
         try {
             settings()
             androidx.test.espresso.Espresso.onView(androidx.test.espresso.matcher.ViewMatchers.withId(R.id.settings_backup_restore)).inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog())
-                .perform(androidx.test.espresso.action.ViewActions.click())
+                .perform(androidx.test.espresso.action.ViewActions.scrollTo(), androidx.test.espresso.action.ViewActions.click())
             androidx.test.espresso.Espresso.onView(androidx.test.espresso.matcher.ViewMatchers.withId(android.R.id.button1)).inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog())
                 .perform(androidx.test.espresso.action.ViewActions.click())
             completion()
