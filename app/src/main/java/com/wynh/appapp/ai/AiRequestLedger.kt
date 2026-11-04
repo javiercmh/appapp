@@ -15,8 +15,9 @@ internal data class AiRequestOwner(
 internal class AiRequestLedger {
     val results = ConcurrentHashMap<String, AiRequestResult>()
     val owners = ConcurrentHashMap<String, AiRequestOwner>()
+    /** An app may hold any number of requests at once; the start rate limit bounds runaway usage. */
     @Synchronized fun begin(id: String, owner: AiRequestOwner) {
-        check(!hasRequest(owner.appId)) { "A request is already running or awaiting acknowledgement." }
+        check(!results.containsKey(id)) { "Duplicate request id." }
         results[id] = AiRequestResult(id)
         owners[id] = owner
     }

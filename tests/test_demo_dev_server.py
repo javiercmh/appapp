@@ -101,13 +101,13 @@ class ServerTest(unittest.TestCase):
         status, request_id = self.ai('start', data=data)
         self.assertEqual(status, 200)
         self.assertEqual(self.ai('result', requestId=request_id), (200, None))
-        self.assertEqual(self.ai('start', data=data)[1]['error']['code'], 'request_in_progress')
+        second_status, second_id = self.ai('start', data=data)  # several requests may run at once
+        self.assertEqual(second_status, 200); self.assertNotEqual(second_id, request_id)
         self.assertEqual(self.ai('acknowledge', requestId=request_id)[0], 400)
         self.server.requests[request_id] = time.monotonic() - 1
         text = self.ai('result', requestId=request_id)[1]
         self.assertIn('subapp', text)
         self.assertEqual(self.ai('result', requestId=request_id)[1], text)
-        self.assertEqual(self.ai('start', data=data)[0], 400)
         self.assertEqual(self.ai('acknowledge', requestId=request_id), (200, True))
         self.assertEqual(self.ai('result', requestId=request_id)[1]['error']['code'], 'not_found')
         request_id = self.ai('start', data=data)[1]

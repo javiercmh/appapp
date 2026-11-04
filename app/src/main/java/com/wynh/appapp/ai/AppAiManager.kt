@@ -226,8 +226,7 @@ class AppAiManager(context: Context) {
             notificationId = lease?.notificationId ?: nextNotificationId(),
             title = AiNotificationCopy.title(title), body = AiNotificationCopy.body(body),
             appName = com.wynh.appapp.grants.SubappGrants.displayName(app, appId), open = openIntent)
-        try { ledger.begin(id, AiRequestOwner(appId, taskId, route.provider.id, Job(), presentation, lease?.id)) }
-        catch (_: IllegalStateException) { throw ApiFailure(ApiFailure.Kind.INVALID_REQUEST, "A request is already running or awaiting acknowledgement.") }
+        ledger.begin(id, AiRequestOwner(appId, taskId, route.provider.id, Job(), presentation, lease?.id))
         val job = scope.launch(Dispatchers.IO, start = kotlinx.coroutines.CoroutineStart.LAZY) {
             try {
                 try {

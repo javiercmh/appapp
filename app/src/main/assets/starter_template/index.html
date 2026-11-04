@@ -151,7 +151,7 @@ if (!writeFile('data/example.json', { id, text })) {
 }
 await ai.acknowledge(id);</code></pre>
       <p class="muted">The Demo tab implements this flow in <code>js/ai-demo.js</code>. It saves a pending request ID, resumes through <code>ai.result(id)</code>, and retries failed saves without another inference.</p>
-      <p class="muted">One request may run or await acknowledgement per subapp. Switching apps keeps its native request running. Closing its task or reloading cancels it. Browser previews show AI as unavailable.</p>
+      <p class="muted">A subapp may run several requests at once. Switching apps keeps its native request running. Closing its task or reloading cancels it. Browser previews show AI as unavailable.</p>
       <p class="muted">For all return shapes, events, failure handling and lifecycle rules, read <code>AGENTS.md</code> and <code>PACKAGING.md</code> in the editor.</p>
     </div>
 

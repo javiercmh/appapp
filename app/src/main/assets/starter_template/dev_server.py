@@ -239,8 +239,6 @@ class Handler(SimpleHTTPRequestHandler):
                 return fail('invalid_request', 'Expected request data object')
             if data.get('providerId') != 'chatgpt' or data.get('model') != 'development-mock' or not isinstance(data.get('input'), str) or data.get('reasoningEffort'):
                 return fail('invalid_request', 'Select the development mock model without reasoning effort')
-            if self.server.requests:
-                return fail('request_in_progress', 'A request is running or awaiting acknowledgement')
             request_id = 'mock-' + uuid.uuid4().hex
             self.server.requests[request_id] = time.monotonic() + 1.5
             return self.reply(request_id)

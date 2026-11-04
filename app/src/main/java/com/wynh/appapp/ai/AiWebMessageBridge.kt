@@ -57,7 +57,6 @@ class AiWebMessageBridge(
                 catch (e: Exception) { fail(reply, id, (e as? com.wynh.appapp.ai.network.ApiFailure)?.kind?.name?.lowercase() ?: "models", e.message ?: "Could not load models.") }
             } }
             "start" -> {
-                if (manager.hasRequest(appId)) { fail(reply, id, "request_in_progress", "A request is already running or awaiting acknowledgement."); return }
                 val data = request.getAsJsonObject("data") ?: JsonObject()
                 val providerId = data.get("providerId")?.asString ?: "chatgpt"
                 val model = data.get("model")?.asString ?: ""
@@ -73,7 +72,6 @@ class AiWebMessageBridge(
                 if (SubappGrants.isGranted(activity, appId, SubappCapability.AI)) begin()
                 else askForAi(providerId, model) { allowed ->
                     if (!allowed) fail(reply, id, "permission", "AI was not allowed for this app. Allow it in the library: app menu → Permissions.")
-                    else if (manager.hasRequest(appId)) fail(reply, id, "request_in_progress", "A request is already running or awaiting acknowledgement.")
                     else begin()
                 }
             }

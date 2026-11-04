@@ -61,15 +61,19 @@ class AiNotificationTest {
         val remaining = ledger.unfinished()
         assertEquals(listOf("c"), remaining.map { it.first })
         assertEquals(AiNotificationCopy.DEFAULT_TITLE, remaining.single().second.presentation.title)
-        assertTrue("A result awaiting acknowledgement still blocks its app", ledger.hasRequest("appA"))
+        assertTrue("A result awaiting acknowledgement is still held for its app", ledger.hasRequest("appA"))
         assertTrue("Concurrent requests from different apps are accepted", ledger.hasRequest("appC"))
     }
 
-    @Test fun `the same subapp cannot hold two requests but different subapps can`() {
+    @Test fun `one subapp may hold several requests at once and each is tracked separately`() {
         val ledger = AiRequestLedger()
-        ledger.begin("one", AiRequestOwner("same", 1, "chatgpt", Job()))
-        assertThrows(IllegalStateException::class.java) { ledger.begin("two", AiRequestOwner("same", 2, "chatgpt", Job())) }
-        ledger.begin("three", AiRequestOwner("other", 3, "chatgpt", Job()))
-        assertEquals(2, ledger.unfinished().size)
+        for (id in listOf("one", "two", "three")) ledger.begin(id, AiRequestOwner("same", 1, "chatgpt", Job()))
+        ledger.begin("four", AiRequestOwner("other", 3, "chatgpt", Job()))
+        assertEquals(4, ledger.unfinished().size)
+        ledger.finish(AiRequestResult("one", text = "done", done = true))
+        ledger.acknowledge("one"); ledger.cancel("two")
+        assertEquals(listOf("three"), ledger.unfinished().filter { it.second.appId == "same" }.map { it.first })
+        assertTrue(ledger.hasRequest("same"))
+        assertThrows(IllegalStateException::class.java) { ledger.begin("three", AiRequestOwner("same", 1, "chatgpt", Job())) }
     }
 }
