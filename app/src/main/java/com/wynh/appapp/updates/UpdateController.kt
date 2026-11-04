@@ -88,11 +88,14 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
      */
     private fun check(source: GitHubSource) {
         var job: kotlinx.coroutines.Job? = null
-        val padding = (24 * activity.resources.displayMetrics.density).toInt()
+        var finished = false
+        val padding = (20 * activity.resources.displayMetrics.density).toInt()
         val indicator = com.google.android.material.progressindicator.LinearProgressIndicator(activity).apply { isIndeterminate = true }
-        val frame = android.widget.FrameLayout(activity).apply { setPadding(padding, padding / 3, padding, 0); addView(indicator) }
-        val progress = MaterialAlertDialogBuilder(activity).setTitle("Checking for updates…").setMessage(source.display)
-            .setView(frame).setCancelable(false).setNegativeButton("Cancel") { _, _ -> job?.cancel() }.show()
+        val frame = android.widget.FrameLayout(activity).apply { setPadding(padding, 0, padding, padding / 2); addView(indicator) }
+        // Cancel, Back or tapping outside all stop waiting; dismissing after the check finishes does not.
+        val progress = showUpdateDialog("Checking for updates…", source.display, primary = null, content = frame,
+            onDismissed = { if (!finished) job?.cancel() })
+        fun close() { finished = true; progress.dismiss() }
         job = activity.lifecycleScope.launch {
             var download: GitHubUpdateDownloader.Download? = null
             try {
@@ -101,18 +104,18 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
                     val subjects = runCatching { withContext(Dispatchers.IO) { GitHubUpdateDownloader(activity.cacheDir).recentSubjects(source, updater.installed()?.commit) } }
                         .getOrDefault(emptyList())
                     kotlinx.coroutines.currentCoroutineContext().ensureActive()
-                    progress.dismiss()
+                    close()
                     subjects
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
-                progress.dismiss(); download?.directory?.deleteRecursively(); throw e
-            } catch (e: Exception) { progress.dismiss(); download?.directory?.deleteRecursively(); checkFailed(source, e) }
+                close(); download?.directory?.deleteRecursively(); throw e
+            } catch (e: Exception) { close(); download?.directory?.deleteRecursively(); checkFailed(source, e) }
         }
     }
 
     private fun checkFailed(source: GitHubSource, e: Exception) {
         if (activity.isFinishing) return
-        showUpdateDialog("Couldn't check for updates", "${e.message ?: "Update failed"}\n\n${source.display}",
+        showUpdateDialog("Couldn't check for updates", UpdateReviewCopy.checkFailure(e, source),
             primary = Action("Try again") { it.dismiss(); check(source) },
             secondary = Action("Change source") { it.dismiss(); changeSource(source) },
             dismissLabel = "Close")
@@ -172,13 +175,13 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
 
     /**
      * Every step of the update flow uses this layout so the buttons read the same way: a filled main
-     * action, an optional tonal alternative and a text dismiss ([dismissLabel] null hides it). The
+     * action ([primary] null hides it), an optional tonal alternative and a text dismiss ([dismissLabel] null hides it). The
      * message scrolls independently and the full-width buttons stay visible at narrow widths and
      * large text sizes, where the platform dialog button bar can clip its last button.
      */
-    private fun showUpdateDialog(title: String, message: CharSequence, primary: Action, secondary: Action? = null,
+    private fun showUpdateDialog(title: String, message: CharSequence, primary: Action?, secondary: Action? = null,
                                  dismissLabel: String? = activity.getString(android.R.string.cancel),
-                                 content: android.view.View? = null, onDismissed: () -> Unit = {}) {
+                                 content: android.view.View? = null, onDismissed: () -> Unit = {}): android.app.Dialog {
         val dialog = android.app.Dialog(activity, com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog)
         dialog.setContentView(com.wynh.appapp.R.layout.dialog_update_review)
         dialog.window?.setLayout(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
@@ -186,8 +189,8 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
         dialog.findViewById<android.widget.TextView>(com.wynh.appapp.R.id.update_review_message).text = message
         if (content != null) dialog.findViewById<android.widget.FrameLayout>(com.wynh.appapp.R.id.update_review_content).apply { addView(content); visibility = android.view.View.VISIBLE }
         dialog.findViewById<android.widget.Button>(com.wynh.appapp.R.id.update_review_confirm).apply {
-            text = primary.label
-            setOnClickListener { primary.run(dialog) }
+            if (primary == null) visibility = android.view.View.GONE
+            else { text = primary.label; setOnClickListener { primary.run(dialog) } }
         }
         dialog.findViewById<android.widget.Button>(com.wynh.appapp.R.id.update_review_secondary).apply {
             if (secondary != null) { text = secondary.label; visibility = android.view.View.VISIBLE; setOnClickListener { secondary.run(dialog) } }
@@ -198,6 +201,7 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
         }
         dialog.setOnDismissListener { onDismissed() }
         dialog.show()
+        return dialog
     }
 
     private fun applyUpdate(label: String, staged: File, operation: () -> Unit) {
