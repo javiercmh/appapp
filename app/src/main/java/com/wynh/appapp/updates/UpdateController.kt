@@ -158,7 +158,7 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
             fun bold(value: String) { val start = length; append(value); setSpan(android.text.style.StyleSpan(android.graphics.Typeface.BOLD), start, length, 0) }
             if (mismatch != null) append(UpdateReviewCopy.identityWarning(mismatch, granted)).append("\n\n")
             // App² offers any change to managed files, so say whether the version goes up or stays.
-            bold(UpdateReviewCopy.versionLine(installedVersion, value.pkg.version))
+            bold(UpdateReviewCopy.versionLine(installedVersion.takeUnless { preview.adoption }, value.pkg.version))
             append("\n${source.display}\n")
             if (latest.isNotEmpty()) { append("\n"); bold("What's new"); append("\n${latest.joinToString("\n") { "• $it" }}\n") }
             if (preview.edited.isNotEmpty()) append("\n⚠ ${preview.edited.size} code files you edited or removed will be replaced by the publisher's versions.\n")
