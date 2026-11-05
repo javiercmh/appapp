@@ -38,4 +38,26 @@ object UpdateReviewCopy {
         }
         return "$reason\n\n${source.display}"
     }
+
+    /** Compares dotted numeric versions ("1.2.10" > "1.2.9"); null when either is not of that form. */
+    fun compareVersions(a: String, b: String): Int? {
+        val left = a.trim().removePrefix("v").split('.').map { it.toIntOrNull() ?: return null }
+        val right = b.trim().removePrefix("v").split('.').map { it.toIntOrNull() ?: return null }
+        for (i in 0 until maxOf(left.size, right.size)) {
+            val diff = left.getOrElse(i) { 0 }.compareTo(right.getOrElse(i) { 0 })
+            if (diff != 0) return diff
+        }
+        return 0
+    }
+
+    /** The review's version line: newer, older, the same number with changed files, or unknown. */
+    fun versionLine(current: String?, incoming: String): String {
+        if (current == null) return "Version $incoming"
+        return when (compareVersions(incoming, current)) {
+            null -> if (current == incoming) "Version $incoming, with file changes" else "Version $current → $incoming"
+            0 -> "Version $incoming, with file changes"
+            in 1..Int.MAX_VALUE -> "New version: $current → $incoming"
+            else -> "⚠ Older version: $current → $incoming"
+        }
+    }
 }

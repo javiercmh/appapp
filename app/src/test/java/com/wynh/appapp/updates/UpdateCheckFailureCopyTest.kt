@@ -23,3 +23,15 @@ class UpdateCheckFailureCopyTest {
         assertEquals("owner/app (feature)", UpdateReviewCopy.checkFailure(RuntimeException(), source).substringAfter("\n\n"))
     }
 }
+
+class UpdateVersionLineTest {
+    @Test
+    fun saysWhetherTheVersionGoesUpDownOrStays() {
+        assertEquals("New version: 1.2.9 → 1.2.10", UpdateReviewCopy.versionLine("1.2.9", "1.2.10"))
+        assertEquals("⚠ Older version: 3.1.0 → 1.2.46", UpdateReviewCopy.versionLine("3.1.0", "1.2.46"))
+        assertEquals("Version 1.2.46, with file changes", UpdateReviewCopy.versionLine("1.2.46", "1.2.46"))
+        assertEquals("Version 1.2, with file changes", UpdateReviewCopy.versionLine("1.2.0", "1.2"))
+        assertEquals("Version beta → rc", UpdateReviewCopy.versionLine("beta", "rc"))
+        assertEquals("Version 2", UpdateReviewCopy.versionLine(null, "2"))
+    }
+}
