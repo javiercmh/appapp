@@ -122,7 +122,8 @@ an App² release that accepts it (Dev build 11 or later) is out. To try unreleas
 to releases. Each switch is a source change that needs **Update anyway**; permissions
 and user data are kept. A version bump on `dev` is optional: App² offers any change
 to managed files and reports **App is up to date** only when the files and version
-match what is installed.
+match what is installed. A lower `version` than the installed one is never offered (**No newer version**);
+going back is Edit → Version history. Bump `version` on `dev` when it is behind `main`.
 
 ## Low-token routine
 

@@ -134,6 +134,16 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
         }
         val mismatch = updater.identityMismatch(value.pkg, source)
         val latest = subjects()
+        val installedVersion = updater.currentVersion()
+        if (!preview.adoption && installedVersion != null && (UpdateReviewCopy.compareVersions(value.pkg.version, installedVersion) ?: 0) < 0) {
+            // Updates only move forward; going back is Version history's job.
+            showUpdateDialog("No newer version",
+                "${source.display} has version ${value.pkg.version}, which is older than the installed version $installedVersion.\n\nTo go back to an earlier version, open Edit → Version history.",
+                primary = Action("Done") { it.dismiss() },
+                secondary = Action("Change source") { it.dismiss(); changeSource(source) },
+                dismissLabel = null, onDismissed = { value.directory.deleteRecursively() })
+            return
+        }
         if (unchanged) {
             showUpdateDialog("App is up to date",
                 "Version ${value.pkg.version}\n${source.display}\n\nThere are no publisher changes to install. Your local edits and saved data are kept.\n\nTo restore an earlier version, open Edit → Version history.",
@@ -147,9 +157,8 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
         val text = android.text.SpannableStringBuilder().apply {
             fun bold(value: String) { val start = length; append(value); setSpan(android.text.style.StyleSpan(android.graphics.Typeface.BOLD), start, length, 0) }
             if (mismatch != null) append(UpdateReviewCopy.identityWarning(mismatch, granted)).append("\n\n")
-            val current = updater.currentVersion()
-            // App² offers any change to managed files, so say whether the version goes up, down or stays.
-            bold(UpdateReviewCopy.versionLine(current, value.pkg.version))
+            // App² offers any change to managed files, so say whether the version goes up or stays.
+            bold(UpdateReviewCopy.versionLine(installedVersion, value.pkg.version))
             append("\n${source.display}\n")
             if (latest.isNotEmpty()) { append("\n"); bold("What's new"); append("\n${latest.joinToString("\n") { "• $it" }}\n") }
             if (preview.edited.isNotEmpty()) append("\n⚠ ${preview.edited.size} code files you edited or removed will be replaced by the publisher's versions.\n")

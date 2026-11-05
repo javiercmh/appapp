@@ -50,7 +50,7 @@ object UpdateReviewCopy {
         return 0
     }
 
-    /** The review's version line: newer, older, the same number with changed files, or unknown. */
+    /** The review's version line: newer, the same number with changed files, or unknown (older ones are not offered). */
     fun versionLine(current: String?, incoming: String): String {
         if (current == null) return "Version $incoming"
         return when (compareVersions(incoming, current)) {
