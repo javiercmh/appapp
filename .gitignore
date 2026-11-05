@@ -26,3 +26,7 @@ local.properties
 examples/**/.dev_preferences.json
 examples/**/app.log
 examples/**/.claude/
+
+# Local review screenshots
+*-screens/
+.ai-settings-screens/
