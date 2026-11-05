@@ -28,7 +28,7 @@ object UpdateReviewCopy {
         val message = e.message.orEmpty()
         val repo = "${source.owner}/${source.repository}"
         val reason = when {
-            "(422)" in message || "No commit found" in message -> "Branch \"${source.branch}\" wasn't found in $repo."
+            "(422)" in message || "No commit found" in message || "Branch not found" in message -> "Branch \"${source.branch}\" wasn't found in $repo."
             "(404)" in message -> "$repo wasn't found. Check the name; private repositories aren't supported."
             "(403)" in message || "(429)" in message -> "GitHub is limiting requests right now. Try again in a few minutes."
             e is java.net.UnknownHostException || e is java.net.SocketTimeoutException || e is java.net.ConnectException ->
@@ -39,18 +39,44 @@ object UpdateReviewCopy {
         return "$reason\n\n${source.display}"
     }
 
-    /** Compares dotted numeric versions ("1.2.10" > "1.2.9"); null when either is not of that form. */
+    /**
+     * Compares versions like "1.2.10" > "1.2.9", with an optional pre-release suffix that sorts before
+     * its release: 1.2.46 < 1.2.47-dev.3 < 1.2.47-dev.10 < 1.2.47. Returns null when either version
+     * does not start with dotted numbers.
+     */
     fun compareVersions(a: String, b: String): Int? {
-        val left = a.trim().removePrefix("v").split('.').map { it.toIntOrNull() ?: return null }
-        val right = b.trim().removePrefix("v").split('.').map { it.toIntOrNull() ?: return null }
-        for (i in 0 until maxOf(left.size, right.size)) {
-            val diff = left.getOrElse(i) { 0 }.compareTo(right.getOrElse(i) { 0 })
+        fun parse(value: String): Pair<List<Int>, List<String>>? {
+            val text = value.trim().removePrefix("v").substringBefore('+')
+            val core = text.substringBefore('-').split('.').map { it.toIntOrNull() ?: return null }
+            val pre = if ('-' in text) text.substringAfter('-').split('.') else emptyList()
+            return core to pre
+        }
+        val (leftCore, leftPre) = parse(a) ?: return null
+        val (rightCore, rightPre) = parse(b) ?: return null
+        for (i in 0 until maxOf(leftCore.size, rightCore.size)) {
+            val diff = leftCore.getOrElse(i) { 0 }.compareTo(rightCore.getOrElse(i) { 0 })
+            if (diff != 0) return diff
+        }
+        if (leftPre.isEmpty() || rightPre.isEmpty()) return rightPre.size.coerceAtMost(1) - leftPre.size.coerceAtMost(1)
+        for (i in 0 until maxOf(leftPre.size, rightPre.size)) {
+            val l = leftPre.getOrNull(i) ?: return -1
+            val r = rightPre.getOrNull(i) ?: return 1
+            val ln = l.toIntOrNull(); val rn = r.toIntOrNull()
+            val diff = when {
+                ln != null && rn != null -> ln.compareTo(rn)
+                ln != null -> -1
+                rn != null -> 1
+                else -> l.compareTo(r)
+            }
             if (diff != 0) return diff
         }
         return 0
     }
 
-    /** The review's version line: newer, the same number with changed files, or unknown (older ones are not offered). */
+    /** True when [incoming] is a lower version than [current]; unknown formats are not called older. */
+    fun isOlder(current: String?, incoming: String) = current != null && (compareVersions(incoming, current) ?: 0) < 0
+
+    /** The review's version line: newer, older, the same number with changed files, or unknown. */
     fun versionLine(current: String?, incoming: String): String {
         if (current == null) return "Version $incoming"
         return when (compareVersions(incoming, current)) {

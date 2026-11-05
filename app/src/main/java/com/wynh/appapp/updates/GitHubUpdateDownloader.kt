@@ -31,12 +31,23 @@ class GitHubUpdateDownloader(private val cache: File, private val connect: (URL)
         return JsonParser.parseString(text).asJsonArray.mapNotNull { it.asJsonObject.get("name")?.asString?.takeIf(String::isNotBlank) }
     }
 
-    fun download(source: GitHubSource, hostCompatibilityLevel: Long): Download {
+    /** The newest commit of the followed branch: one small request, used to skip downloads when nothing moved. */
+    fun latestCommit(source: GitHubSource): String {
+        val branch = URLEncoder.encode(source.branch, "UTF-8").replace("+", "%20")
+        val sha = GitHubClient(connect, "AppApp-Updater", MAX_BYTES)
+            .get("https://api.github.com/repos/${source.owner}/${source.repository}/commits/$branch", 4096, accept = "application/vnd.github.sha")
+            .toString(Charsets.UTF_8).trim()
+        require(sha.matches(Regex("[a-f0-9]{40}"))) { "GitHub returned an invalid commit" }
+        return sha
+    }
+
+    /** Downloads the package at [knownCommit], or at the branch's newest commit when it is null. */
+    fun download(source: GitHubSource, hostCompatibilityLevel: Long, knownCommit: String? = null): Download {
         val client = GitHubClient(connect, "AppApp-Updater", MAX_BYTES, timeoutMillis = 5 * 60_000)
         fun get(url: String, limit: Int) = client.get(url, limit.toLong())
         fun encode(value: String) = URLEncoder.encode(value, "UTF-8").replace("+", "%20")
         val repo = "${source.owner}/${source.repository}"
-        val commit = JsonParser.parseString(get("https://api.github.com/repos/$repo/commits/${encode(source.branch)}", 1024 * 1024).toString(Charsets.UTF_8)).asJsonObject.get("sha").asString
+        val commit = knownCommit ?: JsonParser.parseString(get("https://api.github.com/repos/$repo/commits/${encode(source.branch)}", 1024 * 1024).toString(Charsets.UTF_8)).asJsonObject.get("sha").asString
         require(commit.matches(Regex("[a-f0-9]{40}"))) { "GitHub returned an invalid commit" }
         val root = "https://raw.githubusercontent.com/$repo/$commit/"
         val manifest = get(root + "manifest.json", 256 * 1024)

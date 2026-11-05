@@ -54,7 +54,22 @@ class GitHubUpdateDownloaderTest {
         assertTrue(urls.first().endsWith("/repos/owner/repo/commits/dev"))
         assertEquals(GitHubSource("owner", "repo", "main"), result.pkg.source)
     }
-    @Test fun listsBranchNamesOfTheRepository() {
+    @Test fun latestCommitAsksForThePlainShaOfTheBranch() {
+        var accept: String? = null
+        val downloader = GitHubUpdateDownloader(temp.root) { url ->
+            object : HttpURLConnection(url) {
+                override fun connect() {}
+                override fun disconnect() {}
+                override fun usingProxy() = false
+                override fun getResponseCode() = 200
+                override fun getInputStream() = "$commit\n".byteInputStream()
+                override fun setRequestProperty(key: String?, value: String?) { if (key == "Accept") accept = value }
+            }
+        }
+        assertEquals(commit, downloader.latestCommit(GitHubSource("owner", "repo", "dev")))
+        assertEquals("application/vnd.github.sha", accept)
+    }
+        @Test fun listsBranchNamesOfTheRepository() {
         val urls = mutableListOf<String>()
         val downloader = GitHubUpdateDownloader(temp.root) { url -> urls.add(url.toString()); Response(url, """[{"name":"dev","commit":{}},{"name":"main","commit":{}}]""".toByteArray()) }
         assertEquals(listOf("dev", "main"), downloader.branches("owner", "repo"))

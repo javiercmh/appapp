@@ -195,4 +195,6 @@
     <string name="library_load_failed">Could not read library</string>
     <string name="workspace_operation_failed">Operation failed</string>
     <string name="library_delete_failed">Could not delete app</string>
+    <string name="library_update_available">Update available</string>
+    <string name="library_update_available_for">Update available for %1$s</string>
 </resources>

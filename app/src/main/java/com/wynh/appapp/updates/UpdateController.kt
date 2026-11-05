@@ -99,7 +99,19 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
         job = activity.lifecycleScope.launch {
             var download: GitHubUpdateDownloader.Download? = null
             try {
-                withContext(Dispatchers.IO) { GitHubUpdateDownloader(activity.cacheDir).download(source, hostCompatibilityLevel).also { download = it } }
+                val downloader = GitHubUpdateDownloader(activity.cacheDir)
+                val latest = withContext(Dispatchers.IO) { downloader.latestCommit(source) }
+                availability.recordLatest(record.id, source, latest)
+                // Nothing to download when the branch still points at the installed package, or at
+                // a commit a full check already found identical to it.
+                val installed = updater.installed()
+                if (installed != null && installed.source == source && updater.currentVersion() == installed.version &&
+                    (latest == installed.commit || latest == availability.knownUnchanged(record.id, source))) {
+                    close()
+                    showUpToDate(installed.version, source) {}
+                    return@launch
+                }
+                withContext(Dispatchers.IO) { downloader.download(source, hostCompatibilityLevel, latest).also { download = it } }
                 review(download!!, source) {
                     val subjects = runCatching { withContext(Dispatchers.IO) { GitHubUpdateDownloader(activity.cacheDir).recentSubjects(source, updater.installed()?.commit) } }
                         .getOrDefault(emptyList())
@@ -112,6 +124,14 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
             } catch (e: Exception) { close(); download?.directory?.deleteRecursively(); checkFailed(source, e) }
         }
     }
+
+    private val availability get() = UpdateAvailability.of(activity)
+
+    private fun showUpToDate(version: String, source: GitHubSource, onDismissed: () -> Unit) = showUpdateDialog("App is up to date",
+        "Version $version\n${source.display}\n\nThere are no publisher changes to install. Your local edits and saved data are kept.\n\nTo restore an earlier version, open Edit → Version history.",
+        primary = Action("Done") { it.dismiss() },
+        secondary = Action("Change source") { it.dismiss(); changeSource(source) },
+        dismissLabel = null, onDismissed = onDismissed)
 
     private fun checkFailed(source: GitHubSource, e: Exception) {
         if (activity.isFinishing) return
@@ -135,23 +155,13 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
         val mismatch = updater.identityMismatch(value.pkg, source)
         val latest = subjects()
         val installedVersion = updater.currentVersion()
-        if (!preview.adoption && installedVersion != null && (UpdateReviewCopy.compareVersions(value.pkg.version, installedVersion) ?: 0) < 0) {
-            // Updates only move forward; going back is Version history's job.
-            showUpdateDialog("No newer version",
-                "${source.display} has version ${value.pkg.version}, which is older than the installed version $installedVersion.\n\nTo go back to an earlier version, open Edit → Version history.",
-                primary = Action("Done") { it.dismiss() },
-                secondary = Action("Change source") { it.dismiss(); changeSource(source) },
-                dismissLabel = null, onDismissed = { value.directory.deleteRecursively() })
-            return
-        }
         if (unchanged) {
-            showUpdateDialog("App is up to date",
-                "Version ${value.pkg.version}\n${source.display}\n\nThere are no publisher changes to install. Your local edits and saved data are kept.\n\nTo restore an earlier version, open Edit → Version history.",
-                primary = Action("Done") { it.dismiss() },
-                secondary = Action("Change source") { it.dismiss(); changeSource(source) },
-                dismissLabel = null, onDismissed = { value.directory.deleteRecursively() })
+            availability.recordUnchanged(record.id, source, value.commit)
+            showUpToDate(value.pkg.version, source) { value.directory.deleteRecursively() }
             return
         }
+        // Older versions stay installable, for example to switch back from a dev branch, but say so.
+        val older = !preview.adoption && UpdateReviewCopy.isOlder(installedVersion, value.pkg.version)
         val granted = com.wynh.appapp.grants.SubappGrants.store(activity).granted(record.id)
         // What changes comes first; the safety details follow in smaller, muted text.
         val text = android.text.SpannableStringBuilder().apply {
@@ -169,8 +179,8 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
             setSpan(android.text.style.ForegroundColorSpan(androidx.core.content.ContextCompat.getColor(activity, com.wynh.appapp.R.color.on_surface_muted)), start, length, 0)
         }
         var accepted = false
-        val confirm = if (mismatch != null) "Update anyway" else if (preview.adoption) "Link and update" else "Update"
-        showUpdateDialog("Review app update", text,
+        val confirm = if (mismatch != null) "Update anyway" else if (preview.adoption) "Link and update" else if (older) "Install older version" else "Update"
+        showUpdateDialog("Review app update", text, content = changedFilesView(preview),
             primary = Action(confirm) { dialog ->
                 accepted = true
                 applyUpdate("GitHub update ${value.pkg.version} · ${value.commit.take(12)}", value.directory) { updater.install(value.pkg, value.directory, value.commit, hostCompatibilityLevel, reviewed, acceptMismatch = mismatch != null, source = source) }
@@ -179,6 +189,43 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
             // Only an app that already follows a source can switch it from here.
             secondary = if (preview.adoption) null else Action("Change source") { it.dismiss(); changeSource(source) },
             onDismissed = { if (!accepted) value.directory.deleteRecursively() })
+    }
+
+    /** "Show changed files (N)" that expands to the added, changed and removed paths; null when none. */
+    private fun changedFilesView(preview: UpdatePreview): android.view.View? {
+        val lines = preview.added.map { "+ $it" } + preview.changed.map { "~ $it" } + preview.removed.map { "− $it" }
+        if (lines.isEmpty()) return null
+        val density = activity.resources.displayMetrics.density
+        val list = android.widget.TextView(activity).apply {
+            text = lines.sorted().joinToString("\n") { it }
+            typeface = android.graphics.Typeface.MONOSPACE
+            textSize = 12f
+            setTextColor(androidx.core.content.ContextCompat.getColor(activity, com.wynh.appapp.R.color.on_surface_muted))
+            setPadding((20 * density).toInt(), 0, (20 * density).toInt(), (12 * density).toInt())
+            visibility = android.view.View.GONE
+        }
+        val label = { open: Boolean -> "${if (open) "Hide" else "Show"} changed files (${lines.size})" }
+        val toggle = android.widget.TextView(activity).apply {
+            text = label(false)
+            textSize = 14f
+            minHeight = (48 * density).toInt()
+            gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
+            isClickable = true; isFocusable = true
+            val ripple = android.util.TypedValue().also { activity.theme.resolveAttribute(android.R.attr.selectableItemBackground, it, true) }
+            setBackgroundResource(ripple.resourceId)
+            setTextColor(androidx.core.content.ContextCompat.getColor(activity, com.wynh.appapp.R.color.primary))
+            setPadding((20 * density).toInt(), 0, (20 * density).toInt(), 0)
+            setOnClickListener {
+                val open = list.visibility != android.view.View.VISIBLE
+                list.visibility = if (open) android.view.View.VISIBLE else android.view.View.GONE
+                text = label(open)
+            }
+        }
+        return LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(toggle, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            addView(list)
+        }
     }
 
     private class Action(val label: String, val run: (android.app.Dialog) -> Unit)

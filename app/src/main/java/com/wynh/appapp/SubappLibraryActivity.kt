@@ -329,6 +329,14 @@ class SubappLibraryActivity : AppCompatActivity() {
         }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
+                // Redraw "Update available" badges whenever a check records something new.
+                com.wynh.appapp.updates.UpdateAvailability.changes.collect {
+                    if (displayedRecords.isNotEmpty() && reorderOriginal.isEmpty()) libraryAdapter.notifyItemRangeChanged(1, displayedRecords.size)
+                }
+            }
+        }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
                 backups.status.collect { status ->
                     if (status.busy) {
                         if (backupProgress == null) backupProgress = MaterialAlertDialogBuilder(this@SubappLibraryActivity)
@@ -359,6 +367,18 @@ class SubappLibraryActivity : AppCompatActivity() {
         (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.auth?.setForeground(true)
         if (rowsReady) refreshRows()
         refreshSettingsPermissions?.invoke()
+        checkForUpdates()
+    }
+
+    private var updateCheck: kotlinx.coroutines.Job? = null
+
+    /** Quietly asks GitHub about linked apps that are due; the rows show "Update available" from the result. */
+    private fun checkForUpdates() {
+        if (updateCheck?.isActive == true || displayedRecords.isEmpty()) return
+        val records = displayedRecords.toList()
+        updateCheck = lifecycleScope.launch {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.wynh.appapp.updates.UpdateAvailability.refresh(applicationContext, records) }
+        }
     }
 
     override fun onDestroy() {
@@ -577,6 +597,7 @@ class SubappLibraryActivity : AppCompatActivity() {
         displayedRecords.clear(); displayedRecords.addAll(value.records); rowMetadata = value.metadata
         header.appCount.text = resources.getQuantityString(R.plurals.library_count, displayedRecords.size, displayedRecords.size)
         header.emptyState.visibility = if (displayedRecords.isEmpty()) View.VISIBLE else View.GONE
+        if (previous.isEmpty()) checkForUpdates()
         diff.dispatchUpdatesTo(object : androidx.recyclerview.widget.ListUpdateCallback {
             override fun onInserted(position: Int, count: Int) { libraryAdapter.notifyItemRangeInserted(position + 1, count) }
             override fun onRemoved(position: Int, count: Int) { libraryAdapter.notifyItemRangeRemoved(position + 1, count) }
@@ -624,6 +645,11 @@ class SubappLibraryActivity : AppCompatActivity() {
             row.appDescription.text = metadata?.description?.ifBlank { getString(R.string.library_app_fallback) } ?: getString(R.string.library_app_fallback)
             row.appCard.contentDescription = getString(R.string.library_open_app, name)
             row.appCard.setOnClickListener { open(record) }
+            val updatable = com.wynh.appapp.updates.UpdateAvailability.of(this@SubappLibraryActivity)
+                .available(record.id, runCatching { com.wynh.appapp.updates.WorkspaceUpdater(record.directory).installed() }.getOrNull())
+            row.appUpdateBadge.visibility = if (updatable) View.VISIBLE else View.GONE
+            row.appUpdateBadge.contentDescription = getString(R.string.library_update_available_for, name)
+            row.appUpdateBadge.setOnClickListener { com.wynh.appapp.updates.UpdateController(this@SubappLibraryActivity, record).open() }
             row.appMenu.contentDescription = getString(R.string.library_menu, name)
             row.appMenu.setOnClickListener { anchor ->
                 val content = layoutInflater.inflate(R.layout.popup_library_actions, null)

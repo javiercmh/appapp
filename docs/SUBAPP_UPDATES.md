@@ -122,8 +122,17 @@ an App² release that accepts it (Dev build 11 or later) is out. To try unreleas
 to releases. Each switch is a source change that needs **Update anyway**; permissions
 and user data are kept. A version bump on `dev` is optional: App² offers any change
 to managed files and reports **App is up to date** only when the files and version
-match what is installed. A lower `version` than the installed one is never offered (**No newer version**);
-going back is Edit → Version history. Bump `version` on `dev` when it is behind `main`.
+match what is installed. A lower `version` is still offered, marked **⚠ Older version** with an
+**Install older version** button, so switching back from `dev` to `main` works.
+Versions compare as dotted numbers with an optional pre-release suffix:
+`1.2.46 < 1.2.47-dev.3 < 1.2.47`, so a dev build can read as newer than its release.
+
+App² first asks GitHub for the branch's newest commit. When that is the installed
+commit (or one a full check already found identical), it reports **App is up to
+date** without downloading. The library checks linked apps the same way at most
+every six hours and shows **Update available** on their cards; a commit that turns
+out not to change the app clears the badge. The review lists the added (+),
+changed (~) and removed (−) files under **Show changed files**.
 
 ## Low-token routine
 
