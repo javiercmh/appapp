@@ -129,9 +129,7 @@ Versions compare as dotted numbers with an optional pre-release suffix:
 
 App² first asks GitHub for the branch's newest commit. When that is the installed
 commit (or one a full check already found identical), it reports **App is up to
-date** without downloading. The library checks linked apps the same way at most
-every six hours and shows **Update available** on their cards; a commit that turns
-out not to change the app clears the badge. The review lists the added (+),
+date** without downloading. App² never checks for updates on its own. The review lists the added (+),
 changed (~) and removed (−) files under **Show changed files**.
 
 ## Low-token routine

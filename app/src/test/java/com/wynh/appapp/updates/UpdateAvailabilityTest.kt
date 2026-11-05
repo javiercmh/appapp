@@ -34,37 +34,14 @@ class UpdateAvailabilityTest {
 
     private val main = GitHubSource("owner", "app", "main")
     private val dev = GitHubSource("owner", "app", "dev")
-    private fun installed(commit: String, source: GitHubSource = main) = InstalledUpdate("id", "1", source, commit, emptyMap(), emptySet())
-    private var time = 1_000_000L
-    private val store = UpdateAvailability(MemoryPrefs()) { time }
+    private val store = UpdateAvailability(MemoryPrefs())
 
     @Test
-    fun badgeShowsForANewCommitUntilItIsInstalledOrKnownUnchanged() {
-        assertFalse(store.available("a", installed("1".repeat(40))))
-        store.recordLatest("a", main, "2".repeat(40))
-        assertTrue(store.available("a", installed("1".repeat(40))))
-        assertFalse(store.available("a", installed("2".repeat(40))))
+    fun remembersAnUnchangedCommitOnlyForItsSource() {
+        assertNull(store.knownUnchanged("a", main))
         store.recordUnchanged("a", main, "2".repeat(40))
-        assertFalse(store.available("a", installed("1".repeat(40))))
-        store.recordLatest("a", main, "3".repeat(40))
-        assertTrue(store.available("a", installed("1".repeat(40))))
-    }
-
-    @Test
-    fun aSourceChangeIgnoresTheOldResultAndIsDueAtOnce() {
-        store.recordLatest("a", main, "2".repeat(40))
-        assertFalse(store.available("a", installed("1".repeat(40), dev)))
-        assertTrue(store.due("a", installed("1".repeat(40), dev)))
+        assertEquals("2".repeat(40), store.knownUnchanged("a", main))
         assertNull(store.knownUnchanged("a", dev))
-    }
-
-    @Test
-    fun checksAgainOnlyAfterTheInterval() {
-        assertTrue(store.due("a", installed("1".repeat(40))))
-        store.recordLatest("a", main, "1".repeat(40))
-        assertFalse(store.due("a", installed("1".repeat(40))))
-        time += UpdateAvailability.CHECK_INTERVAL
-        assertTrue(store.due("a", installed("1".repeat(40))))
-        assertFalse(store.due("a", null))
+        assertNull(store.knownUnchanged("b", main))
     }
 }

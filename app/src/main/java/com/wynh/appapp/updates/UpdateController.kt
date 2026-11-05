@@ -104,8 +104,6 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
                 // Nothing to download when the branch still points at the installed package, or at
                 // a commit a full check already found identical to it.
                 val installed = updater.installed()
-                // Only the followed source feeds the library badge; trying another one leaves it alone.
-                if (installed?.source == source) availability.recordLatest(record.id, source, latest)
                 if (installed != null && installed.source == source && updater.currentVersion() == installed.version &&
                     (latest == installed.commit || latest == availability.knownUnchanged(record.id, source))) {
                     close()
