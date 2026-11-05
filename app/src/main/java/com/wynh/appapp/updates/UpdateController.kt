@@ -101,10 +101,11 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
             try {
                 val downloader = GitHubUpdateDownloader(activity.cacheDir)
                 val latest = withContext(Dispatchers.IO) { downloader.latestCommit(source) }
-                availability.recordLatest(record.id, source, latest)
                 // Nothing to download when the branch still points at the installed package, or at
                 // a commit a full check already found identical to it.
                 val installed = updater.installed()
+                // Only the followed source feeds the library badge; trying another one leaves it alone.
+                if (installed?.source == source) availability.recordLatest(record.id, source, latest)
                 if (installed != null && installed.source == source && updater.currentVersion() == installed.version &&
                     (latest == installed.commit || latest == availability.knownUnchanged(record.id, source))) {
                     close()
@@ -171,7 +172,7 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
             bold(UpdateReviewCopy.versionLine(installedVersion.takeUnless { preview.adoption }, value.pkg.version))
             append("\n${source.display}\n")
             if (latest.isNotEmpty()) { append("\n"); bold("What's new"); append("\n${latest.joinToString("\n") { "• $it" }}\n") }
-            if (preview.edited.isNotEmpty()) append("\n⚠ ${preview.edited.size} code files you edited or removed will be replaced by the publisher's versions.\n")
+            if (preview.edited.isNotEmpty()) append("\n⚠ ${if (preview.edited.size == 1) "1 code file you edited or removed will be replaced by the publisher's version." else "${preview.edited.size} code files you edited or removed will be replaced by the publisher's versions."}\n")
             val start = length
             append("\nYour records and files the publisher doesn't own are kept. The current and updated versions are saved in Edit → Version history, with a recovery backup.")
             if (mismatch == null) append("\n\n").append(UpdateReviewCopy.permissionSummary(granted))
@@ -179,7 +180,7 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
             setSpan(android.text.style.ForegroundColorSpan(androidx.core.content.ContextCompat.getColor(activity, com.wynh.appapp.R.color.on_surface_muted)), start, length, 0)
         }
         var accepted = false
-        val confirm = if (mismatch != null) "Update anyway" else if (preview.adoption) "Link and update" else if (older) "Install older version" else "Update"
+        val confirm = if (older) "Install older version" else if (mismatch != null) "Update anyway" else if (preview.adoption) "Link and update" else "Update"
         showUpdateDialog("Review app update", text, content = changedFilesView(preview),
             primary = Action(confirm) { dialog ->
                 accepted = true
