@@ -1,3 +1,31 @@
+# App² 1.9.0
+
+## App update sources
+
+- Choose the repository and branch each subapp follows through Update app → Change source, including development branches and forks.
+- Keep the selected update source independently of the source suggested by the package manifest. Later update checks continue to follow your choice.
+- Review and confirm a source change before it takes effect. Existing publisher warnings, permission choices and user-data protection still apply.
+- Accept GitHub repository URLs as well as owner/repository when choosing a source.
+
+## Development and distribution
+
+- Keep day-to-day development on `dev` and advance `main` for production releases.
+- Allow App² Dev builds from either branch and document the separate host and subapp release flows.
+
+## Installation
+
+Download `AppApp-1.9.0.apk` and install it as an update to App². The package uses the existing release signing certificate and application ID `com.wynh.appapp`. Existing subapp workspaces and AI credentials are preserved.
+
+Version: `1.9.0` (version code `14`). Host compatibility level remains `11`.
+
+## Verification
+
+Local checks passed: 169 JVM tests, release lint, debug build, Android-test compilation, 24 JavaScript tests and 8 Python tests. The full Medium_Phone API 37 emulator run reported two failures: a runtime JavaScript timeout and a backup test clicking an offscreen button. Both runtime tests passed on retry; after adding scrolling to the backup test, all five library UI tests passed. Two LingoMage checks require separately staged fixtures and were skipped.
+
+The release workflow runs JVM tests, release lint, JavaScript and Python checks, compiles Android tests, and builds the signed production APK with Temurin 21. Its certificate is checked against the existing production signing identity. Device coverage and remaining checks are recorded in `docs/DEVICE_CHECKS.md`; this release does not claim a phone installation.
+
+---
+
 # App² 1.8.0
 
 ## AI services

@@ -1,5 +1,14 @@
 # Native verification
 
+## Release 1.9.0 verification — 6 November 2026
+
+Medium_Phone, Android 17/API 37, arm64, emulator-5554; debug build, animations disabled. No physical phone was used.
+
+- 169 JVM tests, release lint, debug build, Android-test compilation, 24 JavaScript tests and 8 Python tests passed.
+- The full connected suite ran 75 tests and reported two failures: a JavaScript timeout in `RuntimeOperationsDeviceTest` and an offscreen backup button in `LibraryReorderDeviceTest`. The LingoMage exposure and continuation checks skipped because their separate fixtures were not staged.
+- Both runtime tests passed on retry. Added scrolling before the backup export/restore test clicks; all five library UI tests then passed, including backup document contracts and persisted reordering.
+- The full suite was not repeated after those focused retries. Live provider inference, the new Change source dialog and phone installation were not manually exercised.
+
 ## Verified on emulator
 
 Medium_Phone, Android 16/API 36, arm64; debug build only. No physical-device verification is implied.
