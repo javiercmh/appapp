@@ -1,106 +1,114 @@
-# App² — Run web apps on your Android phone
+# App²
 
-**Install, run and manage web apps on your Android phone.** Subapps get native features and even AI capabilities with your own account. Import from GitHub, launch from the home screen. App² keeps your apps in one library, keeps them updated from their repositories, and lets you edit their files on the phone. You can also start your own app from the included Starter Demo.
+**Run web apps on your Android phone.** Import an app from GitHub or a ZIP file, launch it from your home screen, and edit its files right on your phone. Apps can use Android features like notifications and text-to-speech, and even AI through your own account.
 
-<table>
-  <tr>
-    <td align="center"><img src="docs/images/appapp-library-phone.png" width="240" alt="App² library with LingoMage and Starter Demo"><br><strong>Your app library</strong></td>
-    <td align="center"><img src="docs/images/appapp-editor-phone.png" width="240" alt="App² editor showing the Starter Demo’s source and data files"><br><strong>Edit files on your phone</strong></td>
-    <td align="center"><img src="docs/images/appapp-runtime-phone.png" width="240" alt="Starter Demo running with file storage and native pronunciation features"><br><strong>Run your apps</strong></td>
-  </tr>
-  <tr>
-    <td align="center" colspan="3"><img src="docs/images/appapp-settings-phone.png" width="240" alt="App² Settings showing subapp backup and AI provider connections, with account details removed"><br><strong>Manage backups and AI connections</strong></td>
-  </tr>
-</table>
+<p align="center">
+  <img src="docs/images/appapp-library-phone.png" width="24%" alt="Library: your apps, with LingoMage and Starter Demo">
+  <img src="docs/images/appapp-editor-phone.png" width="24%" alt="Editor: the Starter Demo’s source and data files">
+  <img src="docs/images/appapp-runtime-phone.png" width="24%" alt="Running app: the Starter Demo with notes, photos and pronunciation">
+  <img src="docs/images/appapp-settings-phone.png" width="24%" alt="Settings: backup and AI provider connections">
+</p>
+<p align="center"><sub><b>Library</b> · <b>Editor</b> · <b>Running app</b> · <b>Settings</b></sub></p>
 
-Captured from App² 1.7.0 on the existing Android 16 emulator: library, editor and runtime on 22 October 2026; Settings on 23 October 2026, with account details redacted using AI image editing.
+## Download
 
-## What you can do
-
-- **Import apps** (called *subapps*) from ZIP files or public GitHub repositories and folders. Add apps made by others or bring in your own HTML, CSS, and JavaScript projects.
-- **Keep apps updated** from their public GitHub repositories, preserving your data.
-- **Create your own** from the included Starter Demo.
-- **Edit on your phone** with a file browser, code highlighting, and search. Customize each app’s name and icon.
-- **Launch from your home screen** with a shortcut that opens the app in its own screen.
-- **Save real files** for notes, settings, photos, and other data. Each app has its own workspace.
-- **Use Android features** including notifications, scheduled reminders, and photo selection.
-- **Read text aloud** using Android text-to-speech. Subapps can pronounce words in different languages or let you select text and tap Speak.
-- **Use AI with your own account.** Connect ChatGPT, OpenRouter, or any OpenAI-compatible custom endpoint once in library Settings → AI, and every app can use it. Credentials stay native and never enter an app’s files. Apps can choose models and reasoning levels, generate text, and cancel requests.
-- **Keep and share your apps** with workspace snapshots, ZIP import/export, and Android sharing.
+Get the latest APK from [Releases](https://github.com/javiercmh/appapp/releases/latest) and open it on your phone. App² runs on **Android 8.0 or newer**.
 
 ## Get started
 
-1. Open App² and tap **Import**. Choose a ZIP file or paste a public GitHub repository or folder URL. To start from scratch, choose **New app**.
-2. Tap an app to run it, or **Edit** to change its files.
-3. Choose **Install** to add a home-screen shortcut.
+1. Open App² and tap **New app**. Import a ZIP file, paste a public GitHub repository or folder URL, or start from the included **Starter Demo**.
+2. Tap an app to run it, or choose **Edit** to change its files.
+3. Choose **Install** to put the app on your home screen.
 
-The Starter Demo includes working examples of file storage, photos, notifications, text-to-speech, and AI, plus a guide to building your own app. App² runs on **Android 8.0 or newer**.
+## What you can do
 
-## Examples
+| | |
+| :--- | :--- |
+| 📥 **Import** | Add apps (called *subapps*) from ZIP files or public GitHub repositories. |
+| 🔄 **Update** | Pull new versions from GitHub. Your data is kept. |
+| ✏️ **Edit** | Browse files, with code highlighting and search. Change each app’s name and icon. |
+| 🏠 **Launch** | Each app gets its own home-screen shortcut and screen. |
+| 💾 **Save files** | Each app has its own private folder for notes, settings, photos and other data. |
+| 🔔 **Use Android** | Notifications, scheduled reminders, photo selection and text-to-speech. |
+| ✨ **Use AI** | Connect ChatGPT, OpenRouter or any OpenAI-compatible endpoint once in **Settings → AI**. Every app can use it; your credentials never enter an app’s files. |
+| 📦 **Back up & share** | Snapshots, ZIP export and Android sharing for single apps, plus one ZIP for all of them. |
 
-- **[LingoMage](https://github.com/javiercmh/lingomage)** — learn languages through AI-generated stories tailored to your interests and reading level, with contextual explanations and saved stories for offline reading. Import its repository URL in App² as a new app.
-- **[Working Hours](https://github.com/javiercmh/working-hours)** — track shifts, breaks and overtime, mark entries transferred to a spreadsheet, and set end-of-day reminders. Import its repository URL in App² as a new app.
-- **[Starter Demo](app/src/main/assets/starter_template/)** — the included starting point for storage, photos, notifications, speech and AI features.
+## Example apps
 
-Examples maintained separately have their own licences and assets; see each repository.
+Paste a repository URL into App² to import it.
+
+- **[LingoMage](https://github.com/javiercmh/lingomage)** — learn languages with AI stories that match your interests and reading level.
+- **[Working Hours](https://github.com/javiercmh/working-hours)** — track shifts, breaks and overtime, with end-of-day reminders.
+- **[Starter Demo](app/src/main/assets/starter_template/)** — included in App². Shows storage, photos, notifications, speech and AI, with a guide to building your own app.
+
+Example repositories have their own licences.
+
+## Updating apps
+
+In the library, open an app’s menu and choose **Update app** to review a new version from its GitHub repository. Updates replace the app’s code and keep your data. Importing a ZIP from the library always creates a new app. Details: [update and deployment guide](docs/SUBAPP_UPDATES.md).
+
+## Backing up
+
+**Back up:** In the library, open **Settings → Subapp backup → Back up all subapps** and pick where to save the ZIP. App² saves every app’s code, data, images and logs, then checks the archive before reporting success. Finish or cancel any running AI requests first, and keep a copy off the phone.
+
+**Restore:** **Restore subapp backup** adds the apps as new copies. Existing apps are not touched. Reinstall home-screen shortcuts if needed.
+
+<details>
+<summary>What the backup does not include, and size limits</summary>
+
+Only app folders are saved. Excluded: App² settings, native key-value state, reminders, history, update links, AI credentials, and browser storage (cookies, localStorage, IndexedDB). Store app data in `data/` so it is backed up.
+
+Limits: 2 GB in total, 512 MB per file, fewer than 100,000 files. If there is not enough temporary storage, the backup fails with an error. This format is separate from single-app ZIP export.
+</details>
 
 ## Try App² Dev
 
-App² Dev installs beside App² with its own data and AI connections. Download its APK from a [Dev prerelease](https://github.com/javiercmh/appapp/releases) when available. See [Dev distribution and signing setup](docs/DEV_DISTRIBUTION.md).
+App² Dev installs next to App² with its own data and AI connections. Download its APK from a [Dev prerelease](https://github.com/javiercmh/appapp/releases) when one is available. See [Dev distribution and signing](docs/DEV_DISTRIBUTION.md).
 
 ## For developers
 
-Subapps use standard HTML, CSS, and JavaScript, with a native bridge for Android features. Store app data as JSON or other files under `data/` so it can be inspected, exported, and restored with the workspace.
+### Building subapps
 
-- [Subapp packaging and bridge reference](app/src/main/assets/starter_template/PACKAGING.md)
+Subapps are plain HTML, CSS and JavaScript, with a bridge to Android features. Store app data as JSON or other files under `data/` so it can be inspected, exported and restored.
+
+- [Packaging and bridge reference](app/src/main/assets/starter_template/PACKAGING.md)
 - [AI integration guide](docs/AI.md)
-- [Text to Speech guide](docs/TEXT_TO_SPEECH.md)
+- [Text-to-speech guide](docs/TEXT_TO_SPEECH.md)
 - [Starter Demo source](app/src/main/assets/starter_template/)
-- [Architecture and transaction boundaries](docs/ARCHITECTURE.md)
-- [Host development guidelines](AGENTS.md)
-- [Pending native verification](docs/DEVICE_CHECKS.md)
 
-The Android host uses Kotlin, Material components, and WebView. Build with JDK 17 or 21 and the checked-in Gradle wrapper:
+**Preview in a browser:**
 
 ```sh
-./gradlew --version
+python3 app/src/main/assets/starter_template/dev_server.py --mock-ai
+```
+
+Then open [localhost:8888](http://localhost:8888). Needs Python 3.9+ and nothing else. Leave out `--mock-ai` to turn AI off, or add a port number to change the port. Mock AI is offline and uses no credentials. The server writes real files to the served folder, so test on a copy. Android permissions and exact alarms still need a device.
+
+### Building App²
+
+The Android host uses Kotlin, Material components and WebView. Build with JDK 17 or 21:
+
+```sh
 ./gradlew :app:assembleDebug :app:testDebugUnitTest
 ```
 
+Other checks:
+
+```sh
+python3 -B -m unittest discover -s tests -p 'test_demo_dev_server.py'
+node --test tests/*.test.mjs
+```
+
+CI runs JVM tests, lint, debug assembly and device-test compilation on JDK 21. Native interaction checks need an emulator.
+
+- [Architecture](docs/ARCHITECTURE.md)
+- [Development guidelines](AGENTS.md)
+- [Pending device checks](docs/DEVICE_CHECKS.md)
+
 ## License
 
-MIT License; see [`LICENSE`](LICENSE). It covers everything in this repository, including the
-starter template, unless a file says otherwise. Linked example repositories have their own licensing. Bundled
-libraries and third-party marks are listed in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
-This means, you can do whatever you want with App².
-Just one personal request: please do not put ads, non-consensual trackers, or other invasive code in your apps.
+[MIT](LICENSE), covering everything in this repository (including the Starter Demo) unless a file says otherwise. Bundled libraries and third-party marks are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
+You can do whatever you want with App². One personal request: please don’t put ads, non-consensual trackers or other invasive code in your apps.
 
-### Preview the Starter Demo
-
-Run `python3 app/src/main/assets/starter_template/dev_server.py --mock-ai` and open
-[localhost:8888](http://localhost:8888). Omit `--mock-ai` to leave AI unavailable, or add a positional
-port to change the port. Python 3.9+ is sufficient; no dependencies are needed.
-The server writes real notes, photos and AI results to the served workspace, so use a disposable
-copy for testing. Mock AI is offline and uses no ChatGPT credentials or plan usage. Android
-permissions and exact alarms require device testing.
-
-CI uses JDK 21 for JVM tests, lint, debug assembly and device-test compilation. Native interaction checks still require an emulator.
-
-Run development checks with `python3 -B -m unittest discover -s tests -p 'test_demo_dev_server.py'`
-and `node --test tests/*.test.mjs`.
-
-## Updating saved apps
-
-Use an app's library menu → **Update app** to review an update from its public
-GitHub repository. Updates replace declared app code and preserve user records.
-The editor has a separate update button; Share & Package App only exports/shares.
-Library ZIP import creates another app. See [the update and deployment guide](docs/SUBAPP_UPDATES.md).
-
-## Back up all subapps
-
-In the library, open **Settings → Subapp backup → Back up all subapps** and choose a ZIP destination. App² captures every registered workspace, including nested data files, code, manifests, images and logs, and verifies the saved archive before reporting the app count. Finish/save or cancel active AI requests before starting. Keep the verified ZIP outside the phone before tests that could affect app data; the single export replaces manually exporting each app.
-
-**Restore subapp backup** validates the complete archive and adds independent copies with fresh IDs in backup order. Existing apps remain untouched. Each restored copy receives an initial history snapshot and can be linked to its publisher through the existing Update flow. Install launcher shortcuts again if needed.
-
-The backup includes workspace files only: global App² settings, native bridge key-value state, reminders, history, publisher installation metadata, ChatGPT credentials and WebView cookies/localStorage/IndexedDB are excluded. Store subapp data in `data/` as documented above. ZIPs are limited to 2 GB of workspace content, 512 MB per file and fewer than 100,000 files; insufficient temporary storage produces an error instead of a successful backup. This multi-app format is separate from the existing single-app ZIP import/export.
+<sub>Screenshots: App² 1.7.0 on an Android 16 emulator, October 2026, with account details removed.</sub>
