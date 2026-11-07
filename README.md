@@ -3,12 +3,12 @@
 **Run web apps on your Android phone.** Import an app from GitHub or a ZIP file, launch it from your home screen, and edit its files right on your phone. Apps can use Android features like notifications and text-to-speech, and even AI through your own account.
 
 <p align="center">
+  <img src="docs/images/appapp-runtime-phone.png" width="23%" alt="Your app: the Starter Demo running full screen, with notes, photos, pronunciation and AI">
   <img src="docs/images/appapp-library-phone.png" width="23%" alt="Library: your apps, with LingoMage and Starter Demo">
   <img src="docs/images/appapp-editor-phone.png" width="23%" alt="Editor: the Starter Demo’s source and data files">
-  <img src="docs/images/appapp-runtime-phone.png" width="23%" alt="Running app: the Starter Demo with notes, photos and pronunciation">
   <img src="docs/images/appapp-settings-phone.png" width="23%" alt="Settings: backup and AI provider connections">
 </p>
-<p align="center"><sub><b>Library</b> · <b>Editor</b> · <b>Running app</b> · <b>Settings</b></sub></p>
+<p align="center"><sub><b>Your app</b> · <b>Library</b> · <b>Editor</b> · <b>Settings</b></sub></p>
 
 ## Download
 
