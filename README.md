@@ -2,28 +2,23 @@
 
 **Run web apps on your Android phone.** Import an app from GitHub or a ZIP file, launch it from your home screen, and edit its files right on your phone. Apps can use Android features like notifications and text-to-speech, and even AI through your own account.
 
-<table>
-  <tr>
-    <td align="center" width="25%"><img src="docs/images/appapp-library-phone.png" width="180" alt="App² library with LingoMage and Starter Demo"></td>
-    <td align="center" width="25%"><img src="docs/images/appapp-editor-phone.png" width="180" alt="App² editor showing the Starter Demo’s source and data files"></td>
-    <td align="center" width="25%"><img src="docs/images/appapp-runtime-phone.png" width="180" alt="Starter Demo running with file storage and native pronunciation features"></td>
-    <td align="center" width="25%"><img src="docs/images/appapp-settings-phone.png" width="180" alt="App² Settings showing subapp backup and AI provider connections, with account details removed"></td>
-  </tr>
-  <tr>
-    <td align="center"><strong>Library</strong></td>
-    <td align="center"><strong>Editor</strong></td>
-    <td align="center"><strong>Running app</strong></td>
-    <td align="center"><strong>Settings</strong></td>
-  </tr>
-</table>
+<p align="center">
+  <img src="docs/images/appapp-library-phone.png" width="24%" alt="Library: your apps, with LingoMage and Starter Demo">
+  <img src="docs/images/appapp-editor-phone.png" width="24%" alt="Editor: the Starter Demo’s source and data files">
+  <img src="docs/images/appapp-runtime-phone.png" width="24%" alt="Running app: the Starter Demo with notes, photos and pronunciation">
+  <img src="docs/images/appapp-settings-phone.png" width="24%" alt="Settings: backup and AI provider connections">
+</p>
+<p align="center"><sub><b>Library</b> · <b>Editor</b> · <b>Running app</b> · <b>Settings</b></sub></p>
+
+## Download
+
+Get the latest APK from [Releases](https://github.com/javiercmh/appapp/releases/latest) and open it on your phone. App² runs on **Android 8.0 or newer**.
 
 ## Get started
 
 1. Open App² and tap **New app**. Import a ZIP file, paste a public GitHub repository or folder URL, or start from the included **Starter Demo**.
 2. Tap an app to run it, or choose **Edit** to change its files.
 3. Choose **Install** to put the app on your home screen.
-
-App² runs on **Android 8.0 or newer**.
 
 ## What you can do
 
@@ -116,4 +111,4 @@ CI runs JVM tests, lint, debug assembly and device-test compilation on JDK 21. N
 
 You can do whatever you want with App². One personal request: please don’t put ads, non-consensual trackers or other invasive code in your apps.
 
-<sub>Screenshots: App² 1.7.0 on an Android 16 emulator, October 2026. Account details in the Settings screenshot were redacted.</sub>
+<sub>Screenshots: App² 1.7.0 on an Android 16 emulator, October 2026, with account details removed.</sub>
