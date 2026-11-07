@@ -34,15 +34,19 @@ class RuntimeOperationsDeviceTest {
         if (view is android.view.ViewGroup) for (i in 0 until view.childCount) findWeb(view.getChildAt(i))?.let { return it }
         return null
     }
-    private fun js(web: WebView, source: String): String {
+    private fun evaluate(web: WebView, source: String, timeoutMs: Long): String? {
         val done = CountDownLatch(1); var value = ""
         instrumentation.runOnMainSync { web.evaluateJavascript(source) { value = it; done.countDown() } }
-        assertTrue("JavaScript timed out", done.await(10, TimeUnit.SECONDS)); return value
+        return if (done.await(timeoutMs, TimeUnit.MILLISECONDS)) value else null
     }
+    private fun js(web: WebView, source: String): String =
+        evaluate(web, source, 10_000) ?: throw AssertionError("JavaScript timed out")
     private fun await(web: WebView, expression: String) {
         val until = SystemClock.uptimeMillis() + 15_000
         while (SystemClock.uptimeMillis() < until) {
-            if (js(web, expression) == "true") return
+            // WebView drops some evaluateJavascript callbacks during a reload; a missing answer means ask again.
+            val remaining = until - SystemClock.uptimeMillis()
+            if (evaluate(web, expression, minOf(1_000L, remaining.coerceAtLeast(1L))) == "true") return
             SystemClock.sleep(50)
         }
         fail("Timed out: $expression")
@@ -123,10 +127,15 @@ class RuntimeOperationsDeviceTest {
                 val until = SystemClock.uptimeMillis() + 15_000
                 while (true) {
                     try {
+                        // Target the dialog window: the default root matcher can latch onto the activity
+                        // while the dialog is shown but not yet focused.
                         androidx.test.espresso.Espresso.onView(androidx.test.espresso.matcher.ViewMatchers.withText(R.string.runtime_stopped_title))
+                            .inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog())
                             .check(androidx.test.espresso.assertion.ViewAssertions.matches(androidx.test.espresso.matcher.ViewMatchers.isDisplayed()))
                         break
-                    } catch (e: androidx.test.espresso.NoMatchingViewException) {
+                    } catch (e: RuntimeException) {
+                        if (e !is androidx.test.espresso.NoMatchingViewException && e !is androidx.test.espresso.NoMatchingRootException &&
+                            e.javaClass.simpleName != "RootViewWithoutFocusException") throw e
                         if (SystemClock.uptimeMillis() > until) throw e
                         SystemClock.sleep(50)
                     }
@@ -136,6 +145,7 @@ class RuntimeOperationsDeviceTest {
                     bitmap.recycle()
                 }
                 androidx.test.espresso.Espresso.onView(androidx.test.espresso.matcher.ViewMatchers.withText(R.string.runtime_reload))
+                    .inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog())
                     .perform(androidx.test.espresso.action.ViewActions.click())
                 lateinit var freshWeb: WebView
                 scenario.onActivity { freshWeb = findWeb(it.findViewById(android.R.id.content))!! }

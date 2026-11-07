@@ -362,9 +362,10 @@ object AiSettingsController {
         fun renderLimit() {
             val limit = ai.startLimit
             limitDropdown.setText(AiStartRateLimiter.label(limit), false)
-            limitStatus.text = if (limit == AiStartRateLimiter.UNLIMITED)
-                "Apps can start any number of AI requests. A faulty app could use your plan or credits quickly."
-            else "Each app can start up to $limit AI requests per minute. Extra starts fail until the minute passes."
+            // Only No limit needs an explanation: it removes the protection.
+            val unlimited = limit == AiStartRateLimiter.UNLIMITED
+            limitStatus.text = if (unlimited) "Without a limit, a faulty app could use up your plan or credits quickly." else ""
+            limitStatus.visibility = if (unlimited) android.view.View.VISIBLE else android.view.View.GONE
         }
         limitDropdown.setSimpleItems(AiStartRateLimiter.CHOICES.map(AiStartRateLimiter::label).toTypedArray())
         renderLimit()

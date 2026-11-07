@@ -15,7 +15,7 @@ A public repository's root `manifest.json` must declare:
   "app2Update": {
     "appId": "com.example.myapp",
     "minimumHostVersionCode": 4,
-    "github": { "owner": "owner", "repository": "repo", "branch": "main" },
+    "github": { "owner": "owner", "repository": "repo" },
     "managedFiles": ["index.html", "manifest.json", "css/style.css", "js/app.js", "js/bridge.js", "data/definitions.json"],
     "seedFiles": ["data/records.json", "data/settings.json"],
     "seedDefaults": { "data/records.json": [], "data/settings.json": {} }
@@ -35,9 +35,14 @@ that counter no longer affects update compatibility. Raise the level only when t
 update contract or bridge gains behavior that publishers can require; releases and
 Dev builds do not change it.
 
-The `github` block suggests the source when an app is first linked. After that the
-user's chosen source decides where updates come from: Update app → **Change source**
-edits the repository (`owner/repository`, a github.com URL also works) and branch,
+The `github` block suggests the source when an app is first linked. Its optional
+`branch` defaults to `main`; leave it out, because the branch belongs to each
+installation (App² builds before Dev build 11 still require it, so keep it on a
+release branch until phones have a newer App²). After that the
+user's chosen source decides where updates come from. Tapping Update on a linked
+app checks its source right away; **Change source** on the result (up to date,
+review, or a failed check) edits the repository (`owner/repository`, a github.com URL also works) and branch
+(type it, or tap the arrow to pick from the repository's branches on GitHub),
 so a phone can follow a `dev` branch or a fork. The downloaded manifest's `github`
 block does not have to match the chosen source; a dev branch can keep the main
 branch's manifest. A new source is saved only when an update from it is installed,
@@ -110,13 +115,22 @@ fast-forwarding it to `dev` (no merge commits). A release bumps `versionCode` an
 
 Subapps such as LingoMage follow the same model. Installed apps follow `main`, so a
 publisher release bumps `version` in `manifest.json` on `dev` and then fast-forwards
-`main`. Keep `app2Update.github.branch` as `main` on both branches; it is only the
-default suggested when linking. To try unreleased work on a phone, use Update app →
+`main`. Leave `app2Update.github.branch` out (it defaults to `main`); dev branches
+already do. Before a release fast-forwards a manifest without it to `main`, make sure
+an App² release that accepts it (Dev build 11 or later) is out. To try unreleased work on a phone, tap Update, then
 **Change source** and set the branch to `dev`, then set it back to `main` to return
 to releases. Each switch is a source change that needs **Update anyway**; permissions
 and user data are kept. A version bump on `dev` is optional: App² offers any change
 to managed files and reports **App is up to date** only when the files and version
-match what is installed.
+match what is installed. A lower `version` is still offered, marked **⚠ Older version** with an
+**Install older version** button, so switching back from `dev` to `main` works.
+Versions compare as dotted numbers with an optional pre-release suffix:
+`1.2.46 < 1.2.47-dev.3 < 1.2.47`, so a dev build can read as newer than its release.
+
+App² first asks GitHub for the branch's newest commit. When that is the installed
+commit (or one a full check already found identical), it reports **App is up to
+date** without downloading. App² never checks for updates on its own. The review lists the added (+),
+changed (~) and removed (−) files under **Show changed files**.
 
 ## Low-token routine
 
@@ -129,7 +143,7 @@ match what is installed.
    The script uses declared empty seed defaults, excludes unlisted files, and
    emits a deterministic ZIP plus `.checks.json` with source revision and hashes.
    `buildDirty` distinguishes a local preview from a published revision.
-3. For a published update, open Update app and Check GitHub, review source,
+3. For a published update, tap Update (it checks GitHub at once), review source,
    commit and file changes, then confirm. If managed code changes after review, check again. Reload occurs
    after installation.
    No APK rebuild is needed for subapp-only changes.
