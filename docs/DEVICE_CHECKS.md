@@ -1,5 +1,14 @@
 # Native verification
 
+## Release 1.9.1 verification — 7 November 2026
+
+Medium_Phone, Android 17/API 37, arm64, emulator-5554; debug build, animations disabled. No physical phone was used.
+
+- Explicitly fetched `dev` and verified that published Dev build 12 (`171e36c`) is an ancestor of the release. Runtime and test source files match that Dev build; the release adds its own version and notes.
+- 177 JVM tests, release lint, debug build, Android-test compilation, 24 JavaScript tests and 8 Python tests passed.
+- The full connected suite completed successfully: 75 tests encountered, zero test failures. The LingoMage exposure and continuation checks raised expected missing-fixture assumptions; their separate packages were not staged. The runner reports zero failures, although its XML encodes those two assumptions as failure elements.
+- No new manual phone, live inference or GitHub branch-picker interaction is claimed.
+
 ## Release 1.9.0 verification — 6 November 2026
 
 Medium_Phone, Android 17/API 37, arm64, emulator-5554; debug build, animations disabled. No physical phone was used.

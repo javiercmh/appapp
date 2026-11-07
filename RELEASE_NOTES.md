@@ -1,3 +1,32 @@
+# App² 1.9.1
+
+## Improved app updates
+
+- Include the update-flow improvements shipped in App² Dev build 12 that were missing from production 1.9.0.
+- Check a linked app for updates immediately. Cancel a running check, retry a failed check, or change source from the result dialog.
+- Pick a branch from GitHub when choosing an update source. A package manifest can omit its suggested branch, which defaults to main.
+- Show whether an incoming version is newer, older, or has changed files at the same version. Installing an older version requires a warning confirmation.
+- Give update dialogs clearer primary actions, change summaries and failure explanations.
+- Skip package downloads when the followed branch still points to the installed commit or a previously checked unchanged package. Checks remain manual.
+
+## Settings
+
+- Simplify the AI request-limit description, showing its explanatory text only when No limit is selected.
+
+## Installation
+
+Download `AppApp-1.9.1.apk` and install it as an update to App². It uses the existing production signing certificate and application ID `com.wynh.appapp`. Existing subapp workspaces and AI credentials are preserved.
+
+Version: `1.9.1` (version code `15`). Host compatibility level remains `11`.
+
+## Verification
+
+Local checks passed: 177 JVM tests, release lint, debug build, Android-test compilation, 24 JavaScript tests and 8 Python tests. The full Medium_Phone API 37 connected suite completed with zero test failures; two LingoMage checks were skipped for missing separate fixtures. Runtime and test source files match the published Dev build 12 (`171e36c`), which is included in the release history.
+
+The production workflow runs JVM tests, release lint, JavaScript and Python checks, compiles Android tests, and builds the signed APK with Temurin 21. The APK's production certificate, version, source commit and checksum are verified before publication. Emulator verification is recorded in `docs/DEVICE_CHECKS.md`; no phone installation is claimed.
+
+---
+
 # App² 1.9.0
 
 ## App update sources
