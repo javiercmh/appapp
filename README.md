@@ -43,72 +43,37 @@ Paste a repository URL into App² to import it.
 
 Example repositories have their own licences.
 
-## Updating apps
+## Updates and backups
 
-In the library, open an app’s menu and choose **Update app** to review a new version from its GitHub repository. Updates replace the app’s code and keep your data. Importing a ZIP from the library always creates a new app. Details: [update and deployment guide](docs/SUBAPP_UPDATES.md).
-
-## Backing up
-
-**Back up:** In the library, open **Settings → Subapp backup → Back up all subapps** and pick where to save the ZIP. App² saves every app’s code, data, images and logs, then checks the archive before reporting success. Finish or cancel any running AI requests first, and keep a copy off the phone.
-
-**Restore:** **Restore subapp backup** adds the apps as new copies. Existing apps are not touched. Reinstall home-screen shortcuts if needed.
-
-<details>
-<summary>What the backup does not include, and size limits</summary>
-
-Only app folders are saved. Excluded: App² settings, native key-value state, reminders, history, update links, AI credentials, and browser storage (cookies, localStorage, IndexedDB). Store app data in `data/` so it is backed up.
-
-Limits: 2 GB in total, 512 MB per file, fewer than 100,000 files. If there is not enough temporary storage, the backup fails with an error. This format is separate from single-app ZIP export.
-</details>
+- **Update an app:** open its menu in the library and choose **Update app**. The code is replaced and your data is kept.
+- **Back up everything:** **Settings → Subapp backup** saves all your apps, with their data, in one ZIP. Restoring adds them as new copies. App² settings, reminders and AI credentials are not included.
 
 ## Try App² Dev
 
-App² Dev installs next to App² with its own data and AI connections. Download its APK from a [Dev prerelease](https://github.com/javiercmh/appapp/releases) when one is available. See [Dev distribution and signing](docs/DEV_DISTRIBUTION.md).
+App² Dev installs next to App² with its own data, so you can try new features early. Get it from a [Dev prerelease](https://github.com/javiercmh/appapp/releases).
 
-## For developers
+## Make your own app
 
-### Building subapps
+Apps are plain HTML, CSS and JavaScript. Start from the [Starter Demo](app/src/main/assets/starter_template/) and see the [packaging and bridge reference](app/src/main/assets/starter_template/PACKAGING.md) and the [AI guide](docs/AI.md).
 
-Subapps are plain HTML, CSS and JavaScript, with a bridge to Android features. Store app data as JSON or other files under `data/` so it can be inspected, exported and restored.
-
-- [Packaging and bridge reference](app/src/main/assets/starter_template/PACKAGING.md)
-- [AI integration guide](docs/AI.md)
-- [Text-to-speech guide](docs/TEXT_TO_SPEECH.md)
-- [Starter Demo source](app/src/main/assets/starter_template/)
-
-**Preview in a browser:**
+To preview an app in your browser (Python 3.9+), run:
 
 ```sh
 python3 app/src/main/assets/starter_template/dev_server.py --mock-ai
 ```
 
-Then open [localhost:8888](http://localhost:8888). Needs Python 3.9+ and nothing else. Leave out `--mock-ai` to turn AI off, or add a port number to change the port. Mock AI is offline and uses no credentials. The server writes real files to the served folder, so test on a copy. Android permissions and exact alarms still need a device.
+Then open [localhost:8888](http://localhost:8888).
 
-### Building App²
+## Build App²
 
-The Android host uses Kotlin, Material components and WebView. Build with JDK 17 or 21:
-
-```sh
-./gradlew :app:assembleDebug :app:testDebugUnitTest
-```
-
-Other checks:
+Needs JDK 17 or 21:
 
 ```sh
-python3 -B -m unittest discover -s tests -p 'test_demo_dev_server.py'
-node --test tests/*.test.mjs
+./gradlew :app:assembleDebug
 ```
-
-CI runs JVM tests, lint, debug assembly and device-test compilation on JDK 21. Native interaction checks need an emulator.
-
-- [Architecture](docs/ARCHITECTURE.md)
-- [Development guidelines](AGENTS.md)
-- [Pending device checks](docs/DEVICE_CHECKS.md)
 
 ## License
 
-[MIT](LICENSE), covering everything in this repository (including the Starter Demo) unless a file says otherwise. Bundled libraries and third-party marks are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+[MIT](LICENSE). Third-party notices are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 You can do whatever you want with App². One personal request: please don’t put ads, non-consensual trackers or other invasive code in your apps.
-
-<sub>Screenshots: App² 1.7.0 on an Android 16 emulator, October 2026, with account details removed.</sub>
