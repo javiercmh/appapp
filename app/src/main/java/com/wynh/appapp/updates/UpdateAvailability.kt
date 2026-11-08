@@ -11,10 +11,10 @@ import android.content.SharedPreferences
 class UpdateAvailability internal constructor(private val prefs: SharedPreferences) {
     /** The commit a full check of [source] found to leave the app unchanged, if any. */
     fun knownUnchanged(appId: String, source: GitHubSource): String? =
-        prefs.getString(appId, null)?.split('\n')?.takeIf { it.size == 2 && it[0] == source.display }?.get(1)
+        prefs.getString(appId, null)?.split('\n')?.takeIf { it.size == 2 && it[0] == source.key }?.get(1)
 
     fun recordUnchanged(appId: String, source: GitHubSource, commit: String) {
-        prefs.edit().putString(appId, "${source.display}\n$commit").apply()
+        prefs.edit().putString(appId, "${source.key}\n$commit").apply()
     }
 
     companion object {

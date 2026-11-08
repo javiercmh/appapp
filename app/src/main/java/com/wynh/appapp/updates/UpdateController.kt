@@ -18,7 +18,11 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 /** Shared native review flow for library, editor and web callers. */
-class UpdateController(private val activity: AppCompatActivity, private val record: SubappRecord) {
+/** [downloader] reaches GitHub; tests replace it. */
+class UpdateController(
+    private val activity: AppCompatActivity, private val record: SubappRecord,
+    private val downloader: GitHubUpdateDownloader = GitHubUpdateDownloader(activity.cacheDir),
+) {
     private val updater = WorkspaceUpdater(record.directory)
     private val ai get() = (activity.application as AppAiApplication).ai
     private val hostCompatibilityLevel = com.wynh.appapp.BuildConfig.HOST_COMPATIBILITY_LEVEL.toLong()
@@ -69,7 +73,7 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
         layout.error = null
         layout.helperText = "Loading branches…"
         activity.lifecycleScope.launch {
-            val names = runCatching { withContext(Dispatchers.IO) { GitHubUpdateDownloader(activity.cacheDir).branches(target.owner, target.repository) } }
+            val names = runCatching { withContext(Dispatchers.IO) { downloader.branches(target.owner, target.repository) } }
             layout.helperText = null
             if (activity.isFinishing) return@launch
             names.onFailure { layout.error = it.message ?: "Could not load branches" }.onSuccess { list ->
@@ -83,8 +87,8 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
     }
 
     /**
-     * Downloads [source] behind a cancellable progress dialog, then shows the review. Cancel stops
-     * waiting at once; a download still finishing in the background is deleted when it returns.
+     * Checks [source] behind a cancellable progress dialog, then shows the review (see [reviewCommit]).
+     * Cancel stops waiting at once; a download still finishing in the background is deleted when it returns.
      */
     private fun check(source: GitHubSource) {
         var job: kotlinx.coroutines.Job? = null
@@ -97,11 +101,9 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
             onDismissed = { if (!finished) job?.cancel() })
         fun close() { finished = true; progress.dismiss() }
         job = activity.lifecycleScope.launch {
-            var download: GitHubUpdateDownloader.Download? = null
             try {
-                val downloader = GitHubUpdateDownloader(activity.cacheDir)
                 val latest = withContext(Dispatchers.IO) { downloader.latestCommit(source) }
-                // Nothing to download when the branch still points at the installed package, or at
+                // Nothing to read when the branch still points at the installed package, or at
                 // a commit a full check already found identical to it.
                 val installed = updater.installed()
                 if (installed != null && installed.source == source && updater.currentVersion() == installed.version &&
@@ -110,18 +112,54 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
                     showUpToDate(installed.version, source) {}
                     return@launch
                 }
-                withContext(Dispatchers.IO) { downloader.download(source, hostCompatibilityLevel, latest).also { download = it } }
-                review(download!!, source) {
-                    val subjects = runCatching { withContext(Dispatchers.IO) { GitHubUpdateDownloader(activity.cacheDir).recentSubjects(source, updater.installed()?.commit) } }
-                        .getOrDefault(emptyList())
-                    kotlinx.coroutines.currentCoroutineContext().ensureActive()
-                    close()
-                    subjects
-                }
+                reviewCommit(source, latest) { kotlinx.coroutines.currentCoroutineContext().ensureActive(); close() }
             } catch (e: kotlinx.coroutines.CancellationException) {
-                close(); download?.directory?.deleteRecursively(); throw e
-            } catch (e: Exception) { close(); download?.directory?.deleteRecursively(); checkFailed(source, e) }
+                close(); throw e
+            } catch (e: Exception) { close(); checkFailed(source, e) }
         }
+    }
+
+    /**
+     * Reviews [commit] of [source]. A linked app is reviewed from the new manifest and GitHub's
+     * comparison of the installed and new commits, without downloading the package; the files
+     * download only after the user confirms. When the comparison cannot describe the update (first
+     * link, another repository, an older or diverged commit, a failed or truncated comparison), the
+     * package is downloaded and compared file by file instead. [beforeShowing] runs just before a
+     * dialog (or [guided]'s skip) follows. A download is deleted if this fails before the review shows.
+     */
+    internal suspend fun reviewCommit(source: GitHubSource, commit: String, guided: GuidedReview? = null, beforeShowing: suspend () -> Unit = {}) {
+        val installed = updater.installed()
+        val pkg = withContext(Dispatchers.IO) { downloader.manifest(source, commit, hostCompatibilityLevel) }
+        if (guided != null && (installed?.source != source || !VersionUpdateChecker.newer(pkg.version, updater.currentVersion()))) {
+            beforeShowing(); guided.onSkip(); return
+        }
+        val sameRepository = installed != null && installed.source.owner == source.owner && installed.source.repository == source.repository
+        val comparison = if (sameRepository) runCatching { withContext(Dispatchers.IO) { downloader.compare(source, installed!!.commit, commit) } }
+            .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }.getOrNull() else null
+        val note = if (installed == null) null else UpdateReviewCopy.historyNote(comparison, otherRepository = !sameRepository)
+        val planned = comparison?.let { compared ->
+            withContext(Dispatchers.IO) {
+                synchronized(WorkspaceLocks.forWorkspace(record.workspaceDir)) {
+                    updater.plan(pkg, compared, source)?.let { it to updater.reviewedFiles(pkg) }
+                }
+            }
+        }
+        if (planned != null) {
+            val (plan, reviewed) = planned
+            beforeShowing()
+            if (plan.unchanged) {
+                availability.recordUnchanged(record.id, source, commit)
+                showUpToDate(pkg.version, source) {}
+                return
+            }
+            showReview(Pending(pkg, commit, source, plan.preview, reviewed, staged = null, reusable = plan.reusable, comparison = comparison, note = note, guided = guided))
+            return
+        }
+        var download: GitHubUpdateDownloader.Download? = null
+        try {
+            withContext(Dispatchers.IO) { downloader.download(source, hostCompatibilityLevel, commit).also { download = it } }
+            review(download!!, source, guided, comparison, note, beforeShowing)
+        } catch (e: Throwable) { download?.directory?.deleteRecursively(); throw e }
     }
 
     private val availability get() = UpdateAvailability.of(activity)
@@ -140,11 +178,6 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
             dismissLabel = "Close")
     }
 
-    /**
-     * Shows the review of a staged package; [check] calls it after downloading. The dialog owns
-     * [value]'s directory and deletes it unless the update is applied. [subjects] supplies the
-     * optional recent commit subjects.
-     */
     internal data class GuidedReview(
         val position: Int, val total: Int, val appName: String,
         val onSkip: () -> Unit, val onStop: () -> Unit,
@@ -152,36 +185,59 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
         val onShown: (android.app.Dialog) -> Unit,
     )
 
-    internal suspend fun review(value: GitHubUpdateDownloader.Download, source: GitHubSource, guided: GuidedReview? = null, subjects: suspend () -> List<String> = { emptyList() }) {
+    /** Everything a review shows and an accepted update needs. [staged] is null until the files are downloaded. */
+    private class Pending(
+        val pkg: UpdatePackage, val commit: String, val source: GitHubSource, val preview: UpdatePreview,
+        val reviewed: Map<String, String?>, val staged: File?, val reusable: Map<String, String> = emptyMap(),
+        val comparison: Comparison? = null, val note: String? = null, val guided: GuidedReview? = null,
+    )
+
+    /**
+     * Shows the review of an already downloaded package, comparing it with the workspace file by
+     * file; [reviewCommit] uses it when a comparison cannot describe the update. The dialog owns
+     * [value]'s directory and deletes it unless the update is applied. [beforeShowing] runs just
+     * before a dialog (or [guided]'s skip) follows.
+     */
+    internal suspend fun review(value: GitHubUpdateDownloader.Download, source: GitHubSource, guided: GuidedReview? = null,
+                                comparison: Comparison? = null, note: String? = null, beforeShowing: suspend () -> Unit = {}) {
         val (preview, reviewed, unchanged) = withContext(Dispatchers.IO) {
             synchronized(WorkspaceLocks.forWorkspace(record.workspaceDir)) {
                 Triple(updater.preview(value.pkg, value.directory, acceptMismatch = true, source = source), updater.reviewedFiles(value.pkg), updater.publisherUnchanged(value.pkg, value.directory, source))
             }
         }
+        beforeShowing()
         if (guided != null && (updater.installed()?.source != source || !VersionUpdateChecker.newer(value.pkg.version, updater.currentVersion()))) {
             value.directory.deleteRecursively()
             guided.onSkip()
             return
         }
-        val mismatch = updater.identityMismatch(value.pkg, source)
-        val latest = subjects()
-        val installedVersion = updater.currentVersion()
         if (unchanged) {
             availability.recordUnchanged(record.id, source, value.commit)
             showUpToDate(value.pkg.version, source) { value.directory.deleteRecursively() }
             return
         }
+        showReview(Pending(value.pkg, value.commit, source, preview, reviewed, staged = value.directory, comparison = comparison, note = note, guided = guided))
+    }
+
+    private fun showReview(update: Pending) {
+        val preview = update.preview
+        val guided = update.guided
+        val mismatch = updater.identityMismatch(update.pkg, update.source)
+        val installedVersion = updater.currentVersion()
         // Older versions stay installable, for example to switch back from a dev branch, but say so.
-        val older = !preview.adoption && UpdateReviewCopy.isOlder(installedVersion, value.pkg.version)
+        val older = !preview.adoption && (UpdateReviewCopy.isOlder(installedVersion, update.pkg.version) || update.comparison?.status == "behind")
         val granted = com.wynh.appapp.grants.SubappGrants.store(activity).granted(record.id)
+        val latest = UpdateReviewCopy.whatsNew(update.comparison)
         // What changes comes first; the safety details follow in smaller, muted text.
         val text = android.text.SpannableStringBuilder().apply {
             fun bold(value: String) { val start = length; append(value); setSpan(android.text.style.StyleSpan(android.graphics.Typeface.BOLD), start, length, 0) }
             if (mismatch != null) append(UpdateReviewCopy.identityWarning(mismatch, granted)).append("\n\n")
             // App² offers any change to managed files, so say whether the version goes up or stays.
-            bold(UpdateReviewCopy.versionLine(installedVersion.takeUnless { preview.adoption }, value.pkg.version))
-            append("\n${source.display}\n")
-            if (latest.isNotEmpty()) { append("\n"); bold("What's new"); append("\n${latest.joinToString("\n") { "• $it" }}\n") }
+            bold(UpdateReviewCopy.versionLine(installedVersion.takeUnless { preview.adoption }, update.pkg.version))
+            // A warning above already names the new source.
+            append(if (mismatch == null) "\n${update.source.display}\n" else "\n")
+            if (latest.isNotEmpty()) { append("\n"); bold("What's new"); append("\n${latest.joinToString("\n")}\n") }
+            update.note?.let { append("\n$it\n") }
             if (preview.edited.isNotEmpty()) append("\n⚠ ${if (preview.edited.size == 1) "1 code file you edited or removed will be replaced by the publisher's version." else "${preview.edited.size} code files you edited or removed will be replaced by the publisher's versions."}\n")
             val start = length
             append("\nA recovery backup will be saved in Edit → Version history.")
@@ -196,21 +252,15 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
             primary = Action(confirm) { dialog ->
                 accepted = true
                 guided?.onInstalling?.invoke()
-                applyUpdate("GitHub update ${value.pkg.version} · ${value.commit.take(12)}", value.directory,
-                    onRejected = { if (guided != null) guided.onFailure(it) else error(it) }) {
-                    if (guided != null) {
-                        check(updater.installed()?.source == source && VersionUpdateChecker.newer(value.pkg.version, updater.currentVersion())) { "This update no longer matches the installed app" }
-                    }
-                    updater.install(value.pkg, value.directory, value.commit, hostCompatibilityLevel, reviewed, acceptMismatch = mismatch != null, source = source)
-                }
+                applyUpdate(update, acceptMismatch = mismatch != null, onRejected = { if (guided != null) guided.onFailure(it) else error(it) })
                 dialog.dismiss()
             },
             // Only an app that already follows a source can switch it from here.
             secondary = if (guided != null) Action("Skip") { skipped = true; it.dismiss(); guided.onSkip() }
-                else if (preview.adoption) null else Action("Change source") { it.dismiss(); changeSource(source) },
+                else if (preview.adoption) null else Action("Change source") { it.dismiss(); changeSource(update.source) },
             dismissLabel = if (guided != null) "Stop reviewing" else activity.getString(android.R.string.cancel),
             onDismissed = {
-                if (!accepted) value.directory.deleteRecursively()
+                if (!accepted) update.staged?.deleteRecursively()
                 if (guided != null && !accepted && !skipped) guided.onStop()
             })
         guided?.onShown?.invoke(reviewDialog)
@@ -286,23 +336,49 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
         return dialog
     }
 
-    private fun applyUpdate(label: String, staged: File, onRejected: (Exception) -> Unit = ::error, operation: () -> Unit) {
-        if (ai.hasRequest(record.id)) { staged.deleteRecursively(); onRejected(IllegalStateException("Finish and save or cancel the AI request before updating.")); return }
-        if (com.wynh.appapp.workspace.WorkspaceOperations.isBusy(record.workspaceDir)) {
-            staged.deleteRecursively(); onRejected(IllegalStateException("A workspace operation is already in progress.")); return
-        }
+    /**
+     * Installs [update] as a workspace operation, which survives rotation. A review planned from a
+     * comparison downloads the reviewed commit first, while the app keeps running, with a progress
+     * count; files the publisher did not change are copied from the workspace when they still match.
+     */
+    private fun applyUpdate(update: Pending, acceptMismatch: Boolean, onRejected: (Exception) -> Unit = ::error) {
+        val name = runCatching { com.google.gson.JsonParser.parseString(File(record.workspaceDir, "manifest.json").readText()).asJsonObject.get("name").asString }
+            .getOrNull()?.trim()?.takeIf { it.isNotEmpty() }
+        val labels = UpdateReviewCopy.updateLabels(name, update.pkg.version)
+        fun reject(message: String) { update.staged?.deleteRecursively(); onRejected(IllegalStateException(message)) }
+        if (ai.hasRequest(record.id)) { reject("Finish and save or cancel the AI request before updating."); return }
+        if (com.wynh.appapp.workspace.WorkspaceOperations.isBusy(record.workspaceDir)) { reject("A workspace operation is already in progress."); return }
         val controller = androidx.lifecycle.ViewModelProvider(activity)[com.wynh.appapp.workspace.WorkspaceActionController::class.java]
-        if (controller.state.value.busy) {
-            staged.deleteRecursively(); onRejected(IllegalStateException("A workspace operation is already in progress.")); return
+        if (controller.state.value.busy) { reject("A workspace operation is already in progress."); return }
+        // The operation may outlive this screen, so capture plain values rather than the controller.
+        val downloader = downloader
+        val updater = updater
+        val level = hostCompatibilityLevel
+        val guided = update.guided != null
+        val downloaded = java.util.concurrent.atomic.AtomicReference<File?>(update.staged)
+        val prepare: (() -> Unit)? = if (update.staged != null) null else {
+            {
+                val result = downloader.download(update.source, level, update.commit,
+                    reuse = { path, target -> update.reusable[path]?.let { updater.copyIfUnchanged(path, it, target) } ?: false },
+                    progress = { done, total -> controller.report(UpdateReviewCopy.downloadProgress(done, total)) })
+                downloaded.set(result.directory)
+                // The package must still be the one reviewed; install() checks the staged manifest again.
+                check(result.pkg == update.pkg) { "The update changed since review; check again" }
+                controller.report("")
+            }
         }
         // The controller deletes the staged download whether the operation ran, failed or was refused;
         // the screen that shows the result is whichever one is started when it finishes.
-        controller.execute(record, label, completion = com.wynh.appapp.workspace.WorkspaceActionController.Completion(com.wynh.appapp.workspace.WorkspaceActionController.Kind.UPDATED, subject = record.id),
-            cleanup = { staged.deleteRecursively() }) { workspace, history ->
+        controller.execute(record, labels.progress, completion = com.wynh.appapp.workspace.WorkspaceActionController.Completion(com.wynh.appapp.workspace.WorkspaceActionController.Kind.UPDATED, subject = record.id),
+            cleanup = { downloaded.get()?.deleteRecursively() }, prepare = prepare) { workspace, history ->
+            val files = checkNotNull(downloaded.get()) { "Update files were not downloaded" }
+            if (guided) {
+                check(updater.installed()?.source == update.source && VersionUpdateChecker.newer(update.pkg.version, updater.currentVersion())) { "This update no longer matches the installed app" }
+            }
             history.ensureInitialVersion(workspace)
-            check(history.saveSnapshot(workspace, "Before $label") != null) { "Could not save version history; update cancelled" }
-            operation()
-            check(history.saveSnapshot(workspace, label) != null) { "App updated, but version history could not be saved" }
+            check(history.saveSnapshot(workspace, labels.before) != null) { "Could not save version history; update cancelled" }
+            updater.install(update.pkg, files, update.commit, level, update.reviewed, acceptMismatch = acceptMismatch, source = update.source)
+            check(history.saveSnapshot(workspace, labels.after) != null) { "App updated, but version history could not be saved" }
         }
     }
 }

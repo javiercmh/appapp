@@ -20,8 +20,9 @@ class GitHubClient(
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     private val deadline = timeoutMillis?.let { clock() + it }
-    var bytes = 0L
-        private set
+    private val received = java.util.concurrent.atomic.AtomicLong()
+    /** Bytes received so far across every response; safe to share between download threads. */
+    val bytes: Long get() = received.get()
 
     fun get(address: String, limit: Long, accept: String? = null): ByteArray {
         var url = checked(URL(address))
@@ -58,8 +59,8 @@ class GitHubClient(
         while (true) {
             checkDeadline()
             val count = input.read(buffer); if (count < 0) break
-            if (counted) bytes += count
-            require(output.size() + count <= limit && bytes <= totalLimit) { "GitHub download exceeds size limit" }
+            val total = if (counted) received.addAndGet(count.toLong()) else bytes
+            require(output.size() + count <= limit && total <= totalLimit) { "GitHub download exceeds size limit" }
             output.write(buffer, 0, count)
         }
         return output.toByteArray()

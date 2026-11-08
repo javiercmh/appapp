@@ -14,6 +14,7 @@ import androidx.test.espresso.action.ViewActions.click
 import androidx.test.espresso.assertion.ViewAssertions.matches
 import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
 import androidx.test.espresso.matcher.ViewMatchers.withId
+import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.espresso.matcher.RootMatchers.isDialog
 import com.google.gson.Gson
 import com.wynh.appapp.R
@@ -155,18 +156,30 @@ class VersionUpdatesDeviceTest {
         } }
         val indicators = SubappUpdateIndicators.of(context)
         records.forEach { indicators.record(it.id, VersionUpdateChecker.PublishedVersion(source, commit, "2.0")) }
-        val downloader = GitHubUpdateDownloader(context.cacheDir) { url -> Response(url,
-            if (url.path.endsWith("manifest.json")) manifest("2.0") else "new code") }
+        // GitHub's comparison names the changed files, so each review shows before any file is
+        // downloaded; the accepted update then downloads the reviewed commit.
+        val requests = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val subject = "Fixture commit ${System.nanoTime()}" // the review must show the commit GitHub reported
+        val compare = """{"status":"ahead","ahead_by":1,"behind_by":0,"total_commits":1,"commits":[{"commit":{"message":"$subject"}}],
+            "files":[{"filename":"index.html","status":"modified"},{"filename":"manifest.json","status":"modified"}]}"""
+        val downloader = GitHubUpdateDownloader(context.cacheDir) { url -> requests.add(url.path); Response(url, when {
+            "/compare/" in url.path -> compare
+            url.path.endsWith("manifest.json") -> manifest("2.0")
+            else -> "new code"
+        }) }
         val scenario = ActivityScenario.launch<SubappLibraryActivity>(Intent(context, SubappLibraryActivity::class.java))
         try {
             scenario.onActivity { it.reviewUpdates(records, downloader) }
             waitUntil { runCatching { onView(withId(R.id.update_review_confirm)).inRoot(isDialog()).check(matches(isDisplayed())) }.isSuccess }
+            onView(withId(R.id.update_review_message)).inRoot(isDialog()).check(matches(withText(org.hamcrest.Matchers.containsString(subject))))
+            assertFalse("the review must show before any package file downloads", requests.any { it.endsWith("/index.html") })
             onView(withId(R.id.update_review_secondary)).inRoot(isDialog()).perform(click())
             instrumentation.waitForIdleSync()
             waitUntil { runCatching { onView(withId(R.id.update_review_confirm)).inRoot(isDialog()).check(matches(isDisplayed())) }.isSuccess }
             assertEquals("1.0", WorkspaceUpdater(records[0].directory).currentVersion())
             onView(withId(R.id.update_review_confirm)).inRoot(isDialog()).perform(click())
             waitUntil { WorkspaceUpdater(records[1].directory).currentVersion() == "2.0" }
+            assertTrue("the accepted update downloads the changed file", requests.any { it.endsWith("/index.html") })
             instrumentation.waitForIdleSync()
             waitUntil { runCatching { onView(withId(R.id.update_review_confirm)).inRoot(isDialog()).check(matches(isDisplayed())) }.isSuccess }
             onView(withId(R.id.update_review_cancel)).inRoot(isDialog()).perform(click())

@@ -27,19 +27,24 @@ class WorkspaceActionController(private val app: Application) : AndroidViewModel
      */
     data class Completion(val kind: Kind, val subject: String = "", val payload: String = "", val id: Long = 0)
 
-    data class State(val busy: Boolean = false, val message: String = "", val error: Boolean = false, val completions: List<Completion> = emptyList())
+    /** [detail] is optional progress text under the operation's [message], such as a download count. */
+    data class State(val busy: Boolean = false, val message: String = "", val error: Boolean = false, val completions: List<Completion> = emptyList(), val detail: String = "")
     private val value = MutableStateFlow(State())
     val state = value.asStateFlow()
     private var sequence = 0L
 
     fun clear() { if (!value.value.busy) value.update { it.copy(message = "", error = false) } }
+    /** Updates the running operation's progress detail; ignored when nothing runs. Safe from any thread. */
+    fun report(detail: String) { value.update { if (it.busy) it.copy(detail = detail) else it } }
     fun acknowledge(id: Long) { value.update { state -> state.copy(completions = state.completions.filterNot { it.id == id }) } }
 
     /**
      * Runs [action] with the app's workspace reserved. A [replacement] (restore, update, reset)
      * suspends the app's live sessions and makes them reload; any other operation leaves running
-     * pages alone. [cleanup] runs exactly once afterwards, also when the operation is refused or
-     * fails, so staged files cannot leak. The operation outlives the screen that started it.
+     * pages alone. [prepare], when given, runs first on I/O without the reservation, so slow work
+     * such as a download does not pause the app; if it fails, the workspace is never reserved.
+     * [cleanup] runs exactly once afterwards, also when the operation is refused or fails, so staged
+     * files cannot leak. The operation outlives the screen that started it.
      */
     fun execute(
         record: SubappRecord,
@@ -47,28 +52,38 @@ class WorkspaceActionController(private val app: Application) : AndroidViewModel
         replacement: Boolean = true,
         completion: Completion? = null,
         cleanup: () -> Unit = {},
+        prepare: (() -> Unit)? = null,
         action: (WorkspaceManager, WorkspaceHistoryManager) -> Unit
     ) {
         if (value.value.busy) { discard(cleanup); return }
-        val lease = try { WorkspaceOperations.reserve(record.workspaceDir, replacement) } catch (e: Exception) {
+        // Without a preparation step, reserve now on the UI thread so a refusal is immediate.
+        val early = if (prepare != null) null else try { WorkspaceOperations.reserve(record.workspaceDir, replacement) } catch (e: Exception) {
             value.update { it.copy(message = e.message ?: "Workspace is busy", error = true) }; discard(cleanup); return
         }
-        value.update { it.copy(busy = true, message = label, error = false) }
+        value.update { it.copy(busy = true, message = label, error = false, detail = "") }
         scope.launch(start = CoroutineStart.UNDISPATCHED) {
             var failure: String? = null
+            var lease = early
+            var paused = false
             try {
-                if (replacement) SubappSessionRegistry.pause(record.id)
+                if (prepare != null) {
+                    withContext(Dispatchers.IO) { prepare() }
+                    // Back on the UI thread, as reservations expect.
+                    lease = WorkspaceOperations.reserve(record.workspaceDir, replacement)
+                }
+                val reserved = lease!!
+                if (replacement) { SubappSessionRegistry.pause(record.id); paused = true }
                 withContext(Dispatchers.IO) {
-                    lease.run { action(WorkspaceManager(app, workspaceDir = record.workspaceDir), WorkspaceHistoryManager(app, appDirectory = record.directory)) }
+                    reserved.run { action(WorkspaceManager(app, workspaceDir = record.workspaceDir), WorkspaceHistoryManager(app, appDirectory = record.directory)) }
                 }
             } catch (e: Exception) {
                 failure = e.message ?: "Operation failed"
             } finally {
-                lease.close()
+                lease?.close()
                 withContext(Dispatchers.IO) { runCatching(cleanup) }
-                if (replacement) SubappSessionRegistry.resume(record.id)
+                if (paused) SubappSessionRegistry.resume(record.id)
                 val finished = if (failure == null && completion != null) listOf(completion.copy(id = ++sequence)) else emptyList()
-                value.update { it.copy(busy = false, message = failure ?: "", error = failure != null, completions = it.completions + finished) }
+                value.update { it.copy(busy = false, message = failure ?: "", error = failure != null, detail = "", completions = it.completions + finished) }
             }
         }
     }

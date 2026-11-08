@@ -10,7 +10,11 @@ data class GitHubSource(val owner: String, val repository: String, val branch: S
         require(owner.matches(Regex("[A-Za-z0-9_.-]+")) && repository.matches(Regex("[A-Za-z0-9_.-]+"))) { "Invalid GitHub repository" }
         require(branch.isNotBlank() && branch.length <= 200 && !branch.any { it.isISOControl() }) { "Invalid GitHub branch" }
     }
-    val display: String get() = "$owner/$repository ($branch)"
+    /** The branch as people read it: a pinned commit shows as its short hash. */
+    val ref: String get() = if (branch.matches(Regex("[a-f0-9]{40}"))) "commit ${branch.take(7)}" else branch
+    val display: String get() = "$owner/$repository ($ref)"
+    /** Stable identity for stored state, independent of how the source is shown. */
+    val key: String get() = "$owner/$repository ($branch)"
 }
 
 /**

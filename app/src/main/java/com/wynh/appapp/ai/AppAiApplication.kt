@@ -9,5 +9,7 @@ class AppAiApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         ai = AppAiManager(this)
+        // No review or update of this new process owns a staged download yet, so any left are orphans.
+        Thread({ runCatching { com.wynh.appapp.updates.GitHubUpdateDownloader.sweepStaged(cacheDir) } }, "update-cache-sweep").start()
     }
 }

@@ -29,8 +29,10 @@ object WorkspaceOperationUi {
                 try {
                     controller.state.collect { state ->
                         if (state.busy) {
+                            val detail = state.detail.ifEmpty { activity.getString(R.string.workspace_working) }
                             if (progress == null) progress = MaterialAlertDialogBuilder(activity).setTitle(state.message)
-                                .setMessage(R.string.workspace_working).setCancelable(false).show()
+                                .setMessage(detail).setCancelable(false).show()
+                            else progress?.setMessage(detail)
                         } else {
                             progress?.dismiss(); progress = null
                             if (state.error) {

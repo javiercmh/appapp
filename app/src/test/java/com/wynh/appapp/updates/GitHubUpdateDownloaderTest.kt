@@ -100,4 +100,74 @@ class GitHubUpdateDownloaderTest {
         }
         assertTrue(temp.root.listFiles()!!.isEmpty())
     }
+
+    private val base = "a".repeat(40)
+    private val compareJson = """{"status":"ahead","ahead_by":3,"behind_by":0,"total_commits":3,
+        "commits":[{"sha":"1","commit":{"message":"Oldest change\n\nbody"}},{"sha":"2","commit":{"message":"Middle"}},{"sha":"3","commit":{"message":"Newest change"}}],
+        "files":[{"filename":"js/app.js","status":"modified","patch":"@@"},{"filename":"js/new.js","status":"renamed","previous_filename":"js/old.js"}]}"""
+
+    @Test fun compareAsksForBothCommitsAndListsNewestSubjectsFirst() {
+        val urls = mutableListOf<String>()
+        val downloader = GitHubUpdateDownloader(temp.root) { url -> urls.add(url.toString()); Response(url, compareJson.toByteArray()) }
+        val comparison = downloader.compare(source, base, commit)
+        assertEquals(listOf("https://api.github.com/repos/owner/repo/compare/$base...$commit"), urls)
+        assertEquals("ahead", comparison.status)
+        assertEquals(listOf("Newest change", "Middle", "Oldest change"), comparison.subjects)
+        assertEquals(setOf("js/app.js", "js/new.js", "js/old.js"), comparison.touchedPaths)
+        assertTrue(comparison.filesComplete)
+        assertThrows(IllegalArgumentException::class.java) { downloader.compare(source, "main", commit) }
+    }
+
+    @Test fun aFullFileListIsTreatedAsPossiblyTruncated() {
+        val files = (1..Comparison.MAX_FILES).joinToString(",") { """{"filename":"f$it.js","status":"modified"}""" }
+        val comparison = Comparison.parse("""{"status":"ahead","ahead_by":1,"behind_by":0,"total_commits":1,"commits":[],"files":[$files]}""")
+        assertFalse(comparison.filesComplete)
+    }
+
+    @Test fun manifestReadsOnlyTheManifestAtThePinnedCommit() {
+        val urls = mutableListOf<String>()
+        val downloader = GitHubUpdateDownloader(temp.root) { url -> urls.add(url.toString()); Response(url, manifest.toByteArray()) }
+        assertEquals("test.publisher", downloader.manifest(source, commit, 4).appId)
+        assertEquals(listOf("https://raw.githubusercontent.com/owner/repo/$commit/manifest.json"), urls)
+        assertThrows(IllegalArgumentException::class.java) { downloaderFor(12).manifest(source, commit, 11) }
+        assertTrue(temp.root.listFiles()!!.isEmpty())
+    }
+
+    @Test fun reusedFilesAreNotRequestedAndProgressReachesTheTotal() {
+        val many = manifest.replace("\"managedFiles\":[\"index.html\",\"manifest.json\"]", "\"managedFiles\":[\"index.html\",\"manifest.json\",\"js/a.js\",\"js/b.js\",\"js/c.js\"]")
+        val urls = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val downloader = GitHubUpdateDownloader(temp.root) { url ->
+            urls.add(url.toString())
+            Response(url, if (url.path.endsWith("manifest.json")) many.toByteArray() else "fetched".toByteArray())
+        }
+        val reports = java.util.Collections.synchronizedList(mutableListOf<Pair<Int, Int>>())
+        val result = downloader.download(source, 4, commit,
+            reuse = { path, target -> if (path == "js/b.js") { target.writeText("local"); true } else false },
+            progress = { done, total -> reports.add(done to total) })
+        assertEquals("local", result.directory.resolve("js/b.js").readText())
+        assertEquals("fetched", result.directory.resolve("js/c.js").readText())
+        assertFalse(urls.any { it.endsWith("/js/b.js") })
+        assertEquals(4, urls.size) // manifest, index.html, js/a.js, js/c.js
+        assertEquals(5 to 5, reports.maxByOrNull { it.first })
+    }
+
+    @Test fun aFailedFileRemovesTheWholeStagedDownload() {
+        val many = manifest.replace("\"managedFiles\":[\"index.html\",\"manifest.json\"]", "\"managedFiles\":[\"index.html\",\"manifest.json\",\"js/a.js\",\"js/b.js\",\"js/c.js\",\"js/d.js\"]")
+        val downloader = GitHubUpdateDownloader(temp.root) { url ->
+            when {
+                url.path.endsWith("manifest.json") -> Response(url, many.toByteArray())
+                url.path.endsWith("/js/c.js") -> Response(url, byteArrayOf(), 404)
+                else -> Response(url, "ok".toByteArray())
+            }
+        }
+        assertThrows(IllegalArgumentException::class.java) { downloader.download(source, 4, commit) }
+        assertTrue(temp.root.listFiles()!!.isEmpty())
+    }
+
+    @Test fun sweepRemovesOnlyStagedUpdates() {
+        temp.newFolder("update-1234").resolve("index.html").writeText("left behind")
+        temp.newFolder("exports")
+        GitHubUpdateDownloader.sweepStaged(temp.root)
+        assertEquals(listOf("exports"), temp.root.list()!!.toList())
+    }
 }

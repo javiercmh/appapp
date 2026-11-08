@@ -8,6 +8,13 @@ import java.io.File
 data class InstalledUpdate(val appId: String, val version: String, val source: GitHubSource, val commit: String, val hashes: Map<String, String>, val seeds: Set<String>)
 data class UpdatePreview(val added: List<String>, val changed: List<String>, val removed: List<String>, val edited: List<String>, val adoption: Boolean)
 
+/**
+ * A review planned from a GitHub comparison. [unchanged] means no publisher file changed, so the app
+ * is up to date. [reusable] maps the managed files the publisher did not touch to their recorded
+ * hashes; an update copies those from the workspace when they still match instead of downloading them.
+ */
+data class UpdatePlan(val preview: UpdatePreview, val unchanged: Boolean, val reusable: Map<String, String>)
+
 class WorkspaceUpdater(private val directory: File) {
     private val workspace = File(directory, "workspace")
     private val state = File(directory, "update-state.json")
@@ -42,8 +49,8 @@ class WorkspaceUpdater(private val directory: File) {
     fun identityMismatch(pkg: UpdatePackage, source: GitHubSource = pkg.source): String? {
         val old = installed() ?: return null
         return buildList {
-            if (old.appId != pkg.appId) add("Publisher ID: installed ${old.appId}, publisher now declares ${pkg.appId}")
-            if (old.source != source) add("Source: installed from ${old.source.display}, this update comes from ${source.display}")
+            if (old.appId != pkg.appId) add(UpdateReviewCopy.publisherChange(old.appId, pkg.appId))
+            if (old.source != source) add(UpdateReviewCopy.sourceChange(old.source, source))
         }.takeIf { it.isNotEmpty() }?.joinToString("\n")
     }
 
@@ -57,6 +64,44 @@ class WorkspaceUpdater(private val directory: File) {
         val edited = old?.hashes?.filter { (path, hash) -> !File(workspace, path).isFile || digest(File(workspace, path)) != hash }?.keys?.toList()
             ?: changed
         return UpdatePreview(added, changed, removed, edited, old == null)
+    }
+
+    /**
+     * Plans an update from GitHub's [comparison] of the installed commit with the new one, without
+     * downloading the package. [pkg] is the new manifest. Returns null when the comparison cannot
+     * describe the update exactly, and the caller downloads and compares the package instead: nothing
+     * installed yet, another repository, an older or diverged commit (GitHub then lists the files
+     * changed since the common ancestor, not between the two commits), or a truncated file list.
+     */
+    fun plan(pkg: UpdatePackage, comparison: Comparison, source: GitHubSource): UpdatePlan? {
+        val old = installed() ?: return null
+        if (old.source.owner != source.owner || old.source.repository != source.repository) return null
+        if (comparison.status !in setOf("ahead", "identical") || !comparison.filesComplete) return null
+        val touched = comparison.touchedPaths
+        // A managed file the publisher did not touch still has the content recorded at the last install.
+        val reusable = pkg.managed.filter { it !in touched }.mapNotNull { path -> old.hashes[path]?.let { path to it } }.toMap()
+        val unchanged = old.appId == pkg.appId && old.source == source && reusable.keys == pkg.managed && old.hashes.keys == pkg.managed &&
+            old.seeds == pkg.seeds && old.version == pkg.version && currentVersion() == pkg.version
+        fun local(path: String) = File(workspace, path).takeIf { it.isFile }?.let(::digest)
+        val added = pkg.managed.filter { !File(workspace, it).exists() }
+        // A present file changes when its new content differs from the local one: the publisher changed
+        // it, it was not managed before, or the user edited it since the last install.
+        val changed = pkg.managed.filter { path -> File(workspace, path).isFile && (path !in reusable || local(path) != reusable[path]) }
+        val removed = old.hashes.keys.filter { it !in pkg.managed && it !in pkg.seeds }
+        val edited = old.hashes.filter { (path, hash) -> local(path) != hash }.keys.toList()
+        return UpdatePlan(UpdatePreview(added, changed, removed, edited, adoption = false), unchanged, reusable)
+    }
+
+    /**
+     * Copies the workspace file at [path] to [target] when the copy has exactly [hash], the publisher
+     * content recorded at the last install. The copy itself is checked, so an edit racing the copy
+     * only means the file is downloaded instead.
+     */
+    fun copyIfUnchanged(path: String, hash: String, target: File): Boolean = synchronized(WorkspaceLocks.forWorkspace(workspace)) {
+        val file = File(workspace, safePath(path))
+        if (!file.isFile) return false
+        file.copyTo(target, overwrite = true)
+        digest(target) == hash
     }
 
     fun reviewedFiles(pkg: UpdatePackage): Map<String, String?> = synchronized(WorkspaceLocks.forWorkspace(workspace)) {

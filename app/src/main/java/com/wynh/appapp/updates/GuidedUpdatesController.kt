@@ -5,11 +5,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.wynh.appapp.workspace.SubappRecord
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 /** A review queue never installs anything until the user accepts each existing update review. */
 class GuidedUpdatesController(
@@ -56,34 +54,30 @@ class GuidedUpdatesController(
         val available = indicators.available(record)
         if (available == null) { changed(); advance(); return }
         val name = runCatching { com.google.gson.JsonParser.parseString(java.io.File(record.workspaceDir, "manifest.json").readText()).asJsonObject.get("name").asString }.getOrNull()?.takeIf { it.isNotBlank() } ?: "Subapp"
-        val controller = UpdateController(activity, record)
+        val controller = UpdateController(activity, record, downloader)
         var loaded = false
         dialog = controller.showUpdateDialog("Preparing update ${index + 1} of ${records.size}",
-            "$name\nChecking and downloading the selected update…", primary = null, dismissLabel = "Stop reviewing",
+            "$name\nChecking the selected update…", primary = null, dismissLabel = "Stop reviewing",
             onDismissed = { if (!loaded) stop() })
         job = activity.lifecycleScope.launch {
-            var download: GitHubUpdateDownloader.Download? = null
             try {
-                withContext(Dispatchers.IO) {
-                    downloader.download(available.source,
-                        com.wynh.appapp.BuildConfig.HOST_COMPATIBILITY_LEVEL.toLong(), available.commit).also { download = it }
-                }
-                ensureActive()
-                loaded = true
-                dialog?.dismiss(); dialog = null
-                controller.review(download!!, available.source, UpdateController.GuidedReview(
+                // Reads the manifest and GitHub's comparison; files download only once the user accepts.
+                controller.reviewCommit(available.source, available.commit, UpdateController.GuidedReview(
                     index + 1, records.size, name,
                     onSkip = { changed(); advance() }, onStop = ::stop,
                     onInstalling = { waitingForInstall = true; dialog = null },
                     onFailure = { waitingForInstall = false; failure(it) },
                     onShown = { dialog = it },
-                ))
+                )) {
+                    ensureActive()
+                    loaded = true
+                    dialog?.dismiss(); dialog = null
+                }
             } catch (e: CancellationException) {
-                download?.directory?.deleteRecursively(); throw e
+                throw e
             } catch (e: Exception) {
                 loaded = true
                 dialog?.dismiss(); dialog = null
-                download?.directory?.deleteRecursively()
                 failure(e)
             }
         }

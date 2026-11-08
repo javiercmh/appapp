@@ -162,7 +162,7 @@ class WorkspaceUpdaterTest {
         val dev = GitHubSource("test", "app", "dev")
         // Same files from a dev branch whose manifest still declares main: still a change of source.
         assertFalse(engine.publisherUnchanged(pkg, files, dev))
-        assertTrue(engine.identityMismatch(pkg, dev)!!.contains("app (dev)"))
+        assertTrue(engine.identityMismatch(pkg, dev)!!.contains("dev"))
         assertThrows(IllegalArgumentException::class.java) { engine.install(pkg, files, sha2, 3, source = dev) }
         engine.install(pkg, files, sha2, 3, acceptMismatch = true, source = dev)
         assertEquals(dev, WorkspaceUpdater(root).installed()!!.source)
@@ -184,5 +184,65 @@ class WorkspaceUpdaterTest {
     @Test fun manifestBranchIsOptionalAndDefaultsToMain() {
         val manifest = """{"version":"1","app2Update":{"appId":"test.publisher","minimumHostVersionCode":3,"github":{"owner":"test","repository":"app"},"managedFiles":["index.html","manifest.json"],"seedFiles":[]}}"""
         assertEquals(GitHubSource("test", "app", "main"), UpdatePackage.parse(manifest).source)
+    }
+
+    private val repoSource = GitHubSource("test", "app", "main")
+    private fun comparison(status: String = "ahead", vararg files: String) =
+        Comparison(status, 1, 0, 1, listOf("Change"), files.map { ChangedFile(it, "modified") })
+
+    @Test fun planWithoutPublisherChangesIsUpToDateDespiteLocalEdits() {
+        val root = workspace(); val engine = WorkspaceUpdater(root)
+        val (pkg, files) = packageFiles("1")
+        engine.install(pkg, files, sha1, 3)
+        write(root, "workspace/index.html", "local edit")
+        val plan = engine.plan(pkg, comparison("ahead", "README.md", ".github/workflows/check.yml"), repoSource)!!
+        assertTrue(plan.unchanged)
+        assertEquals(pkg.managed, plan.reusable.keys)
+    }
+
+    @Test fun planListsPublisherChangesLocalEditsAndRemovalsWithoutDownloading() {
+        val root = workspace(); val engine = WorkspaceUpdater(root)
+        val (v1, files1) = packageFiles("1")
+        engine.install(v1, files1, sha1, 3)
+        write(root, "workspace/data/definitions.json", "edited locally")
+        val (v2, _) = packageFiles("2", "js/new.js")
+        val plan = engine.plan(v2, comparison("ahead", "manifest.json", "index.html", "js/new.js", "js/old.js"), repoSource)!!
+        assertFalse(plan.unchanged)
+        assertEquals(listOf("js/new.js"), plan.preview.added)
+        assertEquals(setOf("manifest.json", "index.html", "data/definitions.json"), plan.preview.changed.toSet())
+        assertEquals(listOf("js/old.js"), plan.preview.removed)
+        assertEquals(listOf("data/definitions.json"), plan.preview.edited)
+        // Only the untouched file can be copied from the workspace; it is edited, so the copy is refused.
+        assertEquals(setOf("data/definitions.json"), plan.reusable.keys)
+        val target = temp.newFile()
+        assertFalse(engine.copyIfUnchanged("data/definitions.json", plan.reusable.getValue("data/definitions.json"), target))
+    }
+
+    @Test fun unchangedLocalFilesAreCopiedAndInstallMatchesAFullDownload() {
+        val root = workspace(); val engine = WorkspaceUpdater(root)
+        val (v1, files1) = packageFiles("1")
+        engine.install(v1, files1, sha1, 3)
+        val (v2, files2) = packageFiles("2")
+        write(files2, "data/definitions.json", "1") // the publisher left this file alone
+        val plan = engine.plan(v2, comparison("ahead", "manifest.json", "index.html", "js/old.js"), repoSource)!!
+        val staged = temp.newFolder()
+        assertTrue(engine.copyIfUnchanged("data/definitions.json", plan.reusable.getValue("data/definitions.json"), File(staged, "definitions.json")))
+        assertEquals("1", File(staged, "definitions.json").readText())
+        engine.install(v2, files2, sha2, 3)
+        assertTrue(engine.publisherUnchanged(v2, files2))
+    }
+
+    @Test fun planFallsBackWhenTheComparisonCannotDescribeTheUpdate() {
+        val root = workspace(); val engine = WorkspaceUpdater(root)
+        val (pkg, files) = packageFiles("1")
+        assertNull("nothing installed", engine.plan(pkg, comparison(), repoSource))
+        engine.install(pkg, files, sha1, 3)
+        assertNull("older commit", engine.plan(pkg, comparison("behind"), repoSource))
+        assertNull("diverged", engine.plan(pkg, comparison("diverged"), repoSource))
+        assertNull("other repository", engine.plan(pkg, comparison(), GitHubSource("fork", "app", "main")))
+        val full = Comparison("ahead", 1, 0, 1, emptyList(), (1..Comparison.MAX_FILES).map { ChangedFile("f$it", "modified") })
+        assertNull("truncated file list", engine.plan(pkg, full, repoSource))
+        assertNotNull("another branch of the same repository", engine.plan(pkg, comparison(), GitHubSource("test", "app", "dev")))
+        assertFalse("a branch switch is never reported as up to date", engine.plan(pkg, comparison(), GitHubSource("test", "app", "dev"))!!.unchanged)
     }
 }

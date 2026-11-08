@@ -20,8 +20,52 @@ object UpdateReviewCopy {
 
     /** Shown first in the review when the package declares a different publisher ID or GitHub source. */
     fun identityWarning(mismatch: String, granted: Set<SubappCapability>): String =
-        "⚠ The publisher identity or source differs from the installed app:\n$mismatch\n\n" +
+        "⚠ This update doesn't match the installed app:\n$mismatch\n\n" +
             permissionSummary(granted) + "\nOnly continue if you trust this repository."
+
+    /**
+     * The "What's new" bullets: the newest [limit] commit subjects, then how many commits are not
+     * shown. Empty unless the new commit is ahead of the installed one.
+     */
+    fun whatsNew(comparison: Comparison?, limit: Int = 10): List<String> {
+        if (comparison?.status != "ahead") return emptyList()
+        val shown = comparison.subjects.take(limit)
+        val more = comparison.totalCommits - shown.size
+        return shown.map { "• $it" } + if (more > 0) listOf("+ $more more ${if (more == 1) "commit" else "commits"}") else emptyList()
+    }
+
+    /**
+     * Why commits are not listed, when an installed app's new commit is not simply ahead of the
+     * installed one; null when there is nothing to explain. [otherRepository] is true when the update
+     * comes from a different repository than the installed version, which GitHub cannot compare.
+     */
+    fun historyNote(comparison: Comparison?, otherRepository: Boolean): String? = when {
+        otherRepository -> "Commits aren't listed because this update comes from a different repository than the installed version."
+        comparison?.status == "behind" -> "⚠ This commit is ${comparison.behindBy} ${if (comparison.behindBy == 1) "commit" else "commits"} behind the installed version, so installing it goes back."
+        comparison?.status == "diverged" -> "The installed version isn't part of this branch's history, so the commits in between can't be listed."
+        else -> null
+    }
+
+    data class UpdateLabels(val progress: String, val before: String, val after: String)
+
+    /**
+     * The progress title and the two Version history entries of an update, by app name and version.
+     * Commits stay out of them: history entries carry their own time.
+     */
+    fun updateLabels(appName: String?, version: String): UpdateLabels {
+        val app = appName ?: "app"
+        return UpdateLabels("Updating $app to $version", "Before update to $app $version", "Updated to $app $version")
+    }
+
+    /** Detail of the update progress while package files download. */
+    fun downloadProgress(done: Int, total: Int) = "Downloading files ($done of $total)…"
+
+    /** One line of [identityWarning]: the old and new source, naming the repository only when it changes. */
+    fun sourceChange(old: GitHubSource, new: GitHubSource): String =
+        if (old.owner == new.owner && old.repository == new.repository) "Branch: ${old.ref} → ${new.ref}"
+        else "Repository: ${old.display} → ${new.display}"
+
+    fun publisherChange(old: String, new: String) = "Publisher ID: $old → $new"
 
     /** Plain-language reason a check failed, followed by the source it tried. */
     fun checkFailure(e: Throwable, source: GitHubSource): String {

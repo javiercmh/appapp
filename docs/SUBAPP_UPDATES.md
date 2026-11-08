@@ -50,7 +50,8 @@ and like any source change it is shown as a warning that needs **Update anyway**
 Switching back to `main` works the same way.
 
 Publisher IDs are independent of App²'s stable installed subapp IDs. The host
-resolves the branch to a commit and downloads only declared files at that commit.
+resolves the branch to a commit and downloads only declared files at that commit,
+after the review (see below).
 It records commit, source and managed hashes beside the workspace. Private repos,
 repository subfolders and automatic data migrations are not supported in v1.
 The repository must be anonymously readable from the phone; SSH access on the
@@ -129,8 +130,27 @@ Versions compare as dotted numbers with an optional pre-release suffix:
 
 App² first asks GitHub for the branch's newest commit. When that is the installed
 commit (or one a full check already found identical), it reports **App is up to
-date** without downloading. App² never checks for updates on its own. The review lists the added (+),
-changed (~) and removed (−) files under **Show changed files**.
+date** without downloading. App² never checks for updates on its own. Otherwise it
+reads only the new `manifest.json` and asks GitHub to compare the installed commit
+with the new one (one request returning both the commits and the changed files).
+The review is built from that, before any package file is downloaded: **What's new**
+lists the newest commit subjects (with "+ N more commits"), and **Show changed files**
+lists the added (+), changed (~) and removed (−) files. If no managed file changed and
+the version is the same, it reports **App is up to date**. Only after **Update** does
+App² download the reviewed commit, four files at a time with a progress count, while
+the app keeps running. Managed files the publisher did not touch are copied from the
+workspace when they still match the hashes recorded at the last install, so only the
+changed files are fetched. That download runs as part of the update operation, so it
+survives rotation. Reviewing several apps' updates in a row from the library uses the same
+commit-first review for each app.
+
+When GitHub's comparison cannot describe the update exactly, App² downloads the whole
+package and compares it file by file before the review, as before: an app being linked
+for the first time, a source in another repository (a fork), a commit that is older
+than or has diverged from the installed one, a failed comparison, or one listing
+GitHub's maximum of 300 files. The review then says why commits are not listed, for
+example that the commit is N commits behind the installed version. Downloads left
+behind by an interrupted check or update are removed when App² next starts.
 
 ## Low-token routine
 
