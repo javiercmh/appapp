@@ -93,10 +93,10 @@ class UpdatePermissionPreservationTest {
         val some = UpdateReviewCopy.identityWarning("Source: a → b", setOf(SubappCapability.AI, SubappCapability.NETWORK))
         assertTrue(some.contains("publisher identity or source differs"))
         assertTrue(some.contains("Source: a → b"))
-        assertTrue(some.contains("Existing permissions are kept. Current permissions: AI, Internet. Permissions that are off stay off."))
+        assertTrue(some.contains("Existing permissions are kept: AI, Internet."))
         assertFalse(some.contains("Notifications"))
-        assertTrue(UpdateReviewCopy.permissionSummary(emptySet()).startsWith("Existing permissions are kept. Current permissions: none."))
-        assertTrue(UpdateReviewCopy.permissionSummary(SubappCapability.entries.toSet()).contains("Current permissions: AI, Notifications, Internet."))
+        assertTrue(UpdateReviewCopy.permissionSummary(emptySet()).startsWith("Existing permissions are kept: none."))
+        assertTrue(UpdateReviewCopy.permissionSummary(SubappCapability.entries.toSet()).contains("Existing permissions are kept: AI, Notifications, Internet."))
         assertFalse(some.contains("prompt", ignoreCase = true))
     }
 }

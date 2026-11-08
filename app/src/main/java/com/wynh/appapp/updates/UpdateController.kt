@@ -184,7 +184,7 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
             if (latest.isNotEmpty()) { append("\n"); bold("What's new"); append("\n${latest.joinToString("\n") { "• $it" }}\n") }
             if (preview.edited.isNotEmpty()) append("\n⚠ ${if (preview.edited.size == 1) "1 code file you edited or removed will be replaced by the publisher's version." else "${preview.edited.size} code files you edited or removed will be replaced by the publisher's versions."}\n")
             val start = length
-            append("\nYour records and files the publisher doesn't own are kept. The current and updated versions are saved in Edit → Version history, with a recovery backup.")
+            append("\nA recovery backup will be saved in Edit → Version history.")
             if (mismatch == null) append("\n\n").append(UpdateReviewCopy.permissionSummary(granted))
             setSpan(android.text.style.RelativeSizeSpan(0.9f), start, length, 0)
             setSpan(android.text.style.ForegroundColorSpan(androidx.core.content.ContextCompat.getColor(activity, com.wynh.appapp.R.color.on_surface_muted)), start, length, 0)

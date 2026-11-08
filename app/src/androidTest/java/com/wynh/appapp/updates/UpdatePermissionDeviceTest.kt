@@ -114,7 +114,7 @@ class UpdatePermissionDeviceTest {
                     // The message scrolls on its own, so its start is shown while both choices stay fully visible.
                     onView(withText(containsString("The publisher identity or source differs"))).inRoot(isDialog()).check(matches(isDisplayed()))
                     onView(withId(R.id.update_review_message)).inRoot(isDialog())
-                        .check(matches(withText(containsString("Existing permissions are kept. Current permissions: Notifications, Internet. Permissions that are off stay off."))))
+                        .check(matches(withText(containsString("Existing permissions are kept: Notifications, Internet."))))
                     onView(withId(R.id.update_review_confirm)).inRoot(isDialog()).check(matches(allOf(isCompletelyDisplayed(), withText("Update anyway"), isEnabled())))
                     onView(withId(R.id.update_review_cancel)).inRoot(isDialog()).check(matches(allOf(isCompletelyDisplayed(), withText(android.R.string.cancel), isEnabled())))
                 }

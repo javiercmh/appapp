@@ -13,9 +13,9 @@ object UpdateReviewCopy {
     /** The user's current decisions, which an update never changes. */
     fun permissionSummary(granted: Set<SubappCapability>): String {
         val current = SubappCapability.entries.filter { it in granted }
-        val kept = if (current.isEmpty()) "Existing permissions are kept. Current permissions: none."
-            else "Existing permissions are kept. Current permissions: ${current.joinToString(", ", transform = ::label)}."
-        return "$kept Permissions that are off stay off."
+        val kept = if (current.isEmpty()) "Existing permissions are kept: none."
+            else "Existing permissions are kept: ${current.joinToString(", ", transform = ::label)}."
+        return kept
     }
 
     /** Shown first in the review when the package declares a different publisher ID or GitHub source. */
