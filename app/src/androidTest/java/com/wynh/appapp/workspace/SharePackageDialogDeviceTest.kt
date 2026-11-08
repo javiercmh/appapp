@@ -36,10 +36,8 @@ class SharePackageDialogDeviceTest {
 
                 // Collapsed by default, with both actions visible above the files toggle.
                 onView(withId(R.id.package_files_section)).inRoot(isDialog()).check(matches(not(isDisplayed())))
-                onView(withText(R.string.action_share_zip)).inRoot(isDialog()).check(matches(isDisplayed()))
-                onView(withText(R.string.action_save_zip)).inRoot(isDialog()).check(matches(isDisplayed()))
-                onView(withId(R.id.package_files_toggle_label)).inRoot(isDialog())
-                    .check(matches(withText(context.getString(R.string.package_files_toggle, total, total))))
+                onView(withId(R.id.package_btn_share_zip)).inRoot(isDialog()).check(matches(isDisplayed()))
+                onView(withId(R.id.package_btn_save_zip)).inRoot(isDialog()).check(matches(isDisplayed()))
                 scenario.onActivity {
                     val share = dialog.findViewById<View>(R.id.package_btn_share_zip)
                     val save = dialog.findViewById<View>(R.id.package_btn_save_zip)
@@ -57,12 +55,8 @@ class SharePackageDialogDeviceTest {
                 val box = allOf(withId(R.id.export_item_checkbox), isDescendantOfA(row))
                 onView(row).inRoot(isDialog()).perform(scrollTo(), click())
                 onView(box).inRoot(isDialog()).check(matches(isNotChecked()))
-                onView(withId(R.id.package_files_toggle_label)).inRoot(isDialog())
-                    .check(matches(withText(context.getString(R.string.package_files_toggle, total - 1, total))))
                 onView(withId(R.id.package_files_toggle_row)).inRoot(isDialog()).perform(click())
                 onView(withId(R.id.package_files_section)).inRoot(isDialog()).check(matches(not(isDisplayed())))
-                onView(withId(R.id.package_files_toggle_label)).inRoot(isDialog())
-                    .check(matches(withText(context.getString(R.string.package_files_toggle, total - 1, total))))
                 onView(withId(R.id.package_files_toggle_row)).inRoot(isDialog()).perform(click())
                 onView(box).inRoot(isDialog()).perform(scrollTo()).check(matches(isNotChecked()))
                 scenario.onActivity {

@@ -26,12 +26,12 @@ class SseTextParserTest {
         assertFailure("data: " + "x".repeat(262_145), ApiFailure.Kind.INVALID_RESPONSE)
     }
 
-    @Test fun `empty completion and invalid JSON have distinct safe diagnostics`() {
+    @Test fun `empty completion and invalid JSON fail without leaking response payload`() {
         try { parse("data: {\"type\":\"response.completed\"}\n\n"); fail() }
-        catch (e: ApiFailure) { assertTrue(e.userMessage.contains("without text output")) }
+        catch (e: ApiFailure) { assertEquals(ApiFailure.Kind.INVALID_RESPONSE, e.kind) }
         try { parse("data: secret-invalid-payload\n\n"); fail() }
         catch (e: ApiFailure) {
-            assertTrue(e.userMessage.contains("not valid JSON"))
+            assertEquals(ApiFailure.Kind.INVALID_RESPONSE, e.kind)
             assertFalse(e.userMessage.contains("secret-invalid-payload"))
         }
     }

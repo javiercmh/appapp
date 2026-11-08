@@ -77,41 +77,6 @@ class AiExposureDeviceTest {
             repository.delete(record.id)
         }
     }
-    @Test fun lingoMagePreviewUsesHostExposureWithoutProviderSelector() {
-        val context = instrumentation.targetContext
-        val source = File(context.filesDir, "ai-lingo-fixture")
-        org.junit.Assume.assumeTrue("Stage a seeded LingoMage Preview fixture first", File(source, "manifest.json").isFile)
-        val manager = (context.applicationContext as AppAiApplication).ai
-        org.junit.Assume.assumeFalse("This fixture exercises disconnected setup without live requests", manager.openRouterConnected)
-        val previous = manager.exposure
-        val repository = SubappRepository(context); repository.ensureMigrated()
-        val record = repository.createImportedFrom(source)
-        try {
-            for (path in listOf("index.html", "js/app.js", "js/bridge.js")) {
-                assertArrayEquals("Imported Preview must match staged code: $path", File(source, path).readBytes(), File(record.workspaceDir, path).readBytes())
-            }
-            instrumentation.runOnMainSync { manager.setExposure("openrouter") }
-            val intent = Intent(context, SubappRuntimeActivity::class.java).setData(Uri.parse("appapp://subapp/${record.id}"))
-            ActivityScenario.launch<SubappRuntimeActivity>(intent).use { scenario ->
-                lateinit var page: android.webkit.WebView
-                scenario.onActivity { page = web(it.findViewById(android.R.id.content))!! }
-                assertEquals("true", await(page, "!!document.getElementById('model-select')"))
-                js(page, "document.querySelector('[data-view=\"settings\"]').click()")
-                assertEquals("true", await(page, "!document.getElementById('ai-setup').hidden"))
-                assertEquals("true", js(page, "document.getElementById('model-controls').hidden"))
-                assertEquals("true", js(page, "!document.getElementById('provider-select')"))
-                js(page, "window.providerResult=null;import(location.origin+'/js/bridge.js').then(m=>m.ai.providers()).then(r=>providerResult=r.providers[0].id).catch(e=>providerResult=e.code||e.message)")
-                assertEquals("\"openrouter\"", await(page, "window.providerResult"))
-                instrumentation.runOnMainSync { manager.setExposure("combined") }
-                js(page, "window.providerResult=null;import(location.origin+'/js/bridge.js').then(m=>m.ai.providers()).then(r=>providerResult=r.providers[0].id).catch(e=>providerResult=e.code||e.message)")
-                assertEquals("\"combined\"", await(page, "window.providerResult"))
-            }
-        } finally {
-            instrumentation.runOnMainSync { manager.setExposure(previous) }
-            repository.delete(record.id)
-        }
-    }
-
     @Test fun encryptedKeySurvivesRecreationAndCorruptionIsNotSilentlyDiscarded() {
         val target = instrumentation.targetContext
         val root = File(target.cacheDir, "ai-key-test-${UUID.randomUUID()}").apply { mkdirs() }

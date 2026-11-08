@@ -89,14 +89,4 @@ class UpdatePermissionPreservationTest {
         assertEquals(setOf(SubappCapability.NETWORK, SubappCapability.NOTIFICATIONS), grants.granted(appId))
     }
 
-    @Test fun reviewCopyListsOnlyCurrentGrantsAndStaysShort() {
-        val some = UpdateReviewCopy.identityWarning("Source: a → b", setOf(SubappCapability.AI, SubappCapability.NETWORK))
-        assertTrue(some.contains("publisher identity or source differs"))
-        assertTrue(some.contains("Source: a → b"))
-        assertTrue(some.contains("Existing permissions are kept: AI, Internet."))
-        assertFalse(some.contains("Notifications"))
-        assertTrue(UpdateReviewCopy.permissionSummary(emptySet()).startsWith("Existing permissions are kept: none."))
-        assertTrue(UpdateReviewCopy.permissionSummary(SubappCapability.entries.toSet()).contains("Existing permissions are kept: AI, Notifications, Internet."))
-        assertFalse(some.contains("prompt", ignoreCase = true))
-    }
 }

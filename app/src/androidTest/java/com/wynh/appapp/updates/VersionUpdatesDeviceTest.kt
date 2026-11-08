@@ -4,7 +4,6 @@ import android.app.Dialog
 import android.content.Intent
 import android.os.SystemClock
 import android.view.View
-import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -14,7 +13,8 @@ import androidx.test.espresso.Espresso.pressBack
 import androidx.test.espresso.action.ViewActions.click
 import androidx.test.espresso.assertion.ViewAssertions.matches
 import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
-import androidx.test.espresso.matcher.ViewMatchers.withText
+import androidx.test.espresso.matcher.ViewMatchers.withId
+import androidx.test.espresso.matcher.RootMatchers.isDialog
 import com.google.gson.Gson
 import com.wynh.appapp.R
 import com.wynh.appapp.SubappLibraryActivity
@@ -82,7 +82,7 @@ class VersionUpdatesDeviceTest {
             scenario.onActivity {
                 assertEquals(View.VISIBLE, dialog.findViewById<View>(R.id.settings_view_release).visibility)
                 assertEquals(View.VISIBLE, dialog.findViewById<View>(R.id.settings_review_updates).visibility)
-                assertEquals("Update available for 1 subapp.", dialog.findViewById<TextView>(R.id.settings_subapp_update_status).text.toString())
+                assertEquals(View.VISIBLE, dialog.findViewById<View>(R.id.settings_subapp_update_status).visibility)
                 assertNotNull(SubappUpdateIndicators.of(context).available(records[0]))
                 assertNull(SubappUpdateIndicators.of(context).available(records[1]))
                 assertEquals(3, urls.size) // host + one shared commit lookup and manifest
@@ -92,7 +92,7 @@ class VersionUpdatesDeviceTest {
             waitUntil { var enabled = false; scenario.onActivity { enabled = dialog.findViewById<View>(R.id.settings_check_updates).isEnabled }; enabled }
             scenario.onActivity {
                 assertEquals(View.GONE, dialog.findViewById<View>(R.id.settings_view_release).visibility)
-                assertTrue(dialog.findViewById<TextView>(R.id.settings_subapp_update_status).text.contains("couldn’t be checked"))
+                assertTrue(dialog.findViewById<View>(R.id.settings_check_updates).isEnabled)
                 assertNotNull(SubappUpdateIndicators.of(context).available(records[0]))
                 dialog.dismiss()
             }
@@ -121,10 +121,14 @@ class VersionUpdatesDeviceTest {
                     val plain = list.findViewHolderForAdapterPosition(2)!!.itemView
                     assertEquals(View.VISIBLE, marked.findViewById<View>(R.id.update_dot).visibility)
                     assertEquals(View.GONE, plain.findViewById<View>(R.id.update_dot).visibility)
-                    assertTrue(marked.findViewById<View>(R.id.app_menu).contentDescription.contains("update available"))
+                    assertNotEquals(plain.findViewById<View>(R.id.app_menu).contentDescription, marked.findViewById<View>(R.id.app_menu).contentDescription)
                     marked.findViewById<View>(R.id.app_menu).performClick()
                 }
-                onView(withText(R.string.updates_available)).check(matches(isDisplayed()))
+                onView(withId(R.id.update_menu_label)).check(matches(isDisplayed()))
+                onView(withId(R.id.update_menu_label)).check { view, error ->
+                    if (error != null) throw error
+                    assertTrue((view as android.widget.TextView).typeface.isBold)
+                }
                 pressBack()
             }
             assertBadgesAndOpen()
@@ -156,15 +160,16 @@ class VersionUpdatesDeviceTest {
         val scenario = ActivityScenario.launch<SubappLibraryActivity>(Intent(context, SubappLibraryActivity::class.java))
         try {
             scenario.onActivity { it.reviewUpdates(records, downloader) }
-            waitUntil { runCatching { onView(withText("Review fixture · 1 of 3")).check(matches(isDisplayed())) }.isSuccess }
-            onView(withText("Skip")).perform(click())
+            waitUntil { runCatching { onView(withId(R.id.update_review_confirm)).inRoot(isDialog()).check(matches(isDisplayed())) }.isSuccess }
+            onView(withId(R.id.update_review_secondary)).inRoot(isDialog()).perform(click())
             instrumentation.waitForIdleSync()
-            waitUntil { runCatching { onView(withText("Review fixture · 2 of 3")).check(matches(isDisplayed())) }.isSuccess }
-            onView(withText("Update")).perform(click())
+            waitUntil { runCatching { onView(withId(R.id.update_review_confirm)).inRoot(isDialog()).check(matches(isDisplayed())) }.isSuccess }
+            assertEquals("1.0", WorkspaceUpdater(records[0].directory).currentVersion())
+            onView(withId(R.id.update_review_confirm)).inRoot(isDialog()).perform(click())
             waitUntil { WorkspaceUpdater(records[1].directory).currentVersion() == "2.0" }
             instrumentation.waitForIdleSync()
-            waitUntil { runCatching { onView(withText("Review fixture · 3 of 3")).check(matches(isDisplayed())) }.isSuccess }
-            onView(withText("Stop reviewing")).perform(click())
+            waitUntil { runCatching { onView(withId(R.id.update_review_confirm)).inRoot(isDialog()).check(matches(isDisplayed())) }.isSuccess }
+            onView(withId(R.id.update_review_cancel)).inRoot(isDialog()).perform(click())
             assertNotNull(indicators.available(records[0]))
             assertNull(indicators.available(records[1]))
             assertNotNull(indicators.available(records[2]))

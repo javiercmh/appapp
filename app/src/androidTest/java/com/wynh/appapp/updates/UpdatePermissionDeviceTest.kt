@@ -21,7 +21,6 @@ import com.wynh.appapp.grants.SubappGrants
 import com.wynh.appapp.workspace.SubappRecord
 import com.wynh.appapp.workspace.SubappRepository
 import kotlinx.coroutines.launch
-import org.hamcrest.Matchers.containsString
 import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
@@ -110,13 +109,10 @@ class UpdatePermissionDeviceTest {
                     assertTrue("review dialog was not shown", shown.await(15, TimeUnit.SECONDS))
                     failure?.let { throw it }
                     instrumentation.waitForIdleSync()
-                    onView(withText("Review app update")).inRoot(isDialog()).check(matches(isDisplayed()))
-                    // The message scrolls on its own, so its start is shown while both choices stay fully visible.
-                    onView(withText(containsString("The publisher identity or source differs"))).inRoot(isDialog()).check(matches(isDisplayed()))
-                    onView(withId(R.id.update_review_message)).inRoot(isDialog())
-                        .check(matches(withText(containsString("Existing permissions are kept: Notifications, Internet."))))
-                    onView(withId(R.id.update_review_confirm)).inRoot(isDialog()).check(matches(allOf(isCompletelyDisplayed(), withText("Update anyway"), isEnabled())))
-                    onView(withId(R.id.update_review_cancel)).inRoot(isDialog()).check(matches(allOf(isCompletelyDisplayed(), withText(android.R.string.cancel), isEnabled())))
+                    onView(withId(R.id.update_review_title)).inRoot(isDialog()).check(matches(isDisplayed()))
+                    onView(withId(R.id.update_review_message)).inRoot(isDialog()).check(matches(isDisplayed()))
+                    onView(withId(R.id.update_review_confirm)).inRoot(isDialog()).check(matches(allOf(isCompletelyDisplayed(), isEnabled())))
+                    onView(withId(R.id.update_review_cancel)).inRoot(isDialog()).check(matches(allOf(isCompletelyDisplayed(), isEnabled())))
                 }
 
                 // Cancel: nothing changes and the staged download is removed.

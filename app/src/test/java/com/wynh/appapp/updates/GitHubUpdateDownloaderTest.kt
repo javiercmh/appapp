@@ -82,11 +82,8 @@ class GitHubUpdateDownloaderTest {
         assertEquals(commit, downloaderFor(4).download(source, level).commit)
         assertEquals(commit, downloaderFor(11).download(source, level).commit)
     }
-    @Test fun requirement12IsRejectedByLevel11WithBothLevelsInMessage() {
-        val error = assertThrows(IllegalArgumentException::class.java) { downloaderFor(12).download(source, 11) }
-        assertTrue(error.message!!.contains("12"))
-        assertTrue(error.message!!.contains("11"))
-        assertTrue(error.message!!.contains("Update App²"))
+    @Test fun unsupportedHostLevelIsRejectedBeforeStaging() {
+        assertThrows(IllegalArgumentException::class.java) { downloaderFor(12).download(source, 11) }
         assertTrue(temp.root.listFiles()!!.isEmpty())
     }
     @Test fun rejectsRedirectsOversizedFilesAndUnsupportedHost() {

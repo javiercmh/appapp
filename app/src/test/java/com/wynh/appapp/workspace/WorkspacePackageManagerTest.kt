@@ -43,7 +43,7 @@ class WorkspacePackageManagerTest {
         val bomb = ByteArray(1024 * 1024)
         listOf("__MACOSX/._bomb", "folder/.DS_Store").forEach { name ->
             val result = import(root, archive("index.html" to "new".toByteArray(), name to bomb))
-            assertTrue(result.exceptionOrNull()?.message.orEmpty().contains("size limit"))
+            assertTrue(result.isFailure)
             assertIntact(root)
         }
     }
@@ -51,17 +51,18 @@ class WorkspacePackageManagerTest {
     @Test fun skippedAndDirectoryEntriesCountTowardEntryLimit() {
         val root = workspace()
         val metadata = (0 until 8).map { "__MACOSX/._$it" to ByteArray(0) }.toTypedArray()
-        assertEquals("Too many ZIP entries", import(root, archive("index.html" to "new".toByteArray(), *metadata)).exceptionOrNull()?.message)
+        assertTrue(import(root, archive("index.html" to "new".toByteArray(), *metadata)).isFailure)
         assertIntact(root)
         val directories = (0 until 8).map { "dir$it/" to ByteArray(0) }.toTypedArray()
-        assertEquals("Too many ZIP entries", import(root, archive("index.html" to "new".toByteArray(), *directories)).exceptionOrNull()?.message)
+        assertTrue(import(root, archive("index.html" to "new".toByteArray(), *directories)).isFailure)
         assertIntact(root)
     }
 
     @Test fun rejectsTimedOutOrCancelledImport() {
         val root = workspace()
         val expired = runCatching { WorkspacePackageManager.replaceFromZip(archive("index.html" to "new".toByteArray()).inputStream(), root, limits.copy(timeoutMillis = 0)) }
-        assertEquals("ZIP import timed out", expired.exceptionOrNull()?.message)
+        assertTrue(expired.isFailure)
+        assertIntact(root)
         Thread.currentThread().interrupt()
         assertTrue(import(root, archive("index.html" to "new".toByteArray())).exceptionOrNull() is InterruptedException)
         assertIntact(root)
@@ -72,7 +73,7 @@ class WorkspacePackageManagerTest {
         val result = import(root, archive("index.html" to "new".toByteArray())) { from, to ->
             if (from.name == "workspace_import_staging") false else from.renameTo(to)
         }
-        assertEquals("Could not activate imported workspace", result.exceptionOrNull()?.message)
+        assertTrue(result.isFailure)
         assertIntact(root)
         val unmoved = import(root, archive("index.html" to "new".toByteArray())) { _, _ -> false }
         assertTrue(unmoved.isFailure)

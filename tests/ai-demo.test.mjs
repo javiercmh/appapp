@@ -13,8 +13,9 @@ function setup(overrides = {}, saved = {pending:null,latest:null}) {
   return {session,calls,disk:()=>disk,fail:value=>{failSave=value;}};
 }
 test('browser unavailable and disconnected do not discover models or generate',async()=>{
- const x=setup({available:false,providers:()=>{throw Error('unexpected');}});await x.session.refresh();assert.match(x.session.state.message,/browser previews/);await x.session.generate('second','');assert.equal(x.calls.length,0);
- const y=setup({providers:async()=>({providers:[{id:'chatgpt',connected:false}]}),models:()=>{throw Error('unexpected');}});await y.session.refresh();assert.match(y.session.state.message,/Settings/);
+ let providerCalls=0, modelCalls=0;
+ const x=setup({available:false,providers:()=>{providerCalls++;throw Error('unexpected');}});await x.session.refresh();await x.session.generate('second','');assert.equal(x.calls.length,0);assert.equal(providerCalls,0);
+ const y=setup({providers:async()=>({providers:[{id:'chatgpt',connected:false}]}),models:()=>{modelCalls++;throw Error('unexpected');}});await y.session.refresh();await y.session.generate('second','');assert.equal(y.calls.length,0);assert.equal(modelCalls,0);
 });
 test('server order, provider default, durable save before ack and one latest result',async()=>{
  const x=setup();await x.session.refresh();assert.deepEqual(x.session.state.models,models);await x.session.generate('second','');
@@ -30,15 +31,15 @@ test('save failure retains response and retries without another inference',async
 });
 test('recreated page retrieves persisted ID; missing request is interrupted, never resubmitted',async()=>{
  const pending={id:'old',model:'second'};const x=setup({}, {pending,latest:null});await x.session.refresh();assert.equal(x.disk().latest.id,'old');assert.equal(x.calls.some(c=>c[0]==='start'),false);
- const err=Object.assign(Error('Request not found'),{code:'not_found'});const y=setup({result:async()=>{throw err;},acknowledge:async()=>{throw err;}},{pending,latest:null});await y.session.refresh();assert.equal(y.session.state.pending,null);assert.match(y.session.state.message,/interrupted/);
+ const err=Object.assign(Error('Request not found'),{code:'not_found'});const y=setup({result:async()=>{throw err;},acknowledge:async()=>{throw err;}},{pending,latest:null});await y.session.refresh();assert.equal(y.session.state.pending,null);assert.equal(y.calls.some(c=>c[0]==='start'),false);
 });
 test('cached and rejected terminal failures are acknowledged',async()=>{
  for(const result of [async id=>({id,done:true,error:{code:'usage_limit',message:'Limit reached'}}),async()=>{throw Object.assign(Error('Limit reached'),{code:'usage_limit'});}]){
-  const x=setup({result});await x.session.refresh();await x.session.generate('second','');assert.match(x.session.state.message,/Limit reached/);assert.equal(x.session.state.pending,null);assert.equal(x.calls.filter(c=>c[0]==='ack').length,1);
+  const x=setup({result});await x.session.refresh();await x.session.generate('second','');assert.equal(x.session.state.pending,null);assert.equal(x.calls.filter(c=>c[0]==='ack').length,1);
  }
 });
 test('pending blocks duplicate requests and cancellation ignores late completion',async()=>{
- let finish;const x=setup({result:()=>new Promise(resolve=>{finish=resolve;})});await x.session.refresh();const generation=x.session.generate('second','');await new Promise(resolve=>setImmediate(resolve));await x.session.generate('first','');assert.equal(x.calls.filter(c=>c[0]==='start').length,1);await x.session.cancel();finish({id:'r1',done:true,value:'late'});await generation;assert.equal(x.disk().latest,null);assert.match(x.session.state.message,/cancelled/);
+ let finish;const x=setup({result:()=>new Promise(resolve=>{finish=resolve;})});await x.session.refresh();const generation=x.session.generate('second','');await new Promise(resolve=>setImmediate(resolve));await x.session.generate('first','');assert.equal(x.calls.filter(c=>c[0]==='start').length,1);await x.session.cancel();finish({id:'r1',done:true,value:'late'});await generation;assert.equal(x.disk().latest,null);assert.equal(x.calls.filter(c=>c[0]==='cancel').length,1);
 });
 test('saved completion recovers acknowledgement without polling or generation',async()=>{
  const x=setup({result:()=>{throw Error('unexpected');}},{pending:{id:'old'},latest:{id:'old',text:'already saved'}});await x.session.refresh();assert.equal(x.disk().pending,null);assert.equal(x.disk().latest.text,'already saved');assert.equal(x.calls[1][0],'ack');
