@@ -139,6 +139,10 @@ Each app's `WebView` loads `https://<id>.app.local/index.html`. Requests for tha
      animations off, see the emulator section). GitHub Checks then cover lint, the release and
      Dev builds and the rest on every branch.
    - Keep commits focused: split unrelated fixes into separate commits rather than one omnibus change.
+   - Tests check behaviour, not wording. For user-facing text, assert which facts appear (names,
+     versions, counts), their order, what is left out, and that different cases read differently;
+     never compare whole sentences. Values a test feeds in (fixture names, commit messages) are
+     defined once and reused in its assertions.
 6. **Releasing**:
    - Only on the user's request. Bump `versionCode` (+1) and `versionName` in `app/build.gradle.kts`.
    - Add a section at the top of `RELEASE_NOTES.md` (same layout as the existing ones: topical `##`
