@@ -6,7 +6,7 @@ import org.junit.Test
 
 class UpdateAvailabilityTest {
     /** Just enough SharedPreferences for string values. */
-    private class MemoryPrefs : SharedPreferences {
+    internal class MemoryPrefs : SharedPreferences {
         val values = HashMap<String, String?>()
         override fun getString(key: String, defValue: String?) = values[key] ?: defValue
         override fun edit(): SharedPreferences.Editor = object : SharedPreferences.Editor {

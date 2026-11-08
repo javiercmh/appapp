@@ -17,7 +17,10 @@ object WorkspaceOperationUi {
      * Renders operation progress and failures and delivers each completion exactly once to
      * [onCompleted] on the first started screen, which may be a new instance after rotation.
      */
-    fun bind(activity: AppCompatActivity, onCompleted: (WorkspaceActionController.Completion) -> Unit = {}) {
+    fun bind(activity: AppCompatActivity, onCompleted: (WorkspaceActionController.Completion) -> Unit = {}) =
+        bindWithFailures(activity, onCompleted = onCompleted)
+
+    fun bindWithFailures(activity: AppCompatActivity, onFailure: (String) -> Boolean = { false }, onCompleted: (WorkspaceActionController.Completion) -> Unit = {}) {
         val controller = ViewModelProvider(activity)[WorkspaceActionController::class.java]
         activity.lifecycleScope.launch {
             activity.repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -32,7 +35,7 @@ object WorkspaceOperationUi {
                             progress?.dismiss(); progress = null
                             if (state.error) {
                                 failure?.dismiss()
-                                failure = MaterialAlertDialogBuilder(activity).setTitle(R.string.workspace_failed)
+                                if (!onFailure(state.message)) failure = MaterialAlertDialogBuilder(activity).setTitle(R.string.workspace_failed)
                                     .setMessage(state.message).setPositiveButton(android.R.string.ok, null).show()
                                 controller.clear()
                             }

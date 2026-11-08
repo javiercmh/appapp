@@ -195,4 +195,33 @@
     <string name="library_load_failed">Could not read library</string>
     <string name="workspace_operation_failed">Operation failed</string>
     <string name="library_delete_failed">Could not delete app</string>
+    <string name="updates_check">Check for updates</string>
+    <string name="updates_checking">Checking…</string>
+    <string name="updates_retry">Retry update check</string>
+    <string name="updates_host_checking">Checking App²…</string>
+    <string name="updates_subapps_checking">Checking subapps…</string>
+    <string name="updates_host_new">Latest App² version: %1$s</string>
+    <string name="updates_host_current">No new App² updates available. Latest version: %1$s</string>
+    <string name="updates_no_release">No published App² releases found.</string>
+    <string name="updates_host_failed">Couldn’t check for App² updates.</string>
+    <string name="updates_view_release">View release on GitHub</string>
+    <string name="updates_browser_missing">No browser is available to open GitHub releases.</string>
+    <string name="updates_subapp_progress">Checking subapps: %1$d of %2$d…</string>
+    <string name="updates_subapps_current">No new subapp updates available.</string>
+    <string name="updates_subapps_incomplete">Some subapps couldn’t be checked.</string>
+    <plurals name="updates_failed_count">
+        <item quantity="one">Couldn’t check %d subapp.</item>
+        <item quantity="other">Couldn’t check %d subapps.</item>
+    </plurals>
+    <plurals name="updates_unlinked_count">
+        <item quantity="one">Skipped %d subapp without an update source.</item>
+        <item quantity="other">Skipped %d subapps without an update source.</item>
+    </plurals>
+    <string name="updates_review">Review updates</string>
+    <string name="updates_available">Update available</string>
+    <string name="updates_menu_available">%1$s menu, update available</string>
+    <plurals name="updates_subapps_found">
+        <item quantity="one">Update available for %d subapp.</item>
+        <item quantity="other">Updates available for %d subapps.</item>
+    </plurals>
 </resources>

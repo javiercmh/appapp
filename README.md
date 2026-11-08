@@ -45,6 +45,8 @@ Example repositories have their own licences.
 
 ## Updates and backups
 
+- **Check for updates:** **Settings → About App² → Check for updates** checks App² and linked subapps. It shows your installed App² version and the latest release, with a GitHub link only when newer. App² Dev checks Dev releases.
+- **Review subapp updates:** choose **Review updates** to review each newer version before installing, with **Skip** and **Stop reviewing** options. Updates are marked by a dot on the app’s menu and a highlighted **Update available** action. Checks run only when requested; same-version file changes do not count as a new version.
 - **Update an app:** open its menu in the library and choose **Update app**. The code is replaced and your data is kept.
 - **Back up everything:** **Settings → Subapp backup** saves all your apps, with their data, in one ZIP. Restoring adds them as new copies. App² settings, reminders and AI credentials are not included.
 

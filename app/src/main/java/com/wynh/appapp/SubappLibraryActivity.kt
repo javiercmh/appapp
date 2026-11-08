@@ -69,6 +69,18 @@ class SubappLibraryActivity : AppCompatActivity() {
     private var libraryRecovery: AlertDialog? = null
     private lateinit var binding: ActivitySubappLibraryBinding
     private val settingsManager by lazy { AppSettingsManager(this) }
+    private val updateIndicators by lazy { com.wynh.appapp.updates.SubappUpdateIndicators.of(this) }
+    private var guidedUpdates: com.wynh.appapp.updates.GuidedUpdatesController? = null
+    private var librarySettingsDialog: Dialog? = null
+    private fun refreshUpdateIndicators() {
+        if (rowsReady) libraryAdapter.notifyItemRangeChanged(1, displayedRecords.size)
+    }
+    internal fun reviewUpdates(records: List<SubappRecord>, downloader: com.wynh.appapp.updates.GitHubUpdateDownloader = com.wynh.appapp.updates.GitHubUpdateDownloader(cacheDir)) {
+        guidedUpdates?.stop()
+        guidedUpdates = com.wynh.appapp.updates.GuidedUpdatesController(this, records,
+            changed = { refreshRows(); refreshUpdateIndicators() }, finished = { guidedUpdates = null }, downloader = downloader)
+        guidedUpdates?.start()
+    }
     private var refreshSettingsPermissions: (() -> Unit)? = null
     private var notificationPromptRefused = false
     private val notificationPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -279,8 +291,12 @@ class SubappLibraryActivity : AppCompatActivity() {
         pendingExportId = savedInstanceState?.getString("export_app_id")
         pendingExportFiles = savedInstanceState?.getStringArrayList("export_files")?.toSet()
         showLibrary()
-        com.wynh.appapp.runtime.WorkspaceOperationUi.bind(this) { completion ->
-            if (completion.kind == com.wynh.appapp.workspace.WorkspaceActionController.Kind.UPDATED) refreshRows()
+        com.wynh.appapp.runtime.WorkspaceOperationUi.bindWithFailures(this, onFailure = { guidedUpdates?.failed(it) == true }) { completion ->
+            if (completion.kind == com.wynh.appapp.workspace.WorkspaceActionController.Kind.UPDATED) {
+                refreshRows()
+                refreshUpdateIndicators()
+                guidedUpdates?.installed(completion.subject)
+            }
         }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -362,6 +378,8 @@ class SubappLibraryActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        librarySettingsDialog?.dismiss(); librarySettingsDialog = null
+        guidedUpdates?.stop()
         backupProgress?.dismiss()
         backupProgress = null
         operationProgress?.dismiss(); libraryRecovery?.dismiss()
@@ -445,6 +463,9 @@ class SubappLibraryActivity : AppCompatActivity() {
     private fun showLibrarySettings() {
         val dialog = Dialog(this)
         dialog.setContentView(R.layout.dialog_library_settings)
+        librarySettingsDialog = dialog
+        val updates = com.wynh.appapp.updates.SettingsUpdateController(this, dialog,
+            records = { repository.list() }, changed = ::refreshUpdateIndicators, review = { reviewUpdates(it) })
         dialog.window?.setLayout(
             (resources.displayMetrics.widthPixels * 0.94).toInt(),
             ViewGroup.LayoutParams.WRAP_CONTENT
@@ -501,7 +522,11 @@ class SubappLibraryActivity : AppCompatActivity() {
         }
         refreshExactAlarmRow()
         refreshSettingsPermissions = { refreshNotificationRow(); refreshExactAlarmRow() }
-        dialog.setOnDismissListener { refreshSettingsPermissions = null }
+        dialog.setOnDismissListener {
+            refreshSettingsPermissions = null
+            librarySettingsDialog = null
+            updates.close()
+        }
         btnExactAlarms?.setOnClickListener {
             if (Build.VERSION.SDK_INT < 31) return@setOnClickListener
             val intent = Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
@@ -583,6 +608,8 @@ class SubappLibraryActivity : AppCompatActivity() {
             override fun onMoved(from: Int, to: Int) { libraryAdapter.notifyItemMoved(from + 1, to + 1) }
             override fun onChanged(position: Int, count: Int, payload: Any?) { libraryAdapter.notifyItemRangeChanged(position + 1, count, payload) }
         })
+        // A followed source can change without changing the workspace metadata stamp.
+        refreshUpdateIndicators()
     }
 
     private class AppHolder(val row: ItemSubappBinding) : RecyclerView.ViewHolder(row.root)
@@ -624,7 +651,9 @@ class SubappLibraryActivity : AppCompatActivity() {
             row.appDescription.text = metadata?.description?.ifBlank { getString(R.string.library_app_fallback) } ?: getString(R.string.library_app_fallback)
             row.appCard.contentDescription = getString(R.string.library_open_app, name)
             row.appCard.setOnClickListener { open(record) }
-            row.appMenu.contentDescription = getString(R.string.library_menu, name)
+            val availableUpdate = updateIndicators.available(record)
+            row.updateDot.visibility = if (availableUpdate != null) View.VISIBLE else View.GONE
+            row.appMenu.contentDescription = getString(if (availableUpdate != null) R.string.updates_menu_available else R.string.library_menu, name)
             row.appMenu.setOnClickListener { anchor ->
                 val content = layoutInflater.inflate(R.layout.popup_library_actions, null)
                 val popupWidth = resources.getDimensionPixelSize(R.dimen.library_actions_popup_width)
@@ -638,9 +667,23 @@ class SubappLibraryActivity : AppCompatActivity() {
                     setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
                     isOutsideTouchable = true
                 }
+                val marked = updateIndicators.available(record) != null
+                if (marked) {
+                    val accent = ContextCompat.getColor(this@SubappLibraryActivity, R.color.primary)
+                    content.findViewById<View>(R.id.update_app).background = android.graphics.drawable.RippleDrawable(
+                        android.content.res.ColorStateList.valueOf(androidx.core.graphics.ColorUtils.setAlphaComponent(accent, 40)),
+                        android.graphics.drawable.ColorDrawable(androidx.core.graphics.ColorUtils.setAlphaComponent(accent, 24)), null)
+                    content.findViewById<ImageView>(R.id.update_menu_icon).imageTintList = android.content.res.ColorStateList.valueOf(accent)
+                    content.findViewById<TextView>(R.id.update_menu_label).apply {
+                        setText(R.string.updates_available)
+                        setTextColor(accent)
+                        setTypeface(typeface, android.graphics.Typeface.BOLD)
+                    }
+                }
                 content.findViewById<View>(R.id.update_app).setOnClickListener {
                     popup.dismiss()
-                    com.wynh.appapp.updates.UpdateController(this@SubappLibraryActivity, record).open()
+                    if (updateIndicators.available(record) != null) reviewUpdates(listOf(record))
+                    else com.wynh.appapp.updates.UpdateController(this@SubappLibraryActivity, record).open()
                 }
                 content.findViewById<View>(R.id.delete_app).setOnClickListener {
                     popup.dismiss()

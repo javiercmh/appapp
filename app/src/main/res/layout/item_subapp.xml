@@ -6,7 +6,10 @@
             <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:layout_marginStart="14dp">
                 <TextView android:id="@+id/app_name" android:layout_width="match_parent" android:layout_height="wrap_content" android:textAppearance="@style/TextAppearance.Material3.TitleMedium" android:textColor="@color/on_surface" android:breakStrategy="simple" />
             </LinearLayout>
+            <FrameLayout android:layout_width="48dp" android:layout_height="48dp">
             <androidx.appcompat.widget.AppCompatImageButton android:id="@+id/app_menu" android:layout_width="48dp" android:layout_height="48dp" android:background="?attr/selectableItemBackgroundBorderless" android:padding="12dp" app:srcCompat="@drawable/ic_more_vertical" app:tint="@color/on_surface_muted" />
+                <View android:id="@+id/update_dot" android:layout_width="8dp" android:layout_height="8dp" android:layout_gravity="top|end" android:layout_marginTop="7dp" android:layout_marginEnd="7dp" android:background="@drawable/update_dot" android:importantForAccessibility="no" android:visibility="gone" />
+            </FrameLayout>
         </LinearLayout>
         <TextView android:id="@+id/app_description" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:maxLines="4" android:ellipsize="end" android:textAppearance="@style/TextAppearance.Material3.BodyMedium" android:textColor="@color/on_surface_muted" />
     </LinearLayout>

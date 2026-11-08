@@ -145,11 +145,23 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
      * [value]'s directory and deletes it unless the update is applied. [subjects] supplies the
      * optional recent commit subjects.
      */
-    internal suspend fun review(value: GitHubUpdateDownloader.Download, source: GitHubSource, subjects: suspend () -> List<String> = { emptyList() }) {
+    internal data class GuidedReview(
+        val position: Int, val total: Int, val appName: String,
+        val onSkip: () -> Unit, val onStop: () -> Unit,
+        val onInstalling: () -> Unit, val onFailure: (Exception) -> Unit,
+        val onShown: (android.app.Dialog) -> Unit,
+    )
+
+    internal suspend fun review(value: GitHubUpdateDownloader.Download, source: GitHubSource, guided: GuidedReview? = null, subjects: suspend () -> List<String> = { emptyList() }) {
         val (preview, reviewed, unchanged) = withContext(Dispatchers.IO) {
             synchronized(WorkspaceLocks.forWorkspace(record.workspaceDir)) {
                 Triple(updater.preview(value.pkg, value.directory, acceptMismatch = true, source = source), updater.reviewedFiles(value.pkg), updater.publisherUnchanged(value.pkg, value.directory, source))
             }
+        }
+        if (guided != null && (updater.installed()?.source != source || !VersionUpdateChecker.newer(value.pkg.version, updater.currentVersion()))) {
+            value.directory.deleteRecursively()
+            guided.onSkip()
+            return
         }
         val mismatch = updater.identityMismatch(value.pkg, source)
         val latest = subjects()
@@ -178,16 +190,30 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
             setSpan(android.text.style.ForegroundColorSpan(androidx.core.content.ContextCompat.getColor(activity, com.wynh.appapp.R.color.on_surface_muted)), start, length, 0)
         }
         var accepted = false
+        var skipped = false
         val confirm = if (older) "Install older version" else if (mismatch != null) "Update anyway" else if (preview.adoption) "Link and update" else "Update"
-        showUpdateDialog("Review app update", text, content = changedFilesView(preview),
+        val reviewDialog = showUpdateDialog(if (guided == null) "Review app update" else "${guided.appName} · ${guided.position} of ${guided.total}", text, content = changedFilesView(preview),
             primary = Action(confirm) { dialog ->
                 accepted = true
-                applyUpdate("GitHub update ${value.pkg.version} · ${value.commit.take(12)}", value.directory) { updater.install(value.pkg, value.directory, value.commit, hostCompatibilityLevel, reviewed, acceptMismatch = mismatch != null, source = source) }
+                guided?.onInstalling?.invoke()
+                applyUpdate("GitHub update ${value.pkg.version} · ${value.commit.take(12)}", value.directory,
+                    onRejected = { if (guided != null) guided.onFailure(it) else error(it) }) {
+                    if (guided != null) {
+                        check(updater.installed()?.source == source && VersionUpdateChecker.newer(value.pkg.version, updater.currentVersion())) { "This update no longer matches the installed app" }
+                    }
+                    updater.install(value.pkg, value.directory, value.commit, hostCompatibilityLevel, reviewed, acceptMismatch = mismatch != null, source = source)
+                }
                 dialog.dismiss()
             },
             // Only an app that already follows a source can switch it from here.
-            secondary = if (preview.adoption) null else Action("Change source") { it.dismiss(); changeSource(source) },
-            onDismissed = { if (!accepted) value.directory.deleteRecursively() })
+            secondary = if (guided != null) Action("Skip") { skipped = true; it.dismiss(); guided.onSkip() }
+                else if (preview.adoption) null else Action("Change source") { it.dismiss(); changeSource(source) },
+            dismissLabel = if (guided != null) "Stop reviewing" else activity.getString(android.R.string.cancel),
+            onDismissed = {
+                if (!accepted) value.directory.deleteRecursively()
+                if (guided != null && !accepted && !skipped) guided.onStop()
+            })
+        guided?.onShown?.invoke(reviewDialog)
     }
 
     /** "Show changed files (N)" that expands to the added, changed and removed paths; null when none. */
@@ -227,7 +253,7 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
         }
     }
 
-    private class Action(val label: String, val run: (android.app.Dialog) -> Unit)
+    internal class Action(val label: String, val run: (android.app.Dialog) -> Unit)
 
     /**
      * Every step of the update flow uses this layout so the buttons read the same way: a filled main
@@ -235,7 +261,7 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
      * message scrolls independently and the full-width buttons stay visible at narrow widths and
      * large text sizes, where the platform dialog button bar can clip its last button.
      */
-    private fun showUpdateDialog(title: String, message: CharSequence, primary: Action?, secondary: Action? = null,
+    internal fun showUpdateDialog(title: String, message: CharSequence, primary: Action?, secondary: Action? = null,
                                  dismissLabel: String? = activity.getString(android.R.string.cancel),
                                  content: android.view.View? = null, onDismissed: () -> Unit = {}): android.app.Dialog {
         val dialog = android.app.Dialog(activity, com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog)
@@ -260,15 +286,18 @@ class UpdateController(private val activity: AppCompatActivity, private val reco
         return dialog
     }
 
-    private fun applyUpdate(label: String, staged: File, operation: () -> Unit) {
-        if (ai.hasRequest(record.id)) { staged.deleteRecursively(); error(IllegalStateException("Finish and save or cancel the AI request before updating.")); return }
+    private fun applyUpdate(label: String, staged: File, onRejected: (Exception) -> Unit = ::error, operation: () -> Unit) {
+        if (ai.hasRequest(record.id)) { staged.deleteRecursively(); onRejected(IllegalStateException("Finish and save or cancel the AI request before updating.")); return }
         if (com.wynh.appapp.workspace.WorkspaceOperations.isBusy(record.workspaceDir)) {
-            staged.deleteRecursively(); error(IllegalStateException("A workspace operation is already in progress.")); return
+            staged.deleteRecursively(); onRejected(IllegalStateException("A workspace operation is already in progress.")); return
         }
         val controller = androidx.lifecycle.ViewModelProvider(activity)[com.wynh.appapp.workspace.WorkspaceActionController::class.java]
+        if (controller.state.value.busy) {
+            staged.deleteRecursively(); onRejected(IllegalStateException("A workspace operation is already in progress.")); return
+        }
         // The controller deletes the staged download whether the operation ran, failed or was refused;
         // the screen that shows the result is whichever one is started when it finishes.
-        controller.execute(record, label, completion = com.wynh.appapp.workspace.WorkspaceActionController.Completion(com.wynh.appapp.workspace.WorkspaceActionController.Kind.UPDATED),
+        controller.execute(record, label, completion = com.wynh.appapp.workspace.WorkspaceActionController.Completion(com.wynh.appapp.workspace.WorkspaceActionController.Kind.UPDATED, subject = record.id),
             cleanup = { staged.deleteRecursively() }) { workspace, history ->
             history.ensureInitialVersion(workspace)
             check(history.saveSnapshot(workspace, "Before $label") != null) { "Could not save version history; update cancelled" }

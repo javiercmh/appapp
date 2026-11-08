@@ -648,6 +648,50 @@
                             android:textSize="13sp" />
                     </LinearLayout>
                     <com.google.android.material.button.MaterialButton
+                        android:id="@+id/settings_check_updates"
+                        style="@style/Widget.Material3.Button.TonalButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:minHeight="48dp"
+                        android:layout_marginTop="8dp"
+                        android:text="@string/updates_check" />
+                    <TextView
+                        android:id="@+id/settings_host_update_status"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:textColor="@color/on_surface"
+                        android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
+                        android:accessibilityLiveRegion="polite"
+                        android:visibility="gone" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/settings_view_release"
+                        style="@style/Widget.Material3.Button.TonalButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:visibility="gone"
+                        android:minHeight="48dp"
+                        android:layout_marginTop="8dp"
+                        android:text="@string/updates_view_release" />
+                    <TextView
+                        android:id="@+id/settings_subapp_update_status"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:textColor="@color/on_surface"
+                        android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
+                        android:accessibilityLiveRegion="polite"
+                        android:visibility="gone" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/settings_review_updates"
+                        style="@style/Widget.Material3.Button.TonalButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:visibility="gone"
+                        android:minHeight="48dp"
+                        android:layout_marginTop="8dp"
+                        android:text="@string/updates_review" />
+                    <com.google.android.material.button.MaterialButton
                         android:id="@+id/settings_btn_privacy_policy"
                         style="@style/Widget.Material3.Button.TonalButton"
                         android:layout_width="match_parent"
