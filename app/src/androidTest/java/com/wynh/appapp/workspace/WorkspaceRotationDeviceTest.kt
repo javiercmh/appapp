@@ -89,8 +89,16 @@ class WorkspaceRotationDeviceTest {
                 onView(withText("note.txt")).perform(scrollTo(), click())
                 onView(withId(R.id.editor_code_input)).perform(replaceText("unsaved draft"), closeSoftKeyboard())
                 systemBack()
-                onView(withText(R.string.discard_changes_title)).inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog())
-                    .check(androidx.test.espresso.assertion.ViewAssertions.matches(isDisplayed()))
+                // Both the editor and the confirmation are dialogs. Select the confirmation by
+                // its action controls, so Espresso cannot pick the editor during the Back transition.
+                val confirmation = org.hamcrest.Matchers.allOf(
+                    androidx.test.espresso.matcher.RootMatchers.isDialog(),
+                    androidx.test.espresso.matcher.RootMatchers.withDecorView(hasDescendant(withId(android.R.id.button1)))
+                )
+                onView(withId(android.R.id.button1)).inRoot(confirmation)
+                    .check(androidx.test.espresso.assertion.ViewAssertions.matches(isCompletelyDisplayed()))
+                onView(withId(android.R.id.button2)).inRoot(confirmation)
+                    .check(androidx.test.espresso.assertion.ViewAssertions.matches(isEnabled()))
                 instrumentation.uiAutomation.takeScreenshot().let { bitmap ->
                     java.io.FileOutputStream(File(context.cacheDir, "back-discard-confirmation.png")).use {
                         bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
@@ -98,7 +106,7 @@ class WorkspaceRotationDeviceTest {
                     bitmap.recycle()
                 }
                 assertEquals("initial", File(record.workspaceDir, "note.txt").readText())
-                onView(withText(R.string.keep_editing)).perform(click())
+                onView(withId(android.R.id.button2)).inRoot(confirmation).perform(click())
                 onView(withId(R.id.editor_code_input)).inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog())
                     .check(androidx.test.espresso.assertion.ViewAssertions.matches(withText("unsaved draft")))
                 assertEquals("initial", File(record.workspaceDir, "note.txt").readText())

@@ -133,6 +133,7 @@ Each app's `WebView` loads `https://<id>.app.local/index.html`. Requests for tha
    - Commit only when asked. Day-to-day work goes to the long-lived `dev` branch; `main` only
      moves for a release, by fast-forwarding it to `dev` (no merge commits).
    - Do **not** create other branches for the work unless the request explicitly asks for one.
+   - Do not push with failing tests. Fix the implementation or the test, then verify the complete required suite passes on the final changes. A passing isolated retry does not override a failed full run. Inspect test reports as well as the Gradle exit status; report missing prerequisites and skips explicitly.
    - Before pushing a native change, run `./gradlew :app:testDebugUnitTest` and the instrumented
      tests (`./gradlew :app:connectedDebugAndroidTest` on the `Medium_Phone` emulator with
      animations off, see the emulator section). GitHub Checks then cover lint, the release and
