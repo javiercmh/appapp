@@ -131,10 +131,12 @@ Each app's `WebView` loads `https://<id>.app.local/index.html`. Requests for tha
    - **ViewBinding** enabled (`buildFeatures { viewBinding = true }`).
 5. **Version Control**:
    - Commit or push only when asked. Day-to-day work goes to the long-lived `dev` branch; `main` only
-     moves for a release, by fast-forwarding it to `dev` (no merge commits). Never commit on `main`
-     directly, not even a release: Dev builds are labelled `<versionName>-dev.<N>` from `dev`, so a
-     release made only on `main` leaves Dev showing an older version than production. Both
-     workflows refuse to build when `main` has commits `dev` lacks.
+     moves for a release, by fast-forwarding it to `dev` (no merge commits). To release, commit the
+     release on `dev`, push `dev`, then push that same commit to `main` (`git push origin dev:main`).
+     Pushing to `main` is expected; creating commits that exist only on `main` is not. Dev builds
+     are labelled `<versionName>-dev.<N>` from `dev`, so a release commit made on `main` would
+     leave Dev showing an older version than production. Both workflows refuse to build when
+     `main` has commits `dev` lacks.
    - Do **not** create other branches for the work unless the request explicitly asks for one.
    - Do not push with failing tests. Fix the implementation or the test, then verify the complete required suite passes on the final changes. A passing isolated retry does not override a failed full run. Inspect test reports as well as the Gradle exit status; report missing prerequisites and skips explicitly.
    - Before pushing a native change, run `./gradlew :app:testDebugUnitTest` and the instrumented
