@@ -141,19 +141,20 @@ Each app's `WebView` loads `https://<id>.app.local/index.html`. Requests for tha
    - Keep commits focused: split unrelated fixes into separate commits rather than one omnibus change.
 6. **Releasing**:
    - Only on the user's request. Bump `versionCode` (+1) and `versionName` in `app/build.gradle.kts`.
-   - Add a section at the top of `RELEASE_NOTES.md` (same layout as the existing ones: topical `##`
-     sections, Installation, `Version: x.y.z (version code n)`, Verification), then commit
-     `Release AppApp x.y.z` and tag `vx.y.z`. Never move or force-push an existing tag; ship a
-     patch version instead.
+   - Write `fastlane/metadata/android/en-US/changelogs/<versionCode>.txt`: what changed for users in
+     a few short lines (F-Droid shows it; at most 500 characters). Then commit `Release AppApp x.y.z`
+     and tag `vx.y.z`. Never move or force-push an existing tag; ship a patch version instead.
    - Build `:app:assembleSignedRelease`, verify the certificate fingerprint above, and copy the APK to
      `AppApp-x.y.z.apk` with `AppApp-x.y.z.apk.sha256` (`sha256sum` output).
    - F-Droid verifies that APK against its own unsigned rebuild (`docs/FDROID.md`). Build it with
      Eclipse Temurin 21, as the production workflow does: a JDK whose zlib is zlib-ng (for example
      a JBR using Fedora's system zlib) writes different `assets/dexopt/baseline.prof*` bytes.
    - Publish a GitHub release for the tag with both files, marked latest, titled
-     `App² x.y.z — Short description`. The release body is the new `RELEASE_NOTES.md` section
-     **without its `# App² x.y.z` heading**, since the release title already shows it.
-     Pushing a tag alone does not create a release.
+     `App² x.y.z — Short description`. The release body is the changelog: what users get, in
+     topical `##` sections (new features, fixes, anything they must do), then Installation. Leave out
+     internal work and test or verification details; the CI run records those. GitHub Releases are
+     the only full changelog; there is no changelog file in the repository. Pushing a tag alone does
+     not create a release.
    - Use `gh` (installed in `~/.local/bin`, logged in as the owner). If it is missing or logged
      out, ask the user to install or authenticate it.
 

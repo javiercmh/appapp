@@ -10,7 +10,7 @@ only take effect in the *next* release.
 | --- | --- |
 | `app/build.gradle.kts` | `dependenciesInfo { includeInApk = false; includeInBundle = false }`: the encrypted dependency-metadata block in the APK signing block is not added. |
 | `settings.gradle.kts` | The unused `org.gradle.toolchains.foojay-resolver-convention` plugin is removed (F-Droid's scanner flags it). No toolchain is configured; builds use the JDK 21 environment described in `AGENTS.md`. |
-| `fastlane/metadata/android/en-US/` | `short_description.txt`, `full_description.txt`, `changelogs/12.txt` (from the 1.7.0 release notes) and `images/icon.png`. |
+| `fastlane/metadata/android/en-US/` | `short_description.txt`, `full_description.txt`, `changelogs/12.txt` (the 1.7.0 changes; each release adds one for its versionCode) and `images/icon.png`. |
 | `scripts/render_fdroid_icon.py` | Regenerates the store `icon.png` as an unmasked 512x512 export of `ic_launcher_background.xml` and `ic_launcher_foreground.xml`. Runs are deterministic; the output was inspected visually. |
 | `THIRD_PARTY_NOTICES.md`, `AGENTS.md` | Artwork provenance section; Temurin 21 note for release builds. |
 | `docs/fdroid/metadata/com.wynh.appapp.yml` | Draft fdroiddata recipe (route B), identical to what `fdroid rewritemeta` produces. |
@@ -170,8 +170,7 @@ proposed. LingoMage is not bundled and is not needed to license the host.
 1. Local verification is complete: `assembleRelease`, `lintRelease`, `testDebugUnitTest`, and F-Droid's
    source and APK scans pass after the foojay removal. This does not replace the server build below.
 2. The changes above (opt-out, foojay removal, fastlane files, docs) are committed on `main` and shipped in a
-   new release: version bump, `RELEASE_NOTES.md`, tag. Until then F-Droid cannot see them; update
-   `changelogs/` to the new versionCode.
+   new release: version bump, `changelogs/<versionCode>.txt`, tag. Until then F-Droid cannot see them.
 3. On that release's signed APK, confirm the dependency-metadata block is absent, and run `fdroid build`
    for the new entry in F-Droid's server container.
 4. Open factual follow-ups, not established blockers: the recorded provenance of `ic_openrouter.xml`, and

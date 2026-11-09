@@ -20,7 +20,7 @@ contract: bridge, permissions, AI, speech, translation, updates). Both ship insi
 | [DEV_DISTRIBUTION.md](DEV_DISTRIBUTION.md) | App² Dev builds, signing key and prereleases |
 | [PRODUCTION_BUILDS.md](PRODUCTION_BUILDS.md) | Signed production builds on GitHub |
 | [FDROID.md](FDROID.md) | F-Droid submission ([draft metadata](fdroid/metadata/com.wynh.appapp.yml)) |
-| [RELEASE_NOTES.md](../RELEASE_NOTES.md) | What changed in each release |
+| [GitHub Releases](https://github.com/javiercmh/appapp/releases) | What changed in each release |
 | [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) | Dependency licences ([data](dependency-licenses.json)) |
 
 **[Archive](archive/README.md):** dated reviews kept for reference, not maintained.
