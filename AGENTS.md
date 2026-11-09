@@ -130,7 +130,7 @@ Each app's `WebView` loads `https://<id>.app.local/index.html`. Requests for tha
    - Material Design 3 components.
    - **ViewBinding** enabled (`buildFeatures { viewBinding = true }`).
 5. **Version Control**:
-   - Commit only when asked. Day-to-day work goes to the long-lived `dev` branch; `main` only
+   - Commit or push only when asked. Day-to-day work goes to the long-lived `dev` branch; `main` only
      moves for a release, by fast-forwarding it to `dev` (no merge commits).
    - Do **not** create other branches for the work unless the request explicitly asks for one.
    - Do not push with failing tests. Fix the implementation or the test, then verify the complete required suite passes on the final changes. A passing isolated retry does not override a failed full run. Inspect test reports as well as the Gradle exit status; report missing prerequisites and skips explicitly.
@@ -379,8 +379,6 @@ binary file that the current subapp's origin interceptor can then serve via `<im
      A correct check must lex the file: track nesting depth while skipping `//` line comments and
      `"`, `'`, and `"""` literals, then report any comment left unclosed at EOF and any `*/`
      encountered at depth 0.
-10. **Git Commit & Push Restrictions**:
-    - **Agent Rule**: Do **not** run `git commit` or `git push` autonomously. Only execute commit and push commands when the user explicitly gives a direct instruction to do so.
 
 
 ## 8. Subapp-facing API and AI host notes
