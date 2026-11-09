@@ -57,8 +57,9 @@ object UpdateReviewCopy {
         return UpdateLabels("Updating $app to $version", "Before update to $app $version", "Updated to $app $version")
     }
 
-    /** Detail of the update progress while package files download. */
-    fun downloadProgress(done: Int, total: Int) = "Downloading files ($done of $total)…"
+    /** What the update progress says while files download (a bar shows how far) and then while it installs. */
+    const val downloadProgress = "Downloading update…"
+    const val installProgress = "Installing…"
 
     /** One line of [identityWarning]: the old and new source, naming the repository only when it changes. */
     fun sourceChange(old: GitHubSource, new: GitHubSource): String =

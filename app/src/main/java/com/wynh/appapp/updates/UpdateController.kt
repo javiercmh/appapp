@@ -360,11 +360,11 @@ class UpdateController(
             {
                 val result = downloader.download(update.source, level, update.commit,
                     reuse = { path, target -> update.reusable[path]?.let { updater.copyIfUnchanged(path, it, target) } ?: false },
-                    progress = { done, total -> controller.report(UpdateReviewCopy.downloadProgress(done, total)) })
+                    progress = { done, total -> controller.report(UpdateReviewCopy.downloadProgress, done.toFloat() / total) })
                 downloaded.set(result.directory)
                 // The package must still be the one reviewed; install() checks the staged manifest again.
                 check(result.pkg == update.pkg) { "The update changed since review; check again" }
-                controller.report("")
+                controller.report(UpdateReviewCopy.installProgress)
             }
         }
         // The controller deletes the staged download whether the operation ran, failed or was refused;

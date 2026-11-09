@@ -25,16 +25,30 @@ object WorkspaceOperationUi {
         activity.lifecycleScope.launch {
             activity.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 var progress: AlertDialog? = null
+                var detailView: android.widget.TextView? = null
+                var bar: com.google.android.material.progressindicator.LinearProgressIndicator? = null
                 var failure: AlertDialog? = null
                 try {
                     controller.state.collect { state ->
                         if (state.busy) {
-                            val detail = state.detail.ifEmpty { activity.getString(R.string.workspace_working) }
-                            if (progress == null) progress = MaterialAlertDialogBuilder(activity).setTitle(state.message)
-                                .setMessage(detail).setCancelable(false).show()
-                            else progress?.setMessage(detail)
+                            if (progress == null) {
+                                val body = activity.layoutInflater.inflate(R.layout.dialog_workspace_progress, null)
+                                detailView = body.findViewById(R.id.workspace_progress_detail)
+                                bar = body.findViewById(R.id.workspace_progress_bar)
+                                progress = MaterialAlertDialogBuilder(activity).setTitle(state.message).setView(body).setCancelable(false).show()
+                            }
+                            detailView?.text = state.detail.ifEmpty { activity.getString(R.string.workspace_working) }
+                            bar?.let { indicator ->
+                                val fraction = state.fraction
+                                if (fraction == null) { if (!indicator.isIndeterminate) { indicator.hide(); indicator.isIndeterminate = true; indicator.show() } }
+                                else {
+                                    // Switching modes needs the indicator hidden; afterwards the bar fills smoothly.
+                                    if (indicator.isIndeterminate) { indicator.hide(); indicator.isIndeterminate = false; indicator.show() }
+                                    indicator.setProgressCompat((fraction * indicator.max).toInt(), true)
+                                }
+                            }
                         } else {
-                            progress?.dismiss(); progress = null
+                            progress?.dismiss(); progress = null; detailView = null; bar = null
                             if (state.error) {
                                 failure?.dismiss()
                                 if (!onFailure(state.message)) failure = MaterialAlertDialogBuilder(activity).setTitle(R.string.workspace_failed)

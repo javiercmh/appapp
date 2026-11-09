@@ -27,15 +27,21 @@ class WorkspaceActionController(private val app: Application) : AndroidViewModel
      */
     data class Completion(val kind: Kind, val subject: String = "", val payload: String = "", val id: Long = 0)
 
-    /** [detail] is optional progress text under the operation's [message], such as a download count. */
-    data class State(val busy: Boolean = false, val message: String = "", val error: Boolean = false, val completions: List<Completion> = emptyList(), val detail: String = "")
+    /**
+     * [detail] says what the running operation is doing under its [message]; [fraction] (0..1) is
+     * how much of it is done, or null when that is unknown.
+     */
+    data class State(val busy: Boolean = false, val message: String = "", val error: Boolean = false, val completions: List<Completion> = emptyList(),
+                     val detail: String = "", val fraction: Float? = null)
     private val value = MutableStateFlow(State())
     val state = value.asStateFlow()
     private var sequence = 0L
 
     fun clear() { if (!value.value.busy) value.update { it.copy(message = "", error = false) } }
-    /** Updates the running operation's progress detail; ignored when nothing runs. Safe from any thread. */
-    fun report(detail: String) { value.update { if (it.busy) it.copy(detail = detail) else it } }
+    /** Updates the running operation's progress; ignored when nothing runs. Safe from any thread. */
+    fun report(detail: String, fraction: Float? = null) {
+        value.update { if (it.busy) it.copy(detail = detail, fraction = fraction?.coerceIn(0f, 1f)) else it }
+    }
     fun acknowledge(id: Long) { value.update { state -> state.copy(completions = state.completions.filterNot { it.id == id }) } }
 
     /**
@@ -60,7 +66,7 @@ class WorkspaceActionController(private val app: Application) : AndroidViewModel
         val early = if (prepare != null) null else try { WorkspaceOperations.reserve(record.workspaceDir, replacement) } catch (e: Exception) {
             value.update { it.copy(message = e.message ?: "Workspace is busy", error = true) }; discard(cleanup); return
         }
-        value.update { it.copy(busy = true, message = label, error = false, detail = "") }
+        value.update { it.copy(busy = true, message = label, error = false, detail = "", fraction = null) }
         scope.launch(start = CoroutineStart.UNDISPATCHED) {
             var failure: String? = null
             var lease = early
@@ -83,7 +89,7 @@ class WorkspaceActionController(private val app: Application) : AndroidViewModel
                 withContext(Dispatchers.IO) { runCatching(cleanup) }
                 if (paused) SubappSessionRegistry.resume(record.id)
                 val finished = if (failure == null && completion != null) listOf(completion.copy(id = ++sequence)) else emptyList()
-                value.update { it.copy(busy = false, message = failure ?: "", error = failure != null, detail = "", completions = it.completions + finished) }
+                value.update { it.copy(busy = false, message = failure ?: "", error = failure != null, detail = "", fraction = null, completions = it.completions + finished) }
             }
         }
     }

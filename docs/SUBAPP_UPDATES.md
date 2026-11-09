@@ -137,7 +137,7 @@ The review is built from that, before any package file is downloaded: **What's n
 lists the newest commit subjects (with "+ N more commits"), and **Show changed files**
 lists the added (+), changed (~) and removed (−) files. If no managed file changed and
 the version is the same, it reports **App is up to date**. Only after **Update** does
-App² download the reviewed commit, four files at a time with a progress count, while
+App² download the reviewed commit, four files at a time with a progress bar, while
 the app keeps running. Managed files the publisher did not touch are copied from the
 workspace when they still match the hashes recorded at the last install, so only the
 changed files are fetched. That download runs as part of the update operation, so it

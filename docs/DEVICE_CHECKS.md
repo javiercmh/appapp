@@ -121,13 +121,10 @@ confirm cancelling update review leaves the disposable workspace unchanged.
 Verified on `Medium_Phone` through the UI against the public LingoMage repository, with
 a disposable app pinned to a commit 5 behind `main`: first link downloaded and compared
 the package (no commit list); switching to `main` showed the 5 commit subjects and 11
-changed files with no package download, then "Downloading files (27 of 42)…" (unchanged
-files copied from the workspace) and installed 1.3.0; switching back showed the "5
+changed files with no package download, then the download progress at 27 of 42 files in its first
+frame (unchanged files copied from the workspace) and installed 1.3.0; switching back showed the "5
 commits behind" note and **Install older version**, and Cancel removed its download.
 The guided review device test covers the same path with a fake GitHub.
-
-Still pending: rotation during the download, and a process kill mid-download (the next
-start should remove the staged folder).
 
 ## Pending speech controls
 
