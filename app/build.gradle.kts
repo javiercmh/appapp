@@ -31,8 +31,8 @@ android {
         applicationId = "com.wynh.appapp"
         minSdk = 26
         targetSdk = 37
-        versionCode = 15
-        versionName = "1.9.1"
+        versionCode = 16
+        versionName = "1.10.0"
         // Update-contract level checked against minimumHostVersionCode. Shared by every build
         // type; unlike versionCode it is not touched by releases or the Dev run counter.
         buildConfigField("int", "HOST_COMPATIBILITY_LEVEL", "11")

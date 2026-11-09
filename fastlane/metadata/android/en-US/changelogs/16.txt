@@ -1,0 +1,5 @@
+• Check for updates to App² and all linked apps from Settings; apps with an update show a dot on their menu
+• Review several apps' updates one after another, with Skip and Stop
+• See what's new from the publisher's commits and the changed files before anything downloads
+• Only changed files download, with a progress bar
+• Clearer update wording, and the changed files open right below What's new
