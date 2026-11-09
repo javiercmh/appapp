@@ -71,7 +71,10 @@ Android tests. It does not run an emulator; native checks remain separate.
 Each successful run publishes a new `dev-N` prerelease containing `app2-dev.apk`
 and `app2-dev.apk.sha256`, pinned to the checked-out commit. `N` is the workflow's
 increasing run number, used as the Android version code; the displayed version
-is `1.6.1-dev.N` for the current base version. Keep this workflow's numbering
+is `<versionName>-dev.N`, where `versionName` is the latest release (for example
+`1.10.0-dev.17` after App² 1.10.0), and the release is titled the same way. The
+workflow refuses to publish from a branch that lacks commits from `main`, so a Dev
+build never shows an older version than production. Keep this workflow's numbering
 continuous. Do not delete/recreate its history or publish a lower version code.
 The run number only orders installs. Subapp update compatibility uses the separate
 `HOST_COMPATIBILITY_LEVEL` build constant, identical in release, Dev and debug
