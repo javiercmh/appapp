@@ -30,3 +30,7 @@ examples/**/.claude/
 # Local review screenshots
 *-screens/
 .ai-settings-screens/
+
+# Python bytecode
+__pycache__/
+*.pyc
