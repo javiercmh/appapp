@@ -42,4 +42,4 @@ Storage, update, AI, speech, and translation remain restricted to their owning o
 
 ## Verification
 
-CI runs JVM, JavaScript, Python, lint, debug assembly, and device-test compilation on JDK 21. Shared fixtures exercise native and development-server path rules. Fault-injection tests cover failed file publication, interrupted directory activation, corrupt indexes, competing reservations, and byte preservation. Device-test compilation is not device execution. See [pending native checks](DEVICE_CHECKS.md).
+CI runs JVM, JavaScript, Python, lint, debug assembly, and device-test compilation on JDK 21. Shared fixtures exercise native and development-server path rules. Fault-injection tests cover failed file publication, interrupted directory activation, corrupt indexes, competing reservations, and byte preservation. Device-test compilation is not device execution.

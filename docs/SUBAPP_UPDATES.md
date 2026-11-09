@@ -184,4 +184,4 @@ or silently install. Browsers and development mocks report unavailable.
 
 Update installation runs as an owned background workspace operation. Only sessions of the affected app are suspended; App² does not pause process-wide WebView timers. The affected document reloads after the transaction. Updates never change the app's permissions (AI, notifications, Internet): decisions are kept after ordinary updates, an accepted publisher identity change, failed updates and recovery, and nothing is granted automatically. Native permission storage is outside the workspace and is not part of the update transaction or recovery backup.
 
-The shared text-history restore now stages a complete replacement and preserves binary/unknown files. It remains a bounded text history, not an all-file backup. See [architecture](ARCHITECTURE.md) and [pending device checks](DEVICE_CHECKS.md).
+The shared text-history restore now stages a complete replacement and preserves binary/unknown files. It remains a bounded text history, not an all-file backup. See [architecture](ARCHITECTURE.md).

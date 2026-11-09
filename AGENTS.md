@@ -34,7 +34,7 @@ The Kotlin namespace is `com.wynh.appapp`. The production installed application 
 
 ---
 
-All documentation is indexed in [docs/README.md](docs/README.md). Current ownership and transaction rules: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Pending native checks: [docs/DEVICE_CHECKS.md](docs/DEVICE_CHECKS.md).
+All documentation is indexed in [docs/README.md](docs/README.md). Current ownership and transaction rules: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## 2. Workspace & Unified Directory Architecture
 
@@ -254,6 +254,7 @@ binary file that the current subapp's origin interceptor can then serve via `<im
 
 ## 6. Testing & Verification
 
+- **Verify now, don't defer.** Check behaviour with automated tests or on the emulator as part of the change. Do not keep lists of pending manual checks; what remains untested is reported by users.
 - **Keep host tests self-contained.** App² tests must use the bundled Starter Demo or disposable test subapps defined in this repository, with fake providers where appropriate. Do not require downloaded third-party apps, external ZIP fixtures or personal installations. App-specific integration tests belong in the subapp’s repository.
 - **Test behavior, not incidental wording.** Locate UI controls by stable view IDs and assert visibility, enabled/selected state, touch-target/layout constraints, and the outcomes of interactions. Do not select actions or wait for screens using hard-coded titles, button labels, status sentences or version/progress text. Check queue order through the affected app IDs and installed versions.
 - **Avoid copy snapshots and copy-only tests.** Changing user-facing prose must not require updating tests. Assert typed error codes, rejected operations, unchanged files/grants, cleanup, persistence and retry behavior instead of matching exception messages or rendered explanations. Do not replace sentence assertions with weak checks that text is nonempty, or generate expected prose using the same formatter under test. Remove tests whose only purpose is to freeze wording when behavior is covered elsewhere.

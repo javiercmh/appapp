@@ -12,7 +12,6 @@ contract: bridge, permissions, AI, speech, translation, updates). Both ship insi
 | --- | --- |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Ownership, transactions, threads, history and the security boundary |
 | [SUBAPP_UPDATES.md](SUBAPP_UPDATES.md) | GitHub updates: publisher contract, review, recovery, publishing a subapp update |
-| [DEVICE_CHECKS.md](DEVICE_CHECKS.md) | Manual emulator checks no automated test covers |
 
 **Releasing App²:**
 
