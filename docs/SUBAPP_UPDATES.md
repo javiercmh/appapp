@@ -108,13 +108,7 @@ so restored code is reported as local changes during the next update review.
 
 ## Branches and releases
 
-App² itself: day-to-day commits go to `dev`; `main` only moves for a release, by
-fast-forwarding it to `dev` (no merge commits). A release bumps `versionCode` and
-`versionName`, tags `vX.Y.Z` and publishes a GitHub release (see `AGENTS.md`). The
-**Publish App² Dev** workflow can build a `dev-N` prerelease from either `dev`
-(ongoing work) or `main` (see [Dev distribution](DEV_DISTRIBUTION.md)).
-
-Subapps such as LingoMage follow the same model. Installed apps follow `main`, so a
+Subapps such as LingoMage follow App²'s branch model (`dev` for work, `main` for releases; see `AGENTS.md`). Installed apps follow `main`, so a
 publisher release bumps `version` in `manifest.json` on `dev` and then fast-forwards
 `main`. Leave `app2Update.github.branch` out (it defaults to `main`); dev branches
 already do. Before a release fast-forwards a manifest without it to `main`, make sure
@@ -152,7 +146,7 @@ GitHub's maximum of 300 files. The review then says why commits are not listed, 
 example that the commit is N commits behind the installed version. Downloads left
 behind by an interrupted check or update are removed when App² next starts.
 
-## Low-token routine
+## Publishing a subapp update
 
 1. Work in the publisher repo. Update version/ownership metadata and keep user
    records compatible. Publish only when the user explicitly authorizes commit
@@ -163,63 +157,15 @@ behind by an interrupted check or update are removed when App² next starts.
    The script uses declared empty seed defaults, excludes unlisted files, and
    emits a deterministic ZIP plus `.checks.json` with source revision and hashes.
    `buildDirty` distinguishes a local preview from a published revision.
+   To try it on a phone, push the ZIP to Downloads and import it through the library's ZIP
+   picker as a separate app; never import over the user's app. To check what landed, export
+   that app through the UI and compare its ZIP hashes with `.checks.json`.
 3. For a published update, tap Update (it checks GitHub at once), review source,
    commit and file changes, then confirm. If managed code changes after review, check again. Reload occurs
    after installation.
    No APK rebuild is needed for subapp-only changes.
 4. Report revision, verification result and any blockers. Inspect verbose logs
    only on failure; avoid repeated repository scans or full UI dumps.
-
-## Host APK delivery
-
-- Run `./gradlew --version` before builds; use the checked-in wrapper. The current
-  wrapper is Gradle 9.6 and this host currently runs JDK 25; the wrapper has already
-  been upgraded. Kotlin bytecode remains JVM 17. Do not change JVM settings merely
-  to deliver an update.
-- Build/check on the emulator first. For routine validation use
-  `:app:assembleDebug :app:testDebugUnitTest :app:assembleDebugAndroidTest`.
-  Install the matching APK and test APK on the selected emulator and run
-  `com.wynh.appapp.updates.UpdaterDeviceTest` with AndroidJUnitRunner.
-- Build signed release with `./gradlew :app:assembleSignedRelease`.
-- Run `adb devices -l`; always use `-s <serial>`. Check `pm path com.wynh.appapp`
-  and inspect installed version/certificate. Pull the installed APK read-only if
-  necessary. Verify both APKs with the SDK's `apksigner verify --print-certs`.
-- Before touching a physical phone, record its exact serial/model and run
-  `adb -s <serial> shell pm list users`. Select the intended Android user/profile
-  and verify AppApp is already installed there with
-  `adb -s <serial> shell pm list packages --user <userId> com.wynh.appapp`.
-  Secure Folder and work profiles have separate package data;
-  if the expected installation is absent in the intended profile, stop. Do not
-  create a fresh installation in another profile as a recovery or test shortcut.
-- Keep physical-phone testing read-only by default; run imports, edits, reorder,
-  deletion, migrations, and other workspace mutations on `Medium_Phone`. If a
-  phone-specific mutation is necessary, first export the relevant apps from the
-  library, verify each ZIP includes its manifest and user `data/`, and copy the
-  exports off-device. Android cloud backup is not a verified workspace backup.
-  Use only a separate, named disposable app with test data. Never import over,
-  delete, recreate, or clean up a user's existing phone app.
-- The Galaxy S24 installation uses SHA-256
-  `d3a30c1acecc9008f11711c39013353f00fc58b540a26eba95bb3556eb02e89a`.
-  Stop on any mismatch; never uninstall or clear storage.
-- Use `adb -s <serial> install -r app/build/outputs/apk/release/app-release.apk`.
-  `-r` preserves data only if package, profile/user, and signing certificate
-  match; it does not restore data that is missing. Do not install a debug APK on
-  a phone unless its certificate is verified to match. Check migration
-  implications before launching. A configured library's normal update does not
-  create a new legacy migration. For routine phone updates, make and verify one
-  full-library backup before installation and record app names/count. After
-  installation, open the library and confirm the same apps are present. A second
-  backup, file-hash comparison, and data-sentinel checks are not required. If the
-  library is empty or apps are unexpectedly missing, stop and report the state;
-  restore or alter entries only when the owner instructs you to do so. This
-  library check does not verify every app's internal data.
-- For first preview delivery, push the ZIP to Downloads and use the library's
-  ZIP picker to create a separate app. Never import over the user's app or use
-  `run-as` to bypass a signed release's sandbox.
-- Verify actual UI controls and source hashes. When release sandbox access is
-  unavailable, export the selected preview through the public UI and compare ZIP
-  file hashes. Do not claim hidden device data was inspected or preserved unless
-  the chosen path leaves it untouched or verification was actually performed.
 
 ## Web API
 

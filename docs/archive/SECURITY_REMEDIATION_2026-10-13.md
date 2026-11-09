@@ -10,7 +10,7 @@ No physical device was touched and no real AI provider was called. Release minif
 ProGuard keep rule for the bridge has not been exercised.
 
 The update-time grant reset described in S3 below has been superseded by the explicit
-permission-preservation decision in [Subapp updates](SUBAPP_UPDATES.md#runtime-coordination).
+permission-preservation decision in [Subapp updates](../SUBAPP_UPDATES.md#runtime-coordination).
 Updates now keep existing grants; a publisher identity or source change requires a warning
 and the user’s choice to proceed. Deletion and deliberate revocation still clear grants.
 
@@ -48,7 +48,7 @@ and the user’s choice to proceed. Deletion and deliberate revocation still cle
 - AI content reporting and moderation process for Play (not built; depends on which AI features ship).
 - Provider terms and payment-link review (OpenAI, OpenRouter), Play Data safety form, content rating, AAB and Play App Signing, foreground-service declaration, F-Droid `fdroiddata` metadata and signing strategy, reproducible-build check.
 - Dependency verification: `gradle/verification-metadata.xml` (SHA-256) now pins every resolved artifact for debug, release, unit-test and lint. After a dependency or plugin bump, regenerate it with `./gradlew --write-verification-metadata sha256 :app:assembleDebug :app:assembleRelease :app:testDebugUnitTest :app:lintDebug` and review the diff.
-- Editor, asset serving and bridge now share `WorkspaceFiles` path validation and symlink rejection; current ownership is documented in [ARCHITECTURE.md](ARCHITECTURE.md).
+- Editor, asset serving and bridge now share `WorkspaceFiles` path validation and symlink rejection; current ownership is documented in [ARCHITECTURE.md](../ARCHITECTURE.md).
 - Library import now stages and verifies copies before registration; native metadata retains the pinned import commit.
 - The development server and native storage policy now share path fixtures and matching file limits. Mock/browser checks still do not establish native isolation.
 - No physical-device run; older Android/WebView versions untested.

@@ -56,7 +56,7 @@ App² Dev installs next to App² with its own data, so you can try new features 
 
 ## Make your own app
 
-Apps are plain HTML, CSS and JavaScript. Start from the [Starter Demo](app/src/main/assets/starter_template/) and see the [packaging and bridge reference](app/src/main/assets/starter_template/PACKAGING.md) and the [AI guide](docs/AI.md).
+Apps are plain HTML, CSS and JavaScript. Start from the [Starter Demo](app/src/main/assets/starter_template/) and see the [packaging and bridge reference](app/src/main/assets/starter_template/PACKAGING.md). AI, speech, translation and updates are covered there too.
 
 To preview an app in your browser (Python 3.9+), run:
 
@@ -73,6 +73,8 @@ Needs JDK 17 or 21:
 ```sh
 ./gradlew :app:assembleDebug
 ```
+
+Developer documentation is indexed in [docs/README.md](docs/README.md).
 
 ## License
 

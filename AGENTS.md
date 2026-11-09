@@ -34,7 +34,7 @@ The Kotlin namespace is `com.wynh.appapp`. The production installed application 
 
 ---
 
-Current ownership and transaction rules: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Pending native checks: [docs/DEVICE_CHECKS.md](docs/DEVICE_CHECKS.md).
+All documentation is indexed in [docs/README.md](docs/README.md). Current ownership and transaction rules: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Pending native checks: [docs/DEVICE_CHECKS.md](docs/DEVICE_CHECKS.md).
 
 ## 2. Workspace & Unified Directory Architecture
 
@@ -57,7 +57,7 @@ the same ID. Shortcuts and Recent Apps document tasks carry that ID, so renaming
 change its identity. On first launch, a verified migration moves the former single workspace into
 the library.
 
-The starter template ships its own `AGENTS.md` (describing the app itself) and `PACKAGING.md` (documenting the runtime from the web app's point of view: bridge API, platform limits, packaging rules). **When the JavaScript bridge changes, update them accordingly.**
+The starter template ships its own `AGENTS.md` (how to build an app for App²) and `PACKAGING.md` (the runtime contract from the web app's point of view: bridge API, platform limits, packaging rules; see section 8). **When the JavaScript bridge changes, update `PACKAGING.md`, and the starter `AGENTS.md` only where its guidance changes.**
 
 The library’s Settings → AI section exclusively owns AI provider setup. ChatGPT and OpenRouter connections are independent. Settings selects which provider subapps see: ChatGPT (the default), OpenRouter, or Combined. Subapps can
 use the origin-limited `window.AppAI` asynchronous channel through `js/bridge.js`; credentials and
@@ -139,10 +139,6 @@ Each app's `WebView` loads `https://<id>.app.local/index.html`. Requests for tha
      animations off, see the emulator section). GitHub Checks then cover lint, the release and
      Dev builds and the rest on every branch.
    - Keep commits focused: split unrelated fixes into separate commits rather than one omnibus change.
-   - Tests check behaviour, not wording. For user-facing text, assert which facts appear (names,
-     versions, counts), their order, what is left out, and that different cases read differently;
-     never compare whole sentences. Values a test feeds in (fixture names, commit messages) are
-     defined once and reused in its assertions.
 6. **Releasing**:
    - Only on the user's request. Bump `versionCode` (+1) and `versionName` in `app/build.gradle.kts`.
    - Add a section at the top of `RELEASE_NOTES.md` (same layout as the existing ones: topical `##`
@@ -199,7 +195,7 @@ When adding new bridge methods for the runtime web app:
 3. Ensure methods run safely and handle exceptions gracefully; an exception becomes a JS `Error`.
 4. Asynchronous or main-frame-only capabilities should use an origin-restricted
    `WebViewCompat.addWebMessageListener` channel instead (see `ai`, `speech`, `translation`).
-5. Mirror the change in **both** `AGENTS.md` files and in the template's `bridge.js`.
+5. Document the change in the starter `PACKAGING.md` and mirror it in the template's `bridge.js`.
 
 ### Per-subapp permissions and network policy
 
@@ -221,7 +217,7 @@ Internet stays blocked until enabled). A changed publisher ID or source shows a 
 permissions the new code will inherit, with Cancel and Update anyway. ZIP and GitHub imports create a
 new app ID and therefore start with no grants.
 When adding a capability, extend `SubappCapability`, ask through `SubappGrants.ask`, and list the
-default here, in the starter `AGENTS.md`, `PACKAGING.md` and `PRIVACY.md`.
+default here, in the starter `PACKAGING.md` and in `PRIVACY.md`.
 
 ### Current bridge surface
 
@@ -387,205 +383,15 @@ binary file that the current subapp's origin interceptor can then serve via `<im
     - **Agent Rule**: Do **not** run `git commit` or `git push` autonomously. Only execute commit and push commands when the user explicitly gives a direct instruction to do so.
 
 
-## Subapp AI guide
+## 8. Subapp-facing API and AI host notes
 
-Manage provider connections exclusively through **library → Settings → AI**. The AI card is collapsed by default and shows a one-line summary (connected services and what subapps see); expanding it lists only services the user has added, plus an **Add another service** menu for the rest. With nothing added, the header shows "+" and tapping it opens that menu directly. OpenRouter and the custom endpoint are verified inside their entry dialog: "Verify and save" keeps the dialog open, shows a failure on the field it concerns, and only a verified service is saved and listed. A saved service shows **Check connection** (re-verifies without generating text); replacing the key or editing the endpoint and removing it are in its overflow menu. Editing a custom endpoint may leave the key empty to keep the current key. **Available to subapps** appears only when there is a real choice (two or more connected, or the selected provider is not connected). Adding a service while the selected provider is disconnected selects the new service. ChatGPT uses OAuth; OpenRouter uses one native encrypted API key. A **custom endpoint** (any OpenAI-compatible service: HTTPS base URL such as `https://host/v1` plus API key, using `/models` and `/chat/completions`) is stored natively and encrypted, is verified by listing models, exposes provider ID `custom`, has no reasoning levels, and is billed by that service. Plain `http://` is refused. Editors and subapps have no credential controls. **Available to subapps** exposes exactly one provider: `chatgpt`, `openrouter`, `custom`, or `combined` (App² AI). Combined is connected when at least one source is connected and lists ChatGPT models first, then OpenRouter models, with source labels. Model IDs are opaque, stable and unique within the exposed provider; do not parse them or hardcode model IDs. Explicit calls to hidden providers fail with `provider`.
+The web API that subapps use (bridge calls, permissions, AI, operation sessions, text to speech,
+device translation, GitHub updates, browser development and workspace guarantees) is documented
+once, in the starter template's [`PACKAGING.md`](app/src/main/assets/starter_template/PACKAGING.md),
+which ships inside every new subapp. Its `AGENTS.md` links to it for app authors. Change that file
+(and the template's `bridge.js`) when the bridge changes; do not copy its sections here.
 
-The native exposure dropdown lists connected providers; Combined is selectable when both are connected. With no connection it is disabled. An unavailable saved exposure is retained without silently switching providers; a previously selected Combined exposure can still use its remaining connected source.
+Host-side AI details that subapps never see:
 
-OpenRouter defaults to explicitly free text models; paid models require native opt-in. Missing or unknown prompt/completion prices are excluded from free mode. Optional pricing fields, including per-request fees, must be zero when supplied; their omission is valid. Pricing is refreshed before generation. The catalog includes OpenRouter’s Free Models Router (`openrouter/free`), which chooses an available free model, as well as individual free models. Free models still have quotas and availability limits. ChatGPT consumes plan usage; OpenRouter consumes quota or credits. There is no automatic model/provider fallback or inference retry. OpenRouter advertises an empty `reasoningLevels` list in this version. Connection/exposure changes dispatch `app2:ai:connection`; rediscover the exposed provider and clear unavailable model/reasoning choices. Already-started requests retain their original route and can be retrieved and acknowledged after an exposure change. Disconnecting a source cancels only its unfinished requests; terminal results remain available for saving.
-
-Browser previews have `ai.available === false` and make no AI requests unless a development mock is explicitly supplied. The wrapper keeps `chatgpt` as its omitted-provider default for compatibility; apps using host exposure must discover and explicitly pass the exposed provider ID.
-
-Import `ai` from `js/bridge.js`. `ai.available` means the native channel exists, **not** that an account is connected. All methods below return Promises:
-
-| Method | Resolved value |
-| --- | --- |
-| `ai.providers()` | `{providers: [{id, name, connected}]}` (one host-selected provider; connection may be false) |
-| `ai.models(providerId)` | `{models: [{id: "provider-model-id", name: "Display name", reasoningLevels: ["low", "medium", "high"]}]}` |
-| `ai.start({providerId, model, instructions, input, reasoningEffort?, title?, body?, sessionId?})` | Request ID string |
-| `ai.sessions.supported()` | `true`/`false`; asks the host once. Rejects, and is not cached, on anything but a confirmed yes or the old-host answer `invalid_request` "Unsupported AI command." |
-| `ai.sessions.begin({providerId, model, title?, body?})` | `{sessionId}`; call from a user action while the page is visible |
-| `ai.sessions.end(sessionId)` | `true`; idempotent for your own session, `not_found` for an unknown or foreign one |
-| `ai.result(id)` | Pending: `{id, done: false, value: null}`; success: `{id, done: true, value: "completed text"}` |
-| `ai.wait(id)` | Completed text string; only for IDs started by this page instance |
-| `ai.cancel(id)` | `true`; cancels and releases the request |
-| `ai.acknowledge(id)` | `true`; releases a terminal result after saving or handling failure |
-
-Model lists preserve each source’s server order, with ChatGPT before OpenRouter in Combined mode. Treat IDs as provider-specific; use the returned list rather than hardcoding models. `reasoningLevels` may be empty. Omit `reasoningEffort` for the provider default; explicit efforts must come from the selected model's list. The examples' model IDs and capabilities above are illustrative.
-
-Native command failures reject with `Error`, usually with `.code` and `.message`. A cached terminal failure from `ai.result()` may instead have `{id, done: true, error: {code, message}}` (its `value` is not response text). Handle both forms. Results created in the current page may contain additional wrapper internals; persist your own metadata, not the result object. Common failure codes include `authentication`, `permission`, `usage_limit`, `network`, `service`, `invalid_response`, `models`, `invalid_request`, `provider`, `request_in_progress`, `not_found`, `background_service`, `session_ended`, `session_cancelled`, `session_idle` and `session_timeout`. An unavailable browser or command timeout may reject without a code. Show failures and require a deliberate new Generate action; never automatically retry inference.
-
-**Operation sessions.** A multi-request operation (dependent generations separated by web work) can hold one bounded session so the host's foreground service stays up between requests. Android does not allow starting a foreground service from the background, so an `ai.start` made after the app was backgrounded, with no service running, can fail with `background_service`. `ai.sessions.begin` starts no inference. It takes the first request's real `providerId` and `model`, applies the same checks and the same first-use AI permission dialog as `ai.start`, and must be called while the page's activity is resumed (otherwise `background_service`). Pass the returned `sessionId` to every `ai.start` of the operation. A session ends after about 90 seconds without a running request, after 30 minutes, at Android's own foreground-service time limit (which can come earlier), when the user cancels from its notification, when AI is revoked, and when the page is replaced or its task closes. Cancelling, revoking, the cap and the Android limit give an unfinished request of the session a terminal error (`session_cancelled`, `session_timeout`) and never touch a completed result; the notification Cancel therefore aborts the whole operation. A page release, reload or rotation (`session_ended`) leaves a running request running, so a recreated page can poll, save and acknowledge it by ID before it begins a new session; `begin` adopts a running request of the same task and never reissues or discards it. A later `ai.start` with an ended session fails with `session_cancelled`, `session_idle`, `session_timeout` or `session_ended` before any provider call; an unknown, foreign or lost session (including after process death) is `not_found`. The host remembers one ended session per subapp. A session without a running request keeps one ongoing notification (body "Waiting for the next step." unless `begin` supplies one). Sessions only keep native inference running and let the next request start; they do not make the page's JavaScript run while Android suspends it, so save results when the page runs again. Hosts without sessions answer `ai.sessions.supported()`'s probe with `invalid_request` "Unsupported AI command."; use unsessioned requests there, and never treat any other failure as "unsupported".
-
-This runnable module example (placed under `js/`) saves before acknowledging:
-
-```js
-import { ai, writeFile } from './bridge.js';
-export async function generateExample() {
-  if (!ai.available) throw new Error('Open this app in App².');
-  const { providers } = await ai.providers();
-  const provider = providers.find(p => p.connected);
-  if (!provider) throw new Error('Connect the selected provider in library Settings → AI.');
-  const { models } = await ai.models(provider.id);
-  if (!models.length) throw new Error('No models available.');
-  const id = await ai.start({providerId: provider.id, model: models[0].id,
-    instructions: 'Use plain language.',
-    input: 'Write one short sentence explaining what a subapp is.'});
-  // Persist id immediately for recovery in a production workflow.
-  let text;
-  try { text = await ai.wait(id); }
-  catch (error) {
-    await ai.acknowledge(id).catch(() => {});
-    throw error;
-  }
-  if (!writeFile('data/example.json', {id, text}))
-    throw new Error('Save failed: retain id and retry saving before acknowledgement.');
-  await ai.acknowledge(id);
-  return text;
-}
-```
-
-The Starter Demo's `js/ai-demo.js` provides the complete recoverable workflow: `data/ai-demo.json` holds `pending` request metadata and one `latest` result containing its ID, provider, model, requested reasoning, prompt, timestamp and text. The request ID is the idempotency key. Save the JSON result first, then acknowledge, then clear pending metadata. A save failure retains the request and offers **Retry saving** without generating again. If the page is recreated or resumes, poll `ai.result(id)` for the persisted ID; `ai.wait(id)` cannot recover a prior page's ID. A missing request is interrupted; preserve any saved result and require deliberate generation. Release handled terminal failures with acknowledgement. Render generated text through `textContent`.
-
-Listen for `app2:ai:connection` with `event.detail = {providerId, connected}` and refresh provider/model discovery. `app2:ai:status` currently reports `{id, status: "running"}`; use result polling for completion/failure, rather than assuming a completion status event. Refresh/recover on `pageshow` and `visibilitychange` when visible. These events expose no account identifiers or credentials.
-
-The native host binds requests to the exact subapp HTTPS origin and main frame and derives subapp/task ownership. Another subapp cannot retrieve, cancel or acknowledge your request. Callers cannot provide arbitrary endpoints or authentication headers. A subapp may run any number of requests at once (for example independent stages of one operation); each has its own ID to poll, save and acknowledge, and only the start rate limit applies (6 starts per app per minute by default, `usage_limit`; the user can raise it or turn it off in App² Settings → AI). Requests under one operation session share its notification. Different subapps generate concurrently. Native credentials remain encrypted outside workspaces, snapshots and exports.
-
-Each unfinished request has its own ongoing notification from `AiRequestService`, with **Open** and **Cancel** actions; Cancel affects only that request and stale actions are ignored. The service recomputes every notification, the single foreground one (promoted when it finishes) and its own stop from the request ledger (`reconcile`), so overlapping starts and finishes cannot leave stale notifications. The notification shows the app name derived natively from its manifest. `title` (60 characters) and `body` (140) are optional presentation text from the subapp: strings only (otherwise `invalid_request`), control characters removed, defaults "AI request in progress" / "AppApp will continue while you use another app.". They never reach the provider and are not stored in workspaces.
-
-Requests use native Responses streaming with `store:false`; text succeeds only after `response.completed`. Switching apps or opening the sign-in browser allows the active request to continue under a foreground notification. Rotation preserves the native request. Explicit reload, final screen closure, deletion and swiping the owning task from Recent Apps cancel its requests; closing another task does not. Completed results remain available until acknowledgement or task closure. Process death, force-stop and reboot do not restart inference. Persisted IDs can become `not_found`. Web workflows after inference (validation and auto-save) resume when the web app runs again; the foreground service does not execute the whole web app in the background.
-
-
-## Starter Demo browser development
-
-The Starter Demo includes `dev_server.py`. From the repository, run:
-
-```sh
-python3 app/src/main/assets/starter_template/dev_server.py
-# Optional deterministic AI simulation, without credentials or ChatGPT usage:
-python3 app/src/main/assets/starter_template/dev_server.py --mock-ai
-```
-
-Open `http://localhost:8888`. A positional port is also accepted, e.g. `dev_server.py 9000 --mock-ai`.
-For an exported workspace, run `python3 dev_server.py` inside that workspace. The server always
-serves the script's directory and binds only to localhost. Use Python 3.9 or newer, with no dependencies.
-
-Browser file operations read/write actual workspace files, including JPEG photos; development
-preferences live in `data/dev-preferences.json`. Use a disposable workspace copy for tests because
-notes, photos and AI results change files on disk. The bridge probes `/__bridge/info` once; ordinary
-static previews retain localStorage. After selecting the server, failed writes return false and
-failed reads throw; they never silently fall back to localStorage.
-
-`--mock-ai` enables a visibly labelled development mock and one offline model. Generate returns
-fixed text after 1.5 seconds. Requests survive browser reloads while the server runs and occupy
-one slot until cancellation or acknowledgement. Restarting the server loses requests; persisted
-IDs then return `not_found`. No external requests are made. Mock requests do not reproduce native
-task closure or background service behavior. Notifications keep browser behavior; Android
-permissions, exact alarms, WebView insets and real AI must be tested on Android.
-
-## Native GitHub subapp updates
-
-Share & Package App is export-only. ZIP installation is available in the library
-and creates a separate app. Existing apps update through native Update app,
-following public GitHub package metadata in `manifest.json.app2Update`. The host
-pins downloads to one commit, reviews managed changes/local edits and requires
-confirmation. Managed files update; seeds copy only when absent; all unowned files
-remain. `data/` can contain managed shipped definitions as well as user records,
-so declare ownership explicitly. Domain records and preferences must be seeds,
-never managed replacements. Publisher app identity differs from installed App² ID.
-
-The wrapper exports `updates.available` and `updates.open()` (Promise resolving
-true when native review opens). Browsers report unavailable. The owning HTTPS
-origin and main frame are required; web callers cannot supply endpoints or install
-silently. Finish/save/acknowledge or cancel AI requests before updating. App² 1.3.0
-(version code 4) adds this channel. Native update state, full binary backups and
-recovery journals live beside the workspace; ordinary history is not a full backup.
-See the App² repository's `docs/SUBAPP_UPDATES.md` for publisher metadata, recovery,
-version history, deterministic packaging and the phone deployment checklist.
-
-
-## Text to Speech
-
-Import `speech` from `js/bridge.js`. `speech.available` reports a supported native channel,
-not engine readiness. Browser previews reject calls with `unavailable`.
-
-- `await speech.voices()` returns `{voices: [{id, name, language, requiresNetwork}]}` from
-  Android's configured TTS engine. Discover voice IDs; do not hardcode them. Online voices
-  may transmit text through the configured engine and require connectivity.
-- `await speech.speak({text, language, voiceId?, rate?, pitch?})` requires a BCP 47 language
-  such as `fr-FR`, `de-DE`, or `ja-JP`. No language detection is performed. An explicit voice
-  must match the requested language and script. Regional fallback within that language is allowed.
-  Rate and pitch default to 1 and accept finite values from 0.5 to 2.
-- The speak Promise resolves with `{status: "completed"}` after playback or
-  `{status: "cancelled"}` after replacement/Stop. New playback replaces previous playback.
-- `await speech.stop()` resolves to `true`, including when idle.
-- Errors reject with `.code` and `.message`: `unavailable`, `invalid_request`, `language`,
-  `missing_data`, `voice`, `network`, `synthesis`, `cancelled`, or command `timeout`.
-  Missing data must be installed through Android TTS settings; do not retry automatically.
-  Empty text and text beyond Android's engine input limit are rejected.
-
-Subapps provide their own pronunciation buttons using `speech.speak({text, language})`.
-App² does not add a Speak action to Android’s text selection menu.
-Subapps supply playback controls; the starter template implements its own web Speaking/Stop bar. Speech stops on backgrounding, page reload,
-navigation, workspace replacement, or closure; it is not persisted or resumed.
-The channel accepts only the owning subapp HTTPS origin and main frame. No AI account is needed.
-Store any subapp voice preferences in plain JSON under `data/`. The Starter Demo includes
-`js/speech-demo.js`; existing apps adopt the speech API explicitly.
-
-
-### Pronunciation example
-
-Use this in a JavaScript module under `js/`:
-
-```js
-import { speech } from './bridge.js';
-if (!speech.available) throw new Error('Open this app in App² to hear pronunciation.');
-try {
-  const result = await speech.speak({text: 'Bonjour', language: 'fr-FR', rate: 0.8});
-  // result.status is "completed" or "cancelled".
-} catch (error) {
-  // Show error.message; require a deliberate retry.
-  console.error(error.code, error.message);
-}
-```
-
-Existing workspaces are not rewritten; adopt the current wrapper explicitly to add speech buttons.
-
-
-## Device Translation
-
-Import `translation` from `js/bridge.js`. These methods return Promises:
-
-- `await translation.availability()` returns `{available: true}` only when Android 10/API 29
-  or later has an installed activity that handles `Intent.ACTION_TRANSLATE`.
-- `await translation.open({text})` opens the default handler, or Android's resolver when a
-  handler must be selected, and resolves to `{opened: true}` after launching it.
-  It does not return translated text or confirm translation completion.
-
-Supply canonical selected text from the subapp's own selection model. Text is forwarded unchanged;
-blank text and text longer than 100000 JavaScript UTF-16 code units are rejected. Android's standard
-translation intent only accepts text (`Intent.EXTRA_TEXT`): it has no source or target language
-parameters. The receiving app controls language detection, target language, and translation UI.
-No contextual menu action is added by App². Call `open` only after a deliberate user action.
-Opening translation sends the supplied text to the selected external application.
-
-The channel is restricted to the owning subapp HTTPS origin and main frame, and requires a
-foreground app. Browser previews and unsupported hosts report `{available: false}` from
-`availability()`; `open()` rejects with `unavailable`. Native failures reject with `.code` and
-`.message`: `invalid_request` or `unavailable`; the wrapper may also reject with `timeout`.
-Handle errors and require deliberate retry. Availability can change between checking and opening.
-
-```js
-import { translation } from './bridge.js';
-translateButton.hidden = !(await translation.availability()).available;
-translateButton.addEventListener('click', async () => {
-  try {
-    await translation.open({text: canonicalSelectedText});
-  } catch (error) {
-    status.textContent = error.message;
-  }
-});
-```
-
-Existing workspaces must explicitly adopt the updated `js/bridge.js` to use this API.
+- Manage provider connections exclusively through **library → Settings → AI**. The AI card is collapsed by default and shows a one-line summary (connected services and what subapps see); expanding it lists only services the user has added, plus an **Add another service** menu for the rest. With nothing added, the header shows "+" and tapping it opens that menu directly. OpenRouter and the custom endpoint are verified inside their entry dialog: "Verify and save" keeps the dialog open, shows a failure on the field it concerns, and only a verified service is saved and listed. A saved service shows **Check connection** (re-verifies without generating text); replacing the key or editing the endpoint and removing it are in its overflow menu. Editing a custom endpoint may leave the key empty to keep the current key. **Available to subapps** appears only when there is a real choice (two or more connected, or the selected provider is not connected). Adding a service while the selected provider is disconnected selects the new service. ChatGPT uses OAuth; OpenRouter uses one native encrypted API key. A **custom endpoint** (any OpenAI-compatible service: HTTPS base URL such as `https://host/v1` plus API key, using `/models` and `/chat/completions`) is stored natively and encrypted, is verified by listing models, exposes provider ID `custom`, has no reasoning levels, and is billed by that service. Plain `http://` is refused. Editors and subapps have no credential controls. **Available to subapps** exposes exactly one provider: `chatgpt`, `openrouter`, `custom`, or `combined` (App² AI). Combined is connected when at least one source is connected and lists ChatGPT models first, then OpenRouter models, with source labels. Model IDs are opaque, stable and unique within the exposed provider; do not parse them or hardcode model IDs. Explicit calls to hidden providers fail with `provider`.
+- Each unfinished request has its own ongoing notification from `AiRequestService`, with **Open** and **Cancel** actions; Cancel affects only that request and stale actions are ignored. The service recomputes every notification, the single foreground one (promoted when it finishes) and its own stop from the request ledger (`reconcile`), so overlapping starts and finishes cannot leave stale notifications. The notification shows the app name derived natively from its manifest. `title` (60 characters) and `body` (140) are optional presentation text from the subapp: strings only (otherwise `invalid_request`), control characters removed, defaults "AI request in progress" / "AppApp will continue while you use another app.". They never reach the provider and are not stored in workspaces.

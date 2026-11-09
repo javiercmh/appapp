@@ -4,7 +4,7 @@ App² is MIT licensed (see `LICENSE`). Its Android build bundles the runtime lib
 Every one declares the Apache License, Version 2.0 in its published Maven POM;
 the full license text is at https://www.apache.org/licenses/LICENSE-2.0.
 This inventory was generated from the resolved release runtime classpath recorded in
-`docs/store-review-2026-10-13/dependency-licenses.json`. Regenerate it when dependencies change.
+`docs/dependency-licenses.json`. Regenerate it when dependencies change.
 
 | Module | Declared license |
 | --- | --- |

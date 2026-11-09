@@ -26,7 +26,7 @@ fastlane. Store screenshots still require a separate review and selection.
 - The single build entry is **disabled** and pins the existing v1.7.0 commit. It records the intended
   shape and the reason v1.7.0 cannot be built for F-Droid. Do not repoint it; activation adds a new entry
   for the next release.
-- `AntiFeatures: NonFreeNet` (optional ChatGPT/OpenRouter AI; basis: `STORE_COMPLIANCE_REVIEW_2026-10-13.md`
+- `AntiFeatures: NonFreeNet` (optional ChatGPT/OpenRouter AI; basis: [the October 2026 store review](archive/STORE_COMPLIANCE_REVIEW_2026-10-13.md)
   section 3 and `ai/`). No other label is claimed; final assignment is up to F-Droid maintainers.
 - `UpdateCheckMode: Tags ^v[0-9]+\.[0-9]+\.[0-9]+$` ignores the `dev-N` tags. `AutoUpdateMode: None` until
   activation, then `Version`. `gradle` is a list; no `output:`.
