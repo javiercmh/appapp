@@ -239,16 +239,14 @@ class UpdateController(
             if (latest.isNotEmpty()) { append("\n"); bold("What's new"); append("\n${latest.joinToString("\n")}\n") }
             update.note?.let { append("\n$it\n") }
             if (preview.edited.isNotEmpty()) append("\n⚠ ${if (preview.edited.size == 1) "1 code file you edited or removed will be replaced by the publisher's version." else "${preview.edited.size} code files you edited or removed will be replaced by the publisher's versions."}\n")
-            val start = length
-            append("\nA recovery backup will be saved in Edit → Version history.")
-            if (mismatch == null) append("\n\n").append(UpdateReviewCopy.permissionSummary(granted))
-            setSpan(android.text.style.RelativeSizeSpan(0.9f), start, length, 0)
-            setSpan(android.text.style.ForegroundColorSpan(androidx.core.content.ContextCompat.getColor(activity, com.wynh.appapp.R.color.on_surface_muted)), start, length, 0)
-        }
+        }.trimEnd()
+        // The fine print follows the changed files, so expanding the list opens right below What's new.
+        val footer = "A recovery backup will be saved in Edit → Version history." +
+            if (mismatch == null) "\n\n" + UpdateReviewCopy.permissionSummary(granted) else ""
         var accepted = false
         var skipped = false
         val confirm = if (older) "Install older version" else if (mismatch != null) "Update anyway" else if (preview.adoption) "Link and update" else "Update"
-        val reviewDialog = showUpdateDialog(if (guided == null) "Review app update" else "${guided.appName} · ${guided.position} of ${guided.total}", text, content = changedFilesView(preview),
+        val reviewDialog = showUpdateDialog(if (guided == null) "Review app update" else "${guided.appName} · ${guided.position} of ${guided.total}", text, content = changedFilesView(preview), footer = footer,
             primary = Action(confirm) { dialog ->
                 accepted = true
                 guided?.onInstalling?.invoke()
@@ -266,41 +264,73 @@ class UpdateController(
         guided?.onShown?.invoke(reviewDialog)
     }
 
-    /** "Show changed files (N)" that expands to the added, changed and removed paths; null when none. */
+    /**
+     * "Show changed files (N)" that expands to the added (+), changed (~) and removed (−) paths, with
+     * coloured markers, and scrolls them into view; null when none.
+     */
     private fun changedFilesView(preview: UpdatePreview): android.view.View? {
-        val lines = preview.added.map { "+ $it" } + preview.changed.map { "~ $it" } + preview.removed.map { "− $it" }
-        if (lines.isEmpty()) return null
+        fun color(id: Int) = androidx.core.content.ContextCompat.getColor(activity, id)
+        val entries = preview.added.map { Triple("+", it, com.wynh.appapp.R.color.accent_green) } +
+            preview.changed.map { Triple("~", it, com.wynh.appapp.R.color.accent_blue) } +
+            preview.removed.map { Triple("−", it, com.wynh.appapp.R.color.accent_red) }
+        if (entries.isEmpty()) return null
         val density = activity.resources.displayMetrics.density
+        fun dp(value: Int) = (value * density).toInt()
         val list = android.widget.TextView(activity).apply {
-            text = lines.sorted().joinToString("\n") { it }
+            text = android.text.SpannableStringBuilder().apply {
+                entries.sortedBy { it.second }.forEachIndexed { index, (mark, path, markColor) ->
+                    if (index > 0) append("\n")
+                    val start = length
+                    append(mark)
+                    setSpan(android.text.style.ForegroundColorSpan(color(markColor)), start, length, 0)
+                    setSpan(android.text.style.StyleSpan(android.graphics.Typeface.BOLD), start, length, 0)
+                    append("  ").append(path)
+                }
+            }
             typeface = android.graphics.Typeface.MONOSPACE
-            textSize = 12f
-            setTextColor(androidx.core.content.ContextCompat.getColor(activity, com.wynh.appapp.R.color.on_surface_muted))
-            setPadding((20 * density).toInt(), 0, (20 * density).toInt(), (12 * density).toInt())
+            textSize = 13f
+            setLineSpacing(dp(4).toFloat(), 1f)
+            setTextColor(color(com.wynh.appapp.R.color.on_surface))
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(color(com.wynh.appapp.R.color.surface_variant)); cornerRadius = dp(12).toFloat()
+            }
             visibility = android.view.View.GONE
         }
-        val label = { open: Boolean -> "${if (open) "Hide" else "Show"} changed files (${lines.size})" }
+        val label = { open: Boolean -> "${if (open) "Hide" else "Show"} changed files (${entries.size})" }
         val toggle = android.widget.TextView(activity).apply {
             text = label(false)
             textSize = 14f
-            minHeight = (48 * density).toInt()
+            minHeight = dp(48)
             gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
             isClickable = true; isFocusable = true
             val ripple = android.util.TypedValue().also { activity.theme.resolveAttribute(android.R.attr.selectableItemBackground, it, true) }
             setBackgroundResource(ripple.resourceId)
-            setTextColor(androidx.core.content.ContextCompat.getColor(activity, com.wynh.appapp.R.color.primary))
-            setPadding((20 * density).toInt(), 0, (20 * density).toInt(), 0)
-            setOnClickListener {
-                val open = list.visibility != android.view.View.VISIBLE
-                list.visibility = if (open) android.view.View.VISIBLE else android.view.View.GONE
-                text = label(open)
-            }
+            setTextColor(color(com.wynh.appapp.R.color.primary))
+            setPadding(dp(20), 0, dp(20), 0)
         }
-        return LinearLayout(activity).apply {
+        val container = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             addView(toggle, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-            addView(list)
+            addView(list, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                .apply { setMargins(dp(20), 0, dp(20), dp(4)) })
         }
+        toggle.setOnClickListener {
+            val open = list.visibility != android.view.View.VISIBLE
+            list.visibility = if (open) android.view.View.VISIBLE else android.view.View.GONE
+            toggle.text = label(open)
+            // Bring the opened list into view: as much of it as fits, starting at the toggle.
+            if (open) list.post {
+                var parent = container.parent
+                while (parent != null && parent !is androidx.core.widget.NestedScrollView) parent = parent.parent
+                val scroll = parent as? androidx.core.widget.NestedScrollView ?: return@post
+                val rect = android.graphics.Rect().also { container.getDrawingRect(it) }
+                scroll.offsetDescendantRectToMyCoords(container, rect)
+                val bottomAligned = rect.bottom - scroll.height
+                scroll.smoothScrollTo(0, minOf(rect.top, maxOf(scroll.scrollY, bottomAligned)))
+            }
+        }
+        return container
     }
 
     internal class Action(val label: String, val run: (android.app.Dialog) -> Unit)
@@ -313,13 +343,20 @@ class UpdateController(
      */
     internal fun showUpdateDialog(title: String, message: CharSequence, primary: Action?, secondary: Action? = null,
                                  dismissLabel: String? = activity.getString(android.R.string.cancel),
-                                 content: android.view.View? = null, onDismissed: () -> Unit = {}): android.app.Dialog {
+                                 content: android.view.View? = null, footer: CharSequence? = null, onDismissed: () -> Unit = {}): android.app.Dialog {
         val dialog = android.app.Dialog(activity, com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog)
         dialog.setContentView(com.wynh.appapp.R.layout.dialog_update_review)
         dialog.window?.setLayout(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
         dialog.findViewById<android.widget.TextView>(com.wynh.appapp.R.id.update_review_title).text = title
         dialog.findViewById<android.widget.TextView>(com.wynh.appapp.R.id.update_review_message).text = message
-        if (content != null) dialog.findViewById<android.widget.FrameLayout>(com.wynh.appapp.R.id.update_review_content).apply { addView(content); visibility = android.view.View.VISIBLE }
+        if (content != null) {
+            dialog.findViewById<android.widget.FrameLayout>(com.wynh.appapp.R.id.update_review_content).apply { addView(content); visibility = android.view.View.VISIBLE }
+            // The content continues the message, so close the gap between them.
+            dialog.findViewById<android.widget.TextView>(com.wynh.appapp.R.id.update_review_message).apply {
+                setPadding(paddingLeft, paddingTop, paddingRight, (4 * activity.resources.displayMetrics.density).toInt())
+            }
+        }
+        if (footer != null) dialog.findViewById<android.widget.TextView>(com.wynh.appapp.R.id.update_review_footer).apply { text = footer; visibility = android.view.View.VISIBLE }
         dialog.findViewById<android.widget.Button>(com.wynh.appapp.R.id.update_review_confirm).apply {
             if (primary == null) visibility = android.view.View.GONE
             else { text = primary.label; setOnClickListener { primary.run(dialog) } }

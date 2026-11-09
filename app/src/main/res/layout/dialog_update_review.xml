@@ -40,11 +40,23 @@
                 android:textColor="@color/on_surface"
                 android:textSize="14sp" />
 
-            <!-- Optional form, such as the repository and branch fields. -->
+            <!-- Optional content right after the message: a form, or the expandable changed files. -->
             <FrameLayout
                 android:id="@+id/update_review_content"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:visibility="gone" />
+
+            <!-- Optional fine print after the content, such as backup and permission notes. -->
+            <TextView
+                android:id="@+id/update_review_footer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingHorizontal="20dp"
+                android:paddingTop="8dp"
+                android:paddingBottom="20dp"
+                android:textColor="@color/on_surface_muted"
+                android:textSize="13sp"
                 android:visibility="gone" />
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
