@@ -424,6 +424,16 @@ class AppAiManager(context: Context) {
         LeaseLookup.Unknown -> false
     }
 
+    /**
+     * The owning activity of [taskId] started or stopped. While it is stopped, its sessions have no
+     * idle deadline: the page may not run JavaScript then, so a gap is not a sign of abandonment.
+     * The session cap, Android's limit, Cancel and task close still apply. Main thread.
+     */
+    fun setTaskVisible(taskId: Int, visible: Boolean) {
+        leases.setVisible(taskId, visible)
+        changed()
+    }
+
     /** The page was replaced or reloaded: its sessions are gone, its running requests are not. */
     fun releaseTask(taskId: Int) {
         leases.all().filter { it.taskId == taskId }.forEach { endLease(it.appId, SessionEnd.RELEASED); leases.forget(it.appId) }
@@ -446,7 +456,7 @@ class AppAiManager(context: Context) {
     /** Recomputes session activity and notifications after any change. Main thread. */
     private fun changed() {
         val busy = ledger.unfinished().map { it.second.appId }.toSet()
-        leases.all().forEach { leases.setBusy(it, it.appId in busy) }
+        leases.all().forEach { leases.refresh(it, it.appId in busy) }
         leases.due().forEach { (lease, reason) -> endLease(lease.appId, reason) }
         scheduleSweep()
         AiRequestService.reconcile()

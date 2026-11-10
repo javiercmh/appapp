@@ -10,7 +10,7 @@ internal enum class SessionEnd(val kind: ApiFailure.Kind, val code: String, val 
     /** The page released the session, or its page was replaced. A running request keeps running. */
     RELEASED(ApiFailure.Kind.SESSION_ENDED, "session_ended", "This background session has ended.", false),
     CANCELLED(ApiFailure.Kind.SESSION_CANCELLED, "session_cancelled", "Background work was cancelled.", true),
-    IDLE(ApiFailure.Kind.SESSION_IDLE, "session_idle", "The background session was released after a period without a running request.", false),
+    IDLE(ApiFailure.Kind.SESSION_IDLE, "session_idle", "The background session was released after a period on screen without a running request.", false),
     /** The session cap, or Android's own foreground-service time limit, which can arrive earlier. */
     TIMEOUT(ApiFailure.Kind.SESSION_TIMEOUT, "session_timeout", "Background work stopped at a time limit.", true),
     DENIED(ApiFailure.Kind.BACKGROUND_SERVICE, "background_service", "Android could not keep background work running.", true)
@@ -20,8 +20,13 @@ internal class AiLease(
     var id: String, val appId: String, val taskId: Int, val notificationId: Int,
     val presentation: AiPresentation, val hardDeadline: Long
 ) {
-    /** Null while a request runs under the session. */
+    /** Null while a request runs under the session, and while its page is not on screen. */
     var idleDeadline: Long? = null
+    /**
+     * Whether the owning activity is started. Only then is the page certain to run JavaScript, so
+     * only then can a gap without a request mean the operation was abandoned.
+     */
+    var visible = true
     var confirmed = false
 }
 
@@ -53,7 +58,8 @@ internal class AiLeaseTable(private val clock: () -> Long, var idleMs: Long = ID
     fun open(appId: String, taskId: Int, id: String, notificationId: Int, presentation: AiPresentation, adopt: Boolean): AiLease {
         val old = live[appId]
         if (old != null && old.taskId != taskId) throw IllegalStateException("Another task of this app holds the session.")
-        if (old != null && adopt) { old.id = id; ended.remove(appId); return old }
+        // A session begins only while its activity is resumed, so an adopted lease is on screen again.
+        if (old != null && adopt) { old.id = id; old.visible = true; ended.remove(appId); return old }
         val now = clock()
         val lease = AiLease(id, appId, taskId, old?.notificationId ?: notificationId, presentation, now + maxMs)
         lease.idleDeadline = now + idleMs
@@ -67,9 +73,17 @@ internal class AiLeaseTable(private val clock: () -> Long, var idleMs: Long = ID
         return LeaseLookup.Unknown
     }
 
-    fun setBusy(lease: AiLease, busy: Boolean) {
-        if (busy) lease.idleDeadline = null else if (lease.idleDeadline == null) lease.idleDeadline = clock() + idleMs
+    /**
+     * The idle clock runs only while no request of the session runs and its page is on screen; each
+     * time both become true the page gets a full [idleMs] again.
+     */
+    fun refresh(lease: AiLease, busy: Boolean) {
+        if (busy || !lease.visible) lease.idleDeadline = null
+        else if (lease.idleDeadline == null) lease.idleDeadline = clock() + idleMs
     }
+
+    /** Marks the leases of [taskId]; call [refresh] afterwards. */
+    fun setVisible(taskId: Int, visible: Boolean) { live.values.filter { it.taskId == taskId }.forEach { it.visible = visible } }
 
     /** Removes the live lease and remembers why, replacing any earlier memory for the app. */
     fun end(appId: String, reason: SessionEnd): AiLease? {

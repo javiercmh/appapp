@@ -158,6 +158,17 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
     private var runtimeSession: com.wynh.appapp.runtime.RuntimeSession? = null
 
 
+    // A session's idle window runs only while its page is on screen (see AppAiManager.setTaskVisible).
+    override fun onStart() {
+        super.onStart()
+        (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.setTaskVisible(taskId, true)
+    }
+
+    override fun onStop() {
+        (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.setTaskVisible(taskId, false)
+        super.onStop()
+    }
+
     override fun onResume() {
         runtimeSession?.resume()
         super.onResume()
@@ -1379,7 +1390,8 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
         editorDialog = null; configDialog = null; historyDialog = null
         runtimeSession?.close()
         super.onDestroy()
-        if (isFinishing) (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.cancelTask(taskId)
+        // Its page is destroyed with it: a session cannot continue, a running request can (see releaseTask).
+        (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.let { if (isFinishing) it.cancelTask(taskId) else it.releaseTask(taskId) }
         if (::subapp.isInitialized) SubappSessionRegistry.unregister(subapp.id, this)
         // Release any in-flight file chooser before tearing the WebView down.
         runtimeChooser.complete(null)

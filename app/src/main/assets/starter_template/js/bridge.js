@@ -177,6 +177,8 @@ export const ai = {
   // operation. They start no inference and never promise that this page runs while it is suspended.
   sessions: {
     // -> boolean. Rejects on any answer that is not a confirmed yes or a confirmed "unsupported".
+    // The host's answer also carries idle: "visible" (the idle window runs only while the app is on
+    // screen) and maxOutputUnits (the longest answer text, in UTF-16 units, this device accepts).
     supported: aiSessionSupport,
     // Call from a user action while the page is visible, with the first request's real provider/model.
     // -> {sessionId}. Errors: permission, background_service, authentication, provider, invalid_request.

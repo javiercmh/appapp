@@ -289,6 +289,36 @@ class AiSessionDeviceTest : AiDeviceFixture() {
         assertEquals(0, fake.calls.get())
     }
 
+    @Test fun aStoppedTaskHasNoIdleDeadlineAndGetsAFullWindowWhenItStartsAgain() {
+        timings(idle = 400)
+        val app = newApp("Off screen")
+        val session = beginOk(app, 9935)
+        onMain { manager.setTaskVisible(9935, false) }
+        SystemClock.sleep(1_500)
+        assertTrue(manager.isSessionLive(app, 9935, session))
+        // A step that ran while stopped finishes, and the next one starts long after idleMs.
+        val first = start(app, 9935, "off1", session)
+        finish("off1"); assertEquals("done:off1", resultOf(first).text)
+        SystemClock.sleep(1_500)
+        val second = start(app, 9935, "off2", session)
+        finish("off2"); assertEquals("done:off2", resultOf(second).text)
+        onMain { manager.setTaskVisible(9935, true) }
+        eventually("idle expiry once visible") { if (!manager.isSessionLive(app, 9935, session)) true else null }
+        assertEquals(ApiFailure.Kind.SESSION_IDLE, failureOf { start(app, 9935, "late", session) }.kind)
+        eventually("service stops") { serviceStopped() }
+    }
+
+    @Test fun aGenerationPastTheCeilingFailsWithTimeout() {
+        manager.timings = AppAiManager.Timings(generationMs = 800)
+        val app = newApp("Ceiling")
+        val id = start(app, 9937, "endless")
+        assertTrue(fake.entered.getValue("endless").await(10, TimeUnit.SECONDS))
+        val result = resultOf(id)
+        assertEquals("timeout", result.errorCode)
+        assertNull(result.text)
+        eventually("service stops") { serviceStopped() }
+    }
+
     @Test fun hardCapTerminalizesARunningRequestWithATimeoutError() {
         timings(max = 600)
         val app = newApp("Cap")

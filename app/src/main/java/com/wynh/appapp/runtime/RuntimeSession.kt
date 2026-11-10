@@ -71,6 +71,8 @@ class RuntimeSession(
             }
             override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
                 close()
+                // The page cannot continue its operation; a running request keeps running for a reloaded page.
+                (activity.application as? AppAiApplication)?.ai?.releaseTask(activity.taskId)
                 (web.parent as? ViewGroup)?.removeView(web)
                 web.destroy()
                 if (!activity.isFinishing && !activity.isDestroyed) MaterialAlertDialogBuilder(activity)

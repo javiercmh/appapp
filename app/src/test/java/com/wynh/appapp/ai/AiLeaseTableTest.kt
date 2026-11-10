@@ -19,15 +19,15 @@ class AiLeaseTableTest {
 
     @Test fun `idle deadline starts without a request and clears while one runs`() {
         val lease = open()
-        now += 80; table.setBusy(lease, true)
+        now += 80; table.refresh(lease, true)
         now += 500; assertTrue(table.due().isEmpty())
-        table.setBusy(lease, false)
+        table.refresh(lease, false)
         now += 89; assertTrue(table.due().isEmpty())
         now += 1; assertEquals(SessionEnd.IDLE, table.due().single().second)
     }
 
     @Test fun `hard cap wins and applies even while busy`() {
-        val lease = open(); table.setBusy(lease, true)
+        val lease = open(); table.refresh(lease, true)
         now += 999; assertTrue(table.due().isEmpty())
         now += 1; assertEquals(SessionEnd.TIMEOUT, table.due().single().second)
     }
@@ -84,6 +84,33 @@ class AiLeaseTableTest {
 
     @Test fun `next deadline is the earliest of cap and idle`() {
         open(); assertEquals(1_090L, table.nextDeadline())
-        table.setBusy(table.leaseOf("a")!!, true); assertEquals(2_000L, table.nextDeadline())
+        table.refresh(table.leaseOf("a")!!, true); assertEquals(2_000L, table.nextDeadline())
+    }
+
+    @Test fun `no idle deadline while the page is off screen, and a full window on return`() {
+        val lease = open()
+        now += 80; table.setVisible(1, false); table.refresh(lease, false)
+        now += 500; assertTrue(table.due().isEmpty())
+        table.setVisible(1, true); table.refresh(lease, false)
+        now += 89; assertTrue(table.due().isEmpty())
+        now += 1; assertEquals(SessionEnd.IDLE, table.due().single().second)
+    }
+
+    @Test fun `a request finishing off screen leaves no idle deadline`() {
+        val lease = open(); table.refresh(lease, true)
+        table.setVisible(1, false); table.refresh(lease, false)
+        assertNull(lease.idleDeadline); assertEquals(2_000L, table.nextDeadline())
+    }
+
+    @Test fun `the cap applies off screen`() {
+        val lease = open(); table.setVisible(1, false); table.refresh(lease, false)
+        now += 1_000; assertEquals(SessionEnd.TIMEOUT, table.due().single().second)
+    }
+
+    @Test fun `visibility is per task and adoption brings a lease back on screen`() {
+        open("a", 1, "sa"); open("b", 2, "sb")
+        table.setVisible(1, false)
+        assertFalse(table.leaseOf("a")!!.visible); assertTrue(table.leaseOf("b")!!.visible)
+        assertTrue(open("a", 1, "sa2", adopt = true).visible)
     }
 }

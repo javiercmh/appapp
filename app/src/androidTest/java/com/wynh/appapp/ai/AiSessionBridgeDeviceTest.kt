@@ -59,7 +59,8 @@ class AiSessionBridgeDeviceTest : AiDeviceFixture() {
 
     @Test fun sessionCarriesStagesAcrossAnIdleGapWhileTheActivityIsBackgrounded() {
         val counting = CountingStarter(manager.foregroundStarter); manager.foregroundStarter = counting
-        manager.timings = AppAiManager.Timings(idleMs = 20_000)
+        // Far shorter than the gap below: off screen the idle clock does not run.
+        manager.timings = AppAiManager.Timings(idleMs = 1_500)
         val app = newApp("Bridge Stages")
         page(app, "import {ai} from './js/bridge.js'; window.ai = ai; window.out = {};")
         withPage(app) { scenario, web, task ->
@@ -78,9 +79,11 @@ class AiSessionBridgeDeviceTest : AiDeviceFixture() {
             assertTrue(fake.entered.getValue("p1").await(10, TimeUnit.SECONDS))
             finish("p1"); assertEquals("done:p1", resultOf(first).text); manager.acknowledge(first)
 
-            // The idle gap, with the activity stopped: the session keeps the service up with an honest notification.
-            SystemClock.sleep(2500)
+            // The gap, with the activity stopped and longer than idleMs: the session keeps the service up
+            // with an honest notification and does not expire.
+            SystemClock.sleep(4_000)
             assertFalse(scenario.state.isAtLeast(Lifecycle.State.RESUMED))
+            assertTrue("No idle expiry while the page is off screen", manager.isSessionLive(app, task, session))
             val gap = eventually("idle notification during the gap") { forApp("Bridge Stages")?.takeIf { isForeground(it) } }
             assertEquals(AiNotificationCopy.LEASE_BODY, text(gap, android.app.Notification.EXTRA_TEXT))
 
@@ -112,7 +115,7 @@ class AiSessionBridgeDeviceTest : AiDeviceFixture() {
         }
     }
 
-    @Test fun idleExpiryHappensWhileTheActivityIsStopped() {
+    @Test fun noIdleExpiryWhileStoppedAndAFullIdleWindowAfterReturning() {
         manager.timings = AppAiManager.Timings(idleMs = 1_500)
         val app = newApp("Bridge Idle")
         page(app, "import {ai} from './js/bridge.js'; window.ai = ai; window.out = {};")
@@ -120,11 +123,46 @@ class AiSessionBridgeDeviceTest : AiDeviceFixture() {
             assertEquals("true", await(web, "!!window.ai"))
             js(web, "ai.sessions.begin({model: 'fake'}).then(r => out.sid = r.sessionId)")
             val session = unquote(await(web, "window.out.sid"))
-            home(scenario)
-            eventually("idle expiry") { if (!manager.isSessionLive(app, task, session)) true else null }
+            scenario.moveToState(Lifecycle.State.CREATED)
+            SystemClock.sleep(4_000)
+            assertTrue("Stopped: no idle expiry", manager.isSessionLive(app, task, session))
+            scenario.moveToState(Lifecycle.State.RESUMED)
+            val back = SystemClock.uptimeMillis()
+            eventually("idle expiry after returning") { if (!manager.isSessionLive(app, task, session)) true else null }
+            assertTrue("A full idle window after returning", SystemClock.uptimeMillis() - back >= 1_400)
             assertEquals(ApiFailure.Kind.SESSION_IDLE, failureOf { start(app, task, "late", session) }.kind)
             assertEquals(0, fake.calls.get())
             eventually("service stops") { serviceStopped() }
+        }
+    }
+
+    @Test fun theSessionCapStillEndsAStoppedSession() {
+        manager.timings = AppAiManager.Timings(idleMs = 1_000, maxMs = 3_000)
+        val app = newApp("Bridge Cap")
+        page(app, "import {ai} from './js/bridge.js'; window.ai = ai; window.out = {};")
+        withPage(app) { scenario, web, task ->
+            assertEquals("true", await(web, "!!window.ai"))
+            js(web, "ai.sessions.begin({model: 'fake'}).then(r => out.sid = r.sessionId)")
+            val session = unquote(await(web, "window.out.sid"))
+            scenario.moveToState(Lifecycle.State.CREATED)
+            eventually("cap while stopped") { if (!manager.isSessionLive(app, task, session)) true else null }
+            assertEquals(ApiFailure.Kind.SESSION_TIMEOUT, failureOf { start(app, task, "late", session) }.kind)
+            eventually("service stops") { serviceStopped() }
+        }
+    }
+
+    @Test fun aRendererCrashReleasesTheSession() {
+        val app = newApp("Bridge Crash")
+        page(app, "import {ai} from './js/bridge.js'; window.ai = ai; window.out = {};")
+        withPage(app) { _, web, task ->
+            assertEquals("true", await(web, "!!window.ai"))
+            js(web, "ai.sessions.begin({model: 'fake'}).then(r => out.sid = r.sessionId)")
+            val session = unquote(await(web, "window.out.sid"))
+            instrumentation.runOnMainSync { web.loadUrl("chrome://crash") }
+            eventually("session released with its page") { if (!manager.isSessionLive(app, task, session)) true else null }
+            // Released like a replaced page: the id is forgotten, and nothing reaches the provider.
+            assertEquals(ApiFailure.Kind.NOT_FOUND, failureOf { start(app, task, "late", session) }.kind)
+            assertEquals(0, fake.calls.get())
         }
     }
 
@@ -141,6 +179,18 @@ class AiSessionBridgeDeviceTest : AiDeviceFixture() {
             eventually("session released by the new page") { if (!manager.isSessionLive(app, task, session)) true else null }
             assertEquals("The request is unaffected by the reload", false, manager.result(id)?.done)
             finish("survives"); assertEquals("done:survives", resultOf(id).text)
+        }
+    }
+
+    @Test fun capabilitiesNameTheIdleRuleAndTheTextBound() {
+        val app = newApp("Bridge Caps")
+        page(app, "window.out = {}; AppAI.onmessage = e => { out.reply = e.data; }; AppAI.postMessage(JSON.stringify({id: 'c1', action: 'capabilities'}));")
+        withPage(app) { _, web, _ ->
+            val data = JsonParser.parseString(unquote(await(web, "window.out.reply"))).asJsonObject.getAsJsonObject("data")
+            assertEquals(1, data.get("sessions").asInt)
+            assertEquals("visible", data.get("idle").asString)
+            assertEquals(manager.maxOutputUnits, data.get("maxOutputUnits").asInt)
+            assertTrue(data.get("maxOutputUnits").asInt >= com.wynh.appapp.ai.network.HttpGateway.MIN_OUTPUT_UNITS)
         }
     }
 

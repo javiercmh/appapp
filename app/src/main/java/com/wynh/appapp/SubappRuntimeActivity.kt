@@ -132,6 +132,17 @@ class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
         }
     }
 
+    // A session's idle window runs only while its page is on screen (see AppAiManager.setTaskVisible).
+    override fun onStart() {
+        super.onStart()
+        (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.setTaskVisible(taskId, true)
+    }
+
+    override fun onStop() {
+        (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.setTaskVisible(taskId, false)
+        super.onStop()
+    }
+
     override fun onResume() {
         runtimeSession?.resume()
         super.onResume()
@@ -171,7 +182,8 @@ class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
 
     override fun onDestroy() {
         runtimeSession?.close()
-        if (isFinishing) (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.cancelTask(taskId)
+        // Its page is destroyed with it: a session cannot continue, a running request can (see releaseTask).
+        (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.let { if (isFinishing) it.cancelTask(taskId) else it.releaseTask(taskId) }
         activeId?.let { SubappSessionRegistry.unregister(it, this) }
         runtimeChooser.complete(null)
         webView?.destroy(); webView = null; super.onDestroy()
