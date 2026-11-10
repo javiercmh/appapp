@@ -151,7 +151,7 @@ class AuthRepository(
             for (attempt in 0..1) {
                 try { api.revoke(registration); revoked = true; break }
                 catch (e: ApiFailure) {
-                    if (e.kind != ApiFailure.Kind.NETWORK && e.kind != ApiFailure.Kind.SERVICE) break
+                    if (e.kind != ApiFailure.Kind.NETWORK && e.kind != ApiFailure.Kind.TIMEOUT && e.kind != ApiFailure.Kind.SERVICE) break
                     if (attempt == 0) delay(1_000)
                 } catch (_: Exception) { break }
             }

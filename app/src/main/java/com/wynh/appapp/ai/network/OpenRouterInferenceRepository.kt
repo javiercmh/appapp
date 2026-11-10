@@ -43,8 +43,8 @@ class OpenRouterInferenceRepository(
                 add("max_price", JsonObject().apply { addProperty("prompt", 0); addProperty("completion", 0); addProperty("request", 0) })
             })
         }
-        return parseText(http.json(request("chat/completions", token)
-            .post(body.toString().toRequestBody("application/json".toMediaType())).build(), errors = ::errorFor))
+        return http.output(parseText(http.completion(request("chat/completions", token)
+            .post(body.toString().toRequestBody("application/json".toMediaType())).build(), errors = ::errorFor)))
     }
     private fun request(path: String, token: String): Request.Builder {
         if (token.isBlank() || token.length > 8192 || token.any { it.code !in 33..126 })
@@ -84,7 +84,9 @@ class OpenRouterInferenceRepository(
             val choices = response.get("choices")?.takeIf { it.isJsonArray }?.asJsonArray ?: throw HttpGateway.malformed()
             if (choices.size() != 1) throw HttpGateway.malformed()
             val choice = choices[0].asJsonObject
-            if (choice.get("finish_reason")?.asString != "stop") throw ApiFailure(ApiFailure.Kind.INVALID_RESPONSE, "OpenRouter did not return a complete, unblocked response.")
+            val finish = choice.get("finish_reason")?.takeIf { !it.isJsonNull }?.asString
+            if (finish == "length") throw HttpGateway.incomplete("length")
+            if (finish != "stop") throw ApiFailure(ApiFailure.Kind.INVALID_RESPONSE, "OpenRouter did not return a complete, unblocked response.")
             val message = choice.getAsJsonObject("message") ?: throw HttpGateway.malformed()
             if (message.get("refusal")?.let { !it.isJsonNull && it.asString.isNotBlank() } == true) throw ApiFailure(ApiFailure.Kind.INVALID_RESPONSE, "OpenRouter declined this request.")
             return message.get("content")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString

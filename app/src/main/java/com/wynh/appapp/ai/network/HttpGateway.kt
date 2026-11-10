@@ -11,6 +11,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import java.io.IOException
+import java.io.InterruptedIOException
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -18,22 +19,51 @@ import kotlin.coroutines.resumeWithException
 class ApiFailure(val kind: Kind, val userMessage: String, val serviceCode: String? = null) : Exception(userMessage) {
     enum class Kind {
         AUTHENTICATION, PERMISSION, USAGE_LIMIT, NETWORK, INVALID_RESPONSE, SERVICE, INVALID_REQUEST, PROVIDER,
+        /** The answer is larger than [HttpGateway.maxOutputUnits]; the provider sent nothing wrong. */
+        RESPONSE_TOO_LARGE,
+        /** The provider ended the answer early, for example at its output-token limit. */
+        INCOMPLETE,
+        /** A connection, read or whole-request time limit; never reported as [NETWORK]. */
+        TIMEOUT,
         /** Bridge codes are the lower-cased names; these serve operation sessions. */
         BACKGROUND_SERVICE, REQUEST_IN_PROGRESS, NOT_FOUND, SESSION_ENDED, SESSION_CANCELLED, SESSION_IDLE, SESSION_TIMEOUT
     }
 }
 
-class HttpGateway(val client: OkHttpClient = OkHttpClient.Builder()
-    .connectTimeout(20, TimeUnit.SECONDS).readTimeout(45, TimeUnit.SECONDS)
-    .callTimeout(180, TimeUnit.SECONDS).retryOnConnectionFailure(false)
-    .followRedirects(false).followSslRedirects(false).build()) {
+/**
+ * [maxOutputUnits] bounds the text of one answer (UTF-16 units), not the bytes on the wire: the host
+ * holds the whole answer in memory until it is acknowledged, so the bound protects the process, and
+ * with it every other app's running request, from running out of memory.
+ */
+class HttpGateway(
+    val client: OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(20, TimeUnit.SECONDS).readTimeout(45, TimeUnit.SECONDS)
+        .callTimeout(180, TimeUnit.SECONDS).retryOnConnectionFailure(false)
+        .followRedirects(false).followSslRedirects(false).build(),
+    val maxOutputUnits: Int = deviceOutputUnits()
+) {
+    /**
+     * Generation has no whole-call deadline: a long answer that keeps arriving is not an error. The
+     * connect and read timeouts catch a dead connection; the request ceiling, the session cap and
+     * Cancel bound the rest.
+     */
+    private val streamClient = client.newBuilder().callTimeout(0, TimeUnit.MILLISECONDS).build()
+    /** A non-streamed answer arrives in one piece at the end, so the wait for its first byte is the whole generation. */
+    private val completionClient = streamClient.newBuilder().readTimeout(COMPLETION_READ_MS, TimeUnit.MILLISECONDS).build()
 
-    suspend fun json(request: Request, maxBytes: Long = 1_048_576, errors: (Int, String?) -> ApiFailure = ::errorFor): JsonObject = request(request, errors) { response ->
-        val text = boundedBody(response, maxBytes)
-        try { JsonParser.parseString(text).asJsonObject } catch (_: Exception) { throw malformed() }
-    }
+    suspend fun json(request: Request, maxBytes: Long = 1_048_576, errors: (Int, String?) -> ApiFailure = ::errorFor): JsonObject =
+        request(client, request, errors) { response -> parseJson(boundedBody(response, maxBytes)) }
 
-    suspend fun textStream(request: Request): String = request(request) { response ->
+    /** A non-streamed generation: no whole-call deadline, a body large enough for [maxOutputUnits] of text. */
+    suspend fun completion(request: Request, errors: (Int, String?) -> ApiFailure = ::errorFor): JsonObject =
+        request(completionClient, request, errors) { response -> parseJson(boundedBody(response, maxOutputUnits * 4L)) }
+
+    /** The text of a completed non-streamed answer, rejected when it is above [maxOutputUnits]. */
+    fun output(text: String): String = if (text.length > maxOutputUnits) throw tooLarge(maxOutputUnits) else text
+
+    private fun parseJson(text: String): JsonObject = try { JsonParser.parseString(text).asJsonObject } catch (_: Exception) { throw malformed() }
+
+    suspend fun textStream(request: Request): String = request(streamClient, request) { response ->
         val mediaType = response.body?.contentType()
         // Some successful responses omit Content-Type. Recognize actual SSE framing
         // without accepting arbitrary JSON/HTML or weakening terminal-event validation.
@@ -52,12 +82,12 @@ class HttpGateway(val client: OkHttpClient = OkHttpClient.Builder()
             throw ApiFailure(ApiFailure.Kind.INVALID_RESPONSE,
                 "OpenAI did not return the requested event stream (HTTP ${response.code}; $format). Please try again.")
         }
-        response.body?.byteStream()?.bufferedReader(Charsets.UTF_8)?.let(SseTextParser::read) ?: throw malformed()
+        response.body?.byteStream()?.bufferedReader(Charsets.UTF_8)?.let { SseTextParser.read(it, maxOutputUnits) } ?: throw malformed()
     }
 
-    suspend fun empty(request: Request) { request(request) { Unit } }
+    suspend fun empty(request: Request) { request(client, request) { Unit } }
 
-    private suspend fun <T> request(request: Request, errors: (Int, String?) -> ApiFailure = ::errorFor, consume: (Response) -> T): T {
+    private suspend fun <T> request(client: OkHttpClient, request: Request, errors: (Int, String?) -> ApiFailure = ::errorFor, consume: (Response) -> T): T {
         coroutineContext.ensureActive()
         return suspendCancellableCoroutine { continuation ->
             val call = client.newCall(request)
@@ -81,6 +111,10 @@ class HttpGateway(val client: OkHttpClient = OkHttpClient.Builder()
                         } catch (e: Exception) {
                             if (continuation.isActive) continuation.resumeWithException(
                                 if (e is ApiFailure || e is com.wynh.appapp.ai.auth.AuthFailure) e
+                                else if (e is java.net.SocketTimeoutException) ApiFailure(ApiFailure.Kind.TIMEOUT,
+                                    "The AI service stopped sending data for ${client.readTimeoutMillis / 1000} seconds. Please try again.")
+                                else if (isTimeout(e)) ApiFailure(ApiFailure.Kind.TIMEOUT,
+                                    "The AI service did not finish within ${client.callTimeoutMillis / 1000} seconds. Please try again.")
                                 else if (e is IOException) ApiFailure(ApiFailure.Kind.NETWORK, "The response was interrupted. Please try again.")
                                 else malformed())
                         }
@@ -92,21 +126,46 @@ class HttpGateway(val client: OkHttpClient = OkHttpClient.Builder()
 
     private fun boundedBody(response: Response, maxBytes: Long = 1_048_576): String {
         val source = response.body?.source() ?: throw malformed()
-        if (source.request(maxBytes + 1)) throw malformed()
+        if (source.request(maxBytes + 1)) throw ApiFailure(ApiFailure.Kind.RESPONSE_TOO_LARGE,
+            "The response was larger than App² accepts for this request. Ask for a shorter result.")
         return source.readUtf8()
     }
 
     companion object {
+        /** The smallest answer bound on any device: four times the largest answer a current subapp asks for. */
+        const val MIN_OUTPUT_UNITS = 4_194_304
+        const val MAX_OUTPUT_UNITS = 33_554_432
+        internal const val COMPLETION_READ_MS = 10 * 60_000L
+
+        /**
+         * One thirty-second of the heap, within [MIN_OUTPUT_UNITS]..[MAX_OUTPUT_UNITS]: an answer of that size
+         * costs two bytes per unit, more while it grows, plus copies for the ledger and the page.
+         */
+        fun deviceOutputUnits(heapBytes: Long = Runtime.getRuntime().maxMemory()): Int =
+            (heapBytes / 32).coerceIn(MIN_OUTPUT_UNITS.toLong(), MAX_OUTPUT_UNITS.toLong()).toInt()
+
+        /** OkHttp reports a socket timeout as [java.net.SocketTimeoutException] and a whole-call timeout as "timeout". */
+        fun isTimeout(error: Throwable): Boolean =
+            error is java.net.SocketTimeoutException || (error is InterruptedIOException && error.message == "timeout")
+
+        fun tooLarge(maxOutputUnits: Int) = ApiFailure(ApiFailure.Kind.RESPONSE_TOO_LARGE,
+            "The response was larger than App² can hold on this device (${"%,d".format(java.util.Locale.ROOT, maxOutputUnits)} characters). Ask for a shorter result.")
+
+        fun incomplete(reason: String?) = ApiFailure(ApiFailure.Kind.INCOMPLETE,
+            "The model stopped before finishing the response" + (reason?.takeIf { it.matches(Regex("[a-z_]{1,40}")) }?.let { " ($it)" } ?: "") + ".")
+
         fun connectionFailure(error: IOException, host: String? = null): ApiFailure {
             val detail = when (error) {
                 is java.net.UnknownHostException -> "The service hostname could not be resolved. Check your network or private DNS settings."
                 is javax.net.ssl.SSLException -> "A secure connection to the AI service could not be established. Check the device date and network configuration."
-                is java.net.SocketTimeoutException -> "The connection timed out. Please try again."
+                is InterruptedIOException -> if (isTimeout(error)) "The AI service did not respond in time. Please try again."
+                    else "The connection failed. Check your internet connection and try again."
                 else -> "The connection failed. Check your internet connection and try again."
             }
             // Class names are safe diagnostics; exception messages can contain request details.
             val endpoint = host?.takeIf { it in setOf("auth.openai.com", "api.openai.com") }?.let { " · $it" } ?: ""
-            return ApiFailure(ApiFailure.Kind.NETWORK, "$detail (${error.javaClass.simpleName}$endpoint)")
+            val kind = if (isTimeout(error)) ApiFailure.Kind.TIMEOUT else ApiFailure.Kind.NETWORK
+            return ApiFailure(kind, "$detail (${error.javaClass.simpleName}$endpoint)")
         }
         fun malformed() = ApiFailure(ApiFailure.Kind.INVALID_RESPONSE, "The service returned an unexpected response. Please try again.")
         fun errorFor(status: Int, code: String?): ApiFailure = when {

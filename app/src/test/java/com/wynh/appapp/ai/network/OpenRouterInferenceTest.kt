@@ -18,7 +18,7 @@ class OpenRouterInferenceTest {
         """{"id":"$id","name":"$id","architecture":{"input_modalities":["text"],"output_modalities":["$output"]},"pricing":$pricing}"""
     private fun catalog(vararg models: String) = """{"data":[${models.joinToString(",") }]}"""
     private val success = """{"choices":[{"finish_reason":"stop","message":{"content":"{\"story\":\"Hello\"}","reasoning":"hidden"}}]}"""
-    private class Stub(var respond: (Request) -> Pair<Int, String>) {
+    private class Stub(private val maxOutputUnits: Int = HttpGateway.MIN_OUTPUT_UNITS, var respond: (Request) -> Pair<Int, String>) {
         val requests = java.util.Collections.synchronizedList(mutableListOf<Request>())
         val client = OkHttpClient.Builder().retryOnConnectionFailure(false).addInterceptor { chain ->
             val r = chain.request(); requests.add(r)
@@ -26,7 +26,7 @@ class OpenRouterInferenceTest {
             Response.Builder().request(r).protocol(Protocol.HTTP_1_1).code(status).message("test")
                 .body(body.toResponseBody("application/json".toMediaType())).build()
         }.build()
-        val http = HttpGateway(client)
+        val http = HttpGateway(client, maxOutputUnits)
     }
     @Test fun `free catalog requires zero token prices and rejects advertised charges`() {
         val rows = OpenRouterInferenceRepository.parseModels(json(catalog(
@@ -127,5 +127,21 @@ class OpenRouterInferenceTest {
         val task = launch(Dispatchers.Default) { HttpGateway(client).json(Request.Builder().url("https://openrouter.ai/api/v1/models").build()) }
         assertTrue(started.await(5, TimeUnit.SECONDS)); task.cancelAndJoin()
         assertTrue(capturedCall!!.isCanceled()); release.countDown()
+    }
+    @Test fun `a long answer is bounded by its text, not the old one megabyte body cap`() = runBlocking {
+        fun answer(text: String) = """{"choices":[{"finish_reason":"stop","message":{"content":"$text"}}]}"""
+        val long = "y".repeat(2_000_000)
+        val stub = Stub { r -> 200 to if (r.url.encodedPath.endsWith("models")) catalog(model("m")) else answer(long) }
+        assertEquals(long, OpenRouterInferenceRepository(stub.http, { "key" }, { false }).generate("m", "", "input"))
+        val small = Stub(maxOutputUnits = 100) { r -> 200 to if (r.url.encodedPath.endsWith("models")) catalog(model("m")) else answer("z".repeat(150)) }
+        try { OpenRouterInferenceRepository(small.http, { "key" }, { false }).generate("m", "", "input"); fail() }
+        catch (e: ApiFailure) { assertEquals(ApiFailure.Kind.RESPONSE_TOO_LARGE, e.kind) }
+        val huge = Stub(maxOutputUnits = 100) { r -> 200 to if (r.url.encodedPath.endsWith("models")) catalog(model("m")) else answer("z".repeat(1_000)) }
+        try { OpenRouterInferenceRepository(huge.http, { "key" }, { false }).generate("m", "", "input"); fail() }
+        catch (e: ApiFailure) { assertEquals(ApiFailure.Kind.RESPONSE_TOO_LARGE, e.kind) }
+    }
+    @Test fun `a length finish is incomplete`() {
+        val e = assertThrows(ApiFailure::class.java) { OpenRouterInferenceRepository.parseText(json("""{"choices":[{"finish_reason":"length","message":{"content":"partial"}}]}""")) }
+        assertEquals(ApiFailure.Kind.INCOMPLETE, e.kind)
     }
 }

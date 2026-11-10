@@ -76,7 +76,8 @@ class AiWebMessageBridge(
                 }
             }
             // Capability probe: hosts without sessions answer every unknown action with invalid_request.
-            "capabilities" -> respond(reply, id, "result", """{"sessions":1}""")
+            // maxOutputUnits: the longest answer text, in UTF-16 units, this device accepts.
+            "capabilities" -> respond(reply, id, "result", """{"sessions":1,"maxOutputUnits":${manager.maxOutputUnits}}""")
             "beginSession" -> {
                 val data = request.getAsJsonObject("data") ?: JsonObject()
                 val providerId = data.get("providerId")?.asString ?: "chatgpt"

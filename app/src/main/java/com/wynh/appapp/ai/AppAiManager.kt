@@ -39,6 +39,8 @@ class AppAiManager(context: Context) {
     private val app = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val http = HttpGateway()
+    /** The largest answer this host accepts, in UTF-16 units; derived from the heap, at least [HttpGateway.MIN_OUTPUT_UNITS]. */
+    val maxOutputUnits: Int get() = http.maxOutputUnits
     val auth = AuthRepository(EncryptedCredentialStore(app), OpenAiOAuthApi(http), IdTokenValidator(), scope)
     val inference = OpenAiInferenceRepository(http, auth)
     private val preferences = app.getSharedPreferences("appapp_ai", Context.MODE_PRIVATE)
@@ -238,7 +240,9 @@ class AppAiManager(context: Context) {
         val job = scope.launch(Dispatchers.IO, start = kotlinx.coroutines.CoroutineStart.LAZY) {
             try {
                 try {
-                    val result = route.provider.inference.generate(route.model, instructions, input, effort)
+                    val result = kotlinx.coroutines.withTimeoutOrNull(timings.generationMs) {
+                        route.provider.inference.generate(route.model, instructions, input, effort)
+                    } ?: throw ApiFailure(ApiFailure.Kind.TIMEOUT, "The request ran longer than ${duration(timings.generationMs)} and was stopped.")
                     ledger.finish(AiRequestResult(id, text = result, done = true))
                 } catch (e: CancellationException) {
                     throw e
@@ -330,7 +334,11 @@ class AppAiManager(context: Context) {
     // ---- Operation sessions -------------------------------------------------------------------
 
     /** Hooks for tests; production uses the defaults. */
-    internal class Timings(val idleMs: Long = AiLeaseTable.IDLE_MS, val maxMs: Long = AiLeaseTable.MAX_MS, val handshakeMs: Long = HANDSHAKE_MS)
+    internal class Timings(
+        val idleMs: Long = AiLeaseTable.IDLE_MS, val maxMs: Long = AiLeaseTable.MAX_MS, val handshakeMs: Long = HANDSHAKE_MS,
+        /** One generation's ceiling, equal to the session cap, so a request without a session has the same bound. */
+        val generationMs: Long = AiLeaseTable.MAX_MS
+    )
     internal var timings = Timings()
         set(value) { field = value; leases.idleMs = value.idleMs; leases.maxMs = value.maxMs }
     internal fun interface ForegroundStarter { fun start(epoch: Long) }
@@ -343,6 +351,8 @@ class AppAiManager(context: Context) {
 
     /** The epoch of the latest service start request, for tests that simulate later foreground loss. */
     internal val foregroundEpoch: Long get() = handshake.epoch
+
+    private fun duration(ms: Long): String = if (ms >= 60_000) "${ms / 60_000} minutes" else "${ms / 1000} seconds"
 
     private fun nextNotificationId() = AiRequestService.NOTIFICATION_BASE + notificationIds.getAndUpdate { (it + 1) % AiRequestService.NOTIFICATION_SPAN }
 

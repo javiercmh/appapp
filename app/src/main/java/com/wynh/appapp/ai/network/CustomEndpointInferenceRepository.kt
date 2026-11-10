@@ -45,8 +45,8 @@ class CustomEndpointInferenceRepository(
             add(JsonObject().apply { addProperty("role", "user"); addProperty("content", input) })
         }
         val body = JsonObject().apply { addProperty("model", model); addProperty("stream", false); add("messages", messages) }
-        return parseText(http.json(request("chat/completions", config)
-            .post(body.toString().toRequestBody("application/json".toMediaType())).build(), maxBytes = 4_194_304, errors = ::errorFor))
+        return http.output(parseText(http.completion(request("chat/completions", config)
+            .post(body.toString().toRequestBody("application/json".toMediaType())).build(), errors = ::errorFor)))
     }
     private fun request(path: String, config: CustomEndpoint): Request.Builder {
         if (!CustomEndpoint.validKey(config.apiKey))
@@ -73,7 +73,9 @@ class CustomEndpointInferenceRepository(
             val choices = response.get("choices")?.takeIf { it.isJsonArray }?.asJsonArray ?: throw HttpGateway.malformed()
             if (choices.size() < 1) throw HttpGateway.malformed()
             val choice = choices[0].asJsonObject
-            if (choice.get("finish_reason")?.takeIf { !it.isJsonNull }?.asString != "stop")
+            val finish = choice.get("finish_reason")?.takeIf { !it.isJsonNull }?.asString
+            if (finish == "length") throw HttpGateway.incomplete("length")
+            if (finish != "stop")
                 throw ApiFailure(ApiFailure.Kind.INVALID_RESPONSE, "The custom endpoint did not return a complete response.")
             val message = choice.getAsJsonObject("message") ?: throw HttpGateway.malformed()
             if (message.get("refusal")?.let { !it.isJsonNull && it.asString.isNotBlank() } == true)

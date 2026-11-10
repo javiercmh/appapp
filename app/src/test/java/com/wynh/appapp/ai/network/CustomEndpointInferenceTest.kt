@@ -28,7 +28,7 @@ class CustomEndpointInferenceTest {
     @Test fun `only a complete stop response yields text`() {
         fun text(json: String) = CustomEndpointInferenceRepository.parseText(JsonParser.parseString(json).asJsonObject)
         assertEquals("hi", text("""{"choices":[{"finish_reason":"stop","message":{"content":"hi"}}]}"""))
-        assertThrows(ApiFailure::class.java) { text("""{"choices":[{"finish_reason":"length","message":{"content":"hi"}}]}""") }
+        assertEquals(ApiFailure.Kind.INCOMPLETE, assertThrows(ApiFailure::class.java) { text("""{"choices":[{"finish_reason":"length","message":{"content":"hi"}}]}""") }.kind)
         assertThrows(ApiFailure::class.java) { text("""{"choices":[{"finish_reason":"stop","message":{"refusal":"no","content":"hi"}}]}""") }
         assertThrows(ApiFailure::class.java) { text("""{"choices":[]}""") }
     }
