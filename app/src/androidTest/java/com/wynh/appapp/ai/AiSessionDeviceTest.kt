@@ -492,6 +492,12 @@ class AiSessionDeviceTest : AiDeviceFixture() {
         ActivityScenario.launch<SubappRuntimeActivity>(runtimeIntent(app)).use { scenario ->
             var task = -1
             scenario.onActivity { task = it.taskId }
+            // A page releases its task's sessions when it starts loading, so begin only once it has loaded.
+            eventually("page loaded") {
+                var progress = 0
+                scenario.onActivity { progress = webView(it.window.decorView)?.progress ?: 0 }
+                if (progress == 100) true else null
+            }
             val session = beginOk(app, task)
             val id = start(app, task, "across-rotation", session)
             assertTrue(fake.entered.getValue("across-rotation").await(10, TimeUnit.SECONDS))
@@ -503,5 +509,11 @@ class AiSessionDeviceTest : AiDeviceFixture() {
             eventually("final close cancels the task's request") { if (manager.result(id) == null) true else null }
             eventually("service stops") { serviceStopped() }
         }
+    }
+
+    private fun webView(view: android.view.View): android.webkit.WebView? {
+        if (view is android.webkit.WebView) return view
+        if (view is android.view.ViewGroup) for (i in 0 until view.childCount) webView(view.getChildAt(i))?.let { return it }
+        return null
     }
 }
