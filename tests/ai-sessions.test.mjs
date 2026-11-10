@@ -78,3 +78,42 @@ test('start without a session sends no sessionId (legacy callers are unchanged)'
   await ai.start({ model: 'm', input: 'x' });
   assert.equal('sessionId' in posted[0].data, false);
 });
+
+/** Like setup, but page timers never fire (as when Android freezes a hidden page) and host pushes can be sent. */
+function frozenSetup(handler) {
+  const listeners = [];
+  const channel = { postMessage(raw) {
+    const message = JSON.parse(raw);
+    const response = handler(message.action, message.data, message);
+    if (response) queueMicrotask(() => channel.onmessage({ data: JSON.stringify({ id: message.id, ...response }) }));
+  } };
+  const context = vm.createContext({
+    window: { AppAI: channel, addEventListener(type, fn) { if (type === 'message') listeners.push(fn); }, AndroidStorage: null },
+    XMLHttpRequest: class { open() {} setRequestHeader() {} send() { this.status = 404; this.responseText = ''; } },
+    URLSearchParams, localStorage: { getItem: () => null, setItem() {}, removeItem() {} },
+    console: { error() {} }, setTimeout: () => 0, clearTimeout() {}, CustomEvent: class {}, Date, JSON,
+  });
+  vm.runInContext(source, context);
+  const push = (message) => listeners.forEach((fn) => fn({ data: JSON.stringify(message) }));
+  return { ai: context.bridge.ai, push };
+}
+
+const pendingHost = (action) => action === 'start' ? { type: 'result', data: 'r1' } : action === 'result' ? { type: 'pending', data: null } : null;
+
+test('wait resolves from the pushed completion while page timers are frozen', async () => {
+  const { ai, push } = frozenSetup(pendingHost);
+  const id = await ai.start({ model: 'm', input: 'x' });
+  const waiting = ai.wait(id);
+  await new Promise((resolve) => setImmediate(resolve));
+  push({ event: 'complete', id, data: 'text' });
+  assert.equal(await waiting, 'text');
+});
+
+test('wait rejects with the pushed error code while page timers are frozen', async () => {
+  const { ai, push } = frozenSetup(pendingHost);
+  const id = await ai.start({ model: 'm', input: 'x' });
+  const waiting = ai.wait(id);
+  await new Promise((resolve) => setImmediate(resolve));
+  push({ event: 'error', id, data: { code: 'response_too_large', message: 'Too large.' } });
+  await assert.rejects(waiting, (error) => error.code === 'response_too_large' && error.message === 'Too large.');
+});

@@ -102,6 +102,37 @@ class AiSessionBridgeDeviceTest : AiDeviceFixture() {
         }
     }
 
+    /**
+     * About a minute after a page leaves the screen, its timers stop (seen on a phone and here),
+     * while messages from the host still reach it. A step that finishes then must still lead the
+     * page to start the next one: ai.wait resolves from the pushed completion, not from a timer.
+     */
+    @Test fun aStepFinishingAfterThePageTimersFreezeStillStartsTheNextStep() {
+        val app = newApp("Bridge Chain")
+        val log = File(context.filesDir, "subapps/$app/workspace/app.log")
+        page(app, "import {ai} from './js/bridge.js'; window.ai = ai; window.out = {}; let n = 0; setInterval(() => console.log('tick ' + (++n)), 1000);")
+        fun ticks() = Regex("tick (\\d+)").findAll(runCatching { log.readText() }.getOrDefault("")).map { it.groupValues[1].toInt() }.maxOrNull() ?: 0
+        withPage(app) { scenario, web, task ->
+            assertEquals("true", await(web, "!!window.ai"))
+            js(web, "ai.sessions.begin({model: 'fake'}).then(r => out.sid = r.sessionId)")
+            val session = unquote(await(web, "window.out.sid"))
+            fake.expect("chain1")
+            js(web, "ai.start({model: 'fake', input: 'chain1', sessionId: out.sid}).then(id => ai.wait(id))" +
+                ".then(text => ai.start({model: 'fake', input: 'chain2:' + text, sessionId: out.sid})).catch(e => console.log('chain failed ' + e.code))")
+            assertTrue(fake.entered.getValue("chain1").await(10, TimeUnit.SECONDS))
+            home(scenario)
+            SystemClock.sleep(80_000)
+            val frozen = ticks(); SystemClock.sleep(3_000)
+            assertEquals("Precondition: the page's timers are frozen off screen", frozen, ticks())
+            fake.expect("chain2:done:chain1")
+            finish("chain1")
+            assertTrue("The next step started while the page's timers were frozen",
+                fake.entered.getValue("chain2:done:chain1").await(15, TimeUnit.SECONDS))
+            assertFalse(scenario.state.isAtLeast(Lifecycle.State.STARTED))
+            assertTrue(manager.isSessionLive(app, task, session))
+        }
+    }
+
     @Test fun beginFromABackgroundedActivityIsRefusedByTheOwningActivityState() {
         val counting = CountingStarter(manager.foregroundStarter); manager.foregroundStarter = counting
         val app = newApp("Bridge Hidden")
