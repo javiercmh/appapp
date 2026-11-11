@@ -82,6 +82,15 @@ class ShareDeviceTest {
             SystemClock.sleep(100)
         }
     }
+    private fun awaitShareSheet() {
+        val end = SystemClock.uptimeMillis() + 20000
+        while (SystemClock.uptimeMillis() < end) {
+            val owner = instrumentation.uiAutomation.rootInActiveWindow?.packageName?.toString().orEmpty()
+            if (owner.contains("intentresolver")) return
+            SystemClock.sleep(100)
+        }
+        throw AssertionError("Android Sharesheet did not become visible")
+    }
     @Test fun shareContractInEditorAndStandalone() {
         val repository = SubappRepository(context); repository.ensureMigrated()
         val record = repository.createStarter()
@@ -141,6 +150,7 @@ class ShareDeviceTest {
                     val (recreated, retained) = chooserOpen(scenario, replacing = host)
                     assertTrue("Saved state must restore the outstanding chooser", retained)
                     host = recreated
+                    awaitShareSheet()
                     shell("input keyevent KEYCODE_BACK")
                     awaitChooserReleased(scenario)
                     scenario.moveToState(Lifecycle.State.RESUMED)
@@ -159,6 +169,7 @@ class ShareDeviceTest {
                     assertEquals(uri, fileSend.clipData!!.getItemAt(0).uri)
                     SystemClock.sleep(600)
                     shell("screencap -p /sdcard/Download/appapp-share-file-$mode.png")
+                    awaitShareSheet()
                     shell("input keyevent KEYCODE_BACK")
                     scenario.moveToState(Lifecycle.State.RESUMED)
                     val received = CountDownLatch(1)
@@ -185,6 +196,7 @@ class ShareDeviceTest {
                     val maxSend = captured.get()!!.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)!!
                     assertEquals("語".repeat(SharePolicy.MAX_TEXT), maxSend.getStringExtra(Intent.EXTRA_TEXT))
                     SystemClock.sleep(600)
+                    awaitShareSheet()
                     shell("input keyevent KEYCODE_BACK")
                     awaitChooserReleased(scenario)
                     scenario.moveToState(Lifecycle.State.RESUMED)
