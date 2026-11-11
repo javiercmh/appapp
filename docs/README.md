@@ -2,9 +2,14 @@
 
 **Using App²:** the [project README](../README.md) and the [privacy policy](../PRIVACY.md).
 
-**Building apps for App²:** the Starter Demo's [`AGENTS.md`](../app/src/main/assets/starter_template/AGENTS.md)
-(how to build an app) and [`PACKAGING.md`](../app/src/main/assets/starter_template/PACKAGING.md) (the runtime
-contract: bridge, permissions, AI, speech, translation, sharing, updates). Both ship inside every new subapp.
+**Building apps for App² (including agents):** read the Starter Demo's [`AGENTS.md`](../app/src/main/assets/starter_template/AGENTS.md)
+(author workflow and data-safety rules), then [`PACKAGING.md`](../app/src/main/assets/starter_template/PACKAGING.md) (the runtime
+contract: bridge, permissions, AI, speech, translation, sharing, save as, choosing a phone file, updates). Both ship inside every new subapp.
+
+For subapp file import/export, read [choosing a file from the phone](../app/src/main/assets/starter_template/PACKAGING.md#choosing-a-file-from-the-phone)
+and [Save as](../app/src/main/assets/starter_template/PACKAGING.md#save-as).
+The development reference on GitHub is on the [`dev` branch](https://github.com/javiercmh/appapp/blob/dev/app/src/main/assets/starter_template/PACKAGING.md).
+Existing subapps may contain an older bundled copy; consult the host repository when adding capabilities.
 
 **Working on App²:** start with the root [`AGENTS.md`](../AGENTS.md), then:
 

@@ -3,8 +3,20 @@
 You are editing a **web app that runs inside App²**, an Android host that renders your files in a
 WebView and gives them access to native device features.
 
-**There is no build step.** No npm, no bundler, no TypeScript, no framework. Edit the files in this
-workspace directly. The user taps **▶ Run** to reload. Keep everything vanilla and dependency-free.
+The starter is vanilla HTML/CSS/JavaScript and **needs no build step**. Edit its workspace files;
+the user taps **▶ Run** to reload. Keep the starter dependency-free. For an existing subapp, follow
+its own project instructions and build process; App² executes the resulting static files, not
+TypeScript or a development server.
+
+Read this guide first, then [PACKAGING.md](PACKAGING.md) for the capability you need. In the host
+repository these files live at `app/src/main/assets/starter_template/`; the root `AGENTS.md` is for
+Android host developers. Each new subapp receives its own copies. Existing copies can be older;
+consult the [host development reference](https://github.com/javiercmh/appapp/blob/dev/app/src/main/assets/starter_template/PACKAGING.md)
+and compare the installed host and wrapper before adopting a new API.
+
+Before editing an existing app, identify its entry point, data schema, persistence layer and tests.
+Preserve user records and unrelated files; the starter's notes/demo modules are examples, not a
+required architecture or domain model.
 
 ---
 
@@ -32,9 +44,9 @@ Modules are loaded with `<script type="module" src="js/app.js">`, so:
 
 - **Use relative imports with the `.js` extension**: `import { load } from './store.js'`.
   Bare specifiers (`from 'store'`) do not work — there is no resolver.
-- **`type="module"` defers execution.** By the time your module runs, `DOMContentLoaded` has usually
-  already fired. Initialise at module top level; do **not** wrap setup in a `DOMContentLoaded`
-  listener or it may never run.
+- **Static module scripts are deferred by default.** Their synchronous top-level setup can access
+  the parsed DOM. Setup after an `await` or dynamic import may run after `DOMContentLoaded`;
+  check `document.readyState` before relying on that event.
 - A bad import path fails the whole module graph silently in the UI — check the Guide tab's Console.
 
 ---
@@ -47,7 +59,7 @@ Every saved subapp has an independent workspace, history, browser storage, bridg
 
 - Reference assets by their relative path: `<img src="assets/photo_123.jpg">`, `<link href="style.css">`.
 - Relative ES module imports work naturally: `import { load } from './store.js'`.
-- Bridge calls like `bridge.writeFile("data/notes.json", ...)` automatically create parent directories as needed.
+- Imported helpers such as `bridge.writeFile("data/notes.json", ...)` create parent directories as needed.
 - Relative paths are protected against directory traversal (`..` outside root is prevented).
 
 The host serves these extensions with a correct MIME type:
@@ -63,75 +75,33 @@ Android host, so stick to this list.
 
 ---
 
-## 3. The native bridge
+## 3. Storage and host APIs
 
-All methods live on `window.AndroidStorage`. `window.AndroidMemory` and
-`window.AndroidNotification` are **aliases of the same object** — there is no separate memory or
-notification API. When the app runs in a normal desktop browser these globals are absent, which is
-how `bridge.js` detects the fallback path.
+Read [PACKAGING.md](PACKAGING.md) for the runtime contract and exact methods. Import the public
+helpers from `js/bridge.js`; use `import * as bridge from './bridge.js'` from a module in `js/`.
+Do not invent methods or edit the Android host to implement an ordinary subapp feature.
 
-Only top-level documents and same-origin frames of `https://<subapp-id>.app.local` receive these
-objects. They are installed before page scripts run and call one token-protected native interface;
-iframes of other origins (including opaque `sandbox` and `srcdoc` frames without
-`allow-same-origin`) and external web pages have no storage bridge, and raw calls from them are
-rejected. Methods stay synchronous with the same names, argument counts and return types; a call
-with the wrong argument count or type (for example `null` where a string is expected) throws.
-Main-frame navigation cannot leave the app origin: a tapped `http(s)`, `mailto:` or `tel:` link
-opens in another Android app, and other navigations are blocked. `file://` and `content://` URLs
-are not loadable.
+Keep domain entities **and user settings** in JSON files under `data/`. Browser storage and native
+key-value preferences are not portable app data: they do not travel with workspace exports or text
+history. Legacy preference helpers still exist, but use file-based storage for new features.
 
-`bridge.js` already wraps everything below. **Extend `bridge.js` rather than calling these globals
-from elsewhere.**
+Validate loaded data and distinguish missing files from corrupt data. Do not replace corrupt user
+data with an empty collection and immediately save it. Build the next state separately, check the
+write succeeded, then publish it to the UI. A failed save must preserve both the previous file and
+the user's unsaved changes. See [storage](PACKAGING.md#storage-and-persistence).
 
-### Key-value preferences (Android SharedPreferences)
+For common file actions:
 
-| Method | Returns |
-| :--- | :--- |
-| `saveState(key, value)` | `Boolean` |
-| `loadState(key, defaultValue)` | `String` |
-| `removeState(key)` | `Boolean` |
-| `clearAllState()` | `Boolean` |
+| User intent | Use |
+| --- | --- |
+| Open/import a file from the phone | Standard `<input type="file">`, then `file.text()` or `file.arrayBuffer()` |
+| Save an export to a phone folder | `save.text(...)` or `save.file(...)` |
+| Send text or a text file to another app | `share.text(...)` or `share.file(...)` |
+| Save app records internally | `writeFile('data/…', ...)` |
+| Install an entire subapp | App² library import; this is separate from a subapp importing its own records |
 
-### Files (workspace directory)
-
-| Method | Returns |
-| :--- | :--- |
-| `writeFile(name, text)` | `Boolean` |
-| `readFile(name)` | `String` |
-| `writeFileBase64(name, base64)` | `Boolean` — binary; accepts a bare payload or a full `data:…;base64,…` URL |
-| `readFileBase64(name)` | `String` |
-| `fileExists(name)` | `Boolean` |
-| `deleteFile(name)` | `Boolean` |
-| `listFiles()` | `String` — JSON array of `{name, size, lastModified}` |
-| `getStorageStats()` | `String` — JSON with `usableSpaceBytes`, `totalSpaceBytes`, `appFilesCount`, `appFilesBytes`, `filesDir` |
-
-### Text selection menu
-
-| Method | Returns |
-| :--- | :--- |
-| `setSelectionMenuSuppressed(suppressed)` | `Boolean` — hides Android's floating selection menu for this page load; use `selectionMenu.setSuppressed()` from `js/bridge.js` |
-
-### Notifications
-
-| Method | Returns |
-| :--- | :--- |
-| `hasNotificationPermission()` | `Boolean` |
-| `requestNotificationPermission()` | `Boolean` — see gotcha below |
-| `openNotificationSettings()` | `Boolean` — opens the OS notification screen for this app |
-| `showNotification(title, message)` | `Boolean` |
-| `cancelNotification(id)` | `Boolean` |
-| `scheduleNotification(id, triggerAtMillis, title, message)` | `Boolean` — fires even if the app is closed |
-| `cancelScheduledNotification(id)` | `Boolean` |
-| `canScheduleExactNotifications()` | `Boolean` |
-| `requestExactNotificationPermission()` | `Boolean` — opens Android Alarms & reminders settings after a user action |
-
-`triggerAtMillis` is epoch milliseconds **as a string** (`String(Date.now() + 60000)`) — JS numbers
-cross the bridge as doubles and would lose the value. Re-using an `id` replaces that alarm, so
-rescheduling is idempotent. Pending alarms survive reboot. `scheduleNotification` returns `false`
-until exact alarm access is granted on Android 12+. The app does not schedule an approximate
-duplicate. Re-check `canScheduleExactNotifications()` on resume or listen for `app2:alarmperm`
-(`event.detail.granted`) after the user returns from Settings. The starter's one-minute example uses
-the same host scheduler; background scheduling is unavailable in a plain browser preview.
+No incoming-share receiver or manifest opt-in is needed for a file input. Read the corresponding
+runtime section before implementing a capability and feature-detect APIs on older hosts.
 
 ---
 
@@ -139,15 +109,19 @@ the same host scheduler; background scheduling is unavailable in a plain browser
 
 1. **`loadState` needs both arguments.** `loadState('key')` throws. Always pass a default:
    `loadState('key', '')`.
-2. **`requestNotificationPermission()` returns `false` immediately** even when the user is about to
-   grant it — the Android dialog is asynchronous. Listen for the
-   `app2:notifperm` event on `window` (`event.detail.granted`), and re-check
-   `hasNotificationPermission()` on `focus` as a fallback. Never treat the return value as the answer.
-3. **`readFile` returns `""` for both "missing" and "empty".** Pair it with `fileExists` when the
-   difference matters.
-4. **Storage and notification bridge calls are synchronous and block the JS thread.** AI, speech, and update wrapper methods are asynchronous. Keep payloads small. Before saving a
-   photo, downscale it through a `<canvas>` (max ~1280px, `toDataURL('image/jpeg', 0.82)`) — a raw
-   camera photo is several megabytes and will jank the UI. Writes over ~6 MB are rejected outright.
+2. **`requestNotificationPermission()` does not wait for a new grant.** It returns `false` while
+   approval is pending, even if the user is about to grant it; it can return `true` when already allowed. Listen for the
+   editor's `app2:notifperm` event on `window` (`event.detail.granted`) when available. Always re-check
+   `hasNotificationPermission()` on `focus`/visible `visibilitychange`; the standalone activity does
+   not dispatch that event. Never treat the request's return value as the answer.
+3. **`readFile` returning `""` does not prove a file is missing.** It can mean empty, failed or
+   temporarily unavailable storage. `listFiles()` can check existence across wrapper backends, but
+   an empty listing can also be an unavailable workspace. See the storage recovery guidance in
+   `PACKAGING.md`; never erase known data because of one empty read.
+4. **Storage and notification bridge calls are synchronous and block the JS thread.** AI, speech,
+   translation, sharing, saving exports and update wrappers are asynchronous. Keep payloads small.
+   Downscale large photos through a `<canvas>` before saving. Text file I/O is capped at 16 MiB
+   UTF-8; binary file I/O at 6 MiB decoded bytes. Other APIs have their own limits in `PACKAGING.md`.
 5. **`writeFile` is text only.** Images and other binaries must go through `writeFileBase64`, or the
    bytes get mangled by UTF-8 encoding.
 6. **File paths are validated.** Use relative paths built from `A-Z a-z 0-9 . _ -` segments
@@ -163,33 +137,36 @@ the same host scheduler; background scheduling is unavailable in a plain browser
 
 ## 5. What the platform can and cannot do
 
-**Available.** The app runs on a real secure origin, so `localStorage`, IndexedDB, `fetch`, Canvas,
-WebGL, Web Audio, CSS animations and `env(safe-area-inset-*)` all work (see §7 for the safe-area caveat). The host has network
-permission, so remote URLs load — but **prefer offline-first**: this is a phone app that should work
-with no signal. Do not add CDN dependencies for things you can write inline.
+**Available:** standard DOM, Canvas, WebGL, Web Audio, CSS and browser storage, subject to the
+installed WebView. Keep records/settings in `data/` even though browser storage is available.
+Internet is **off for new/imported apps**. Bundle scripts, fonts and assets locally; remote
+requests require the user to grant Internet in App² and can still fail offline or because of CORS.
+Native AI has its own provider setup and permission; it does not require a subapp Internet grant.
 
-`<input type="file">` **works** and opens the Android file/photo picker. Read the result with
-`FileReader` and persist it with `writeFileBase64`.
+**File selection works:** `<input type="file">` opens Android's picker. Read a selected JSON file
+with `file.text()`; binary files with `file.arrayBuffer()` or `FileReader`. Choosing a file does
+not persist it. Camera capture is not implemented by the picker; do not promise a camera option.
 
-**Not available.**
+**Unavailable or constrained:** camera/microphone capture via `getUserMedia`, geolocation, printing
+and receiving Android Sharesheet deliveries are not exposed by App². Do not invent native APIs
+for them. Notifications/reminders, AI, speech, translation, outgoing sharing and Save as are the
+explicit host capabilities documented in `PACKAGING.md`.
 
-- **Camera and microphone.** `getUserMedia()` is auto-denied — the host has no camera permission.
-  Use `<input type="file" accept="image/*">` instead; the picker offers the camera on most devices.
-- **Geolocation.** Denied for the same reason.
-- **Background execution.** Timers stop when the app is closed. To schedule anything, persist a
-  target timestamp and check for due items on startup — `app.js` demonstrates this pattern with
-  reminders. Do not rely on `setTimeout` surviving a close.
-- **Service workers** are not registered, so there is no offline cache layer beyond the workspace.
+**Background behavior:** the page is not a general Android background worker. Timers may freeze
+while off screen and stop when closed. Use native scheduled notifications for closed-app reminders;
+for multi-step AI operations use the documented operation sessions and `ai.wait`. Native requests
+and JavaScript workflow lifetimes differ. Do not add a service worker as an assumed host-supported
+background/offline solution; workspace assets already work offline.
 
 ---
 
 ## 6. Debugging
 
-Every `console.log` / `console.error` and every uncaught exception is captured by the host and
-appended to `app.log` **in this workspace**. That means the app can read its own logs:
+Runtime console messages and errors are recorded in the bounded `app.log` **in this workspace**. That means the app can read its own logs:
 
 ```js
-const log = AndroidStorage.readFile('app.log');
+import {readFile} from './js/bridge.js'; // use './bridge.js' from a module in js/
+const log = readFile('app.log');
 ```
 
 The Guide tab's Console does exactly this. Use that pattern instead of building a logger.
@@ -216,9 +193,10 @@ Design for that:
     `event.detail.imeVisible` boolean reports whether the on-screen keyboard is visible. Do not
     treat text-field focus as proof that it is open; hardware keyboards can focus fields without
     showing the IME.
+  - Include `<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">`.
   - Take whichever is larger. `css/style.css` already defines the tokens — use them:
     ```css
-    --sa-bottom: max(env(safe-area-inset-bottom, 0px), var(--app-inset-bottom));
+    --sa-bottom: max(env(safe-area-inset-bottom, 0px), var(--app-inset-bottom, 0px));
     ```
     A fixed bottom bar needs `padding-bottom: var(--sa-bottom)` or it sits under the gesture pill.
 - Give feedback on tap (`:active` states); a phone has no hover to signal interactivity.
@@ -233,10 +211,12 @@ ChatGPT login, OpenRouter API keys, provider routing, model requests and complet
 subapps receive model choices and completed response text only. AI requests require the bound app
 origin and may continue while the app is in the background.
 
-- **Do not rename or delete `index.html` or `manifest.json`.** The host protects and depends on them.
-- **Update `manifest.json`'s `files` array** when you add a file.
+- Keep `index.html` and `manifest.json` at the package root. If `main` points elsewhere, keep it
+  valid and keep the root entry file for packaging compatibility.
+- Keep `manifest.json.files` in sync with shipped files. Do not publish real user records,
+  credentials, logs or local development state. See [packaging](PACKAGING.md#app-package-and-manifest).
 - **Do not maintain legacy code unless explicitly stated otherwise.** Refactor cleanly and drop dead patterns.
-- Keep it vanilla — no frameworks, no build tooling, no package manager.
+- Keep the starter vanilla; follow an existing app’s documented tooling rather than replacing its architecture.
 - Prefer `textContent` over `innerHTML` when inserting user-entered text.
 
 ## 9. Runtime reference
@@ -248,8 +228,25 @@ before using a capability:
 - [Permissions and offline mode](PACKAGING.md#permissions-and-offline-mode): AI, notifications and Internet grants
 - [Scheduled notifications](PACKAGING.md#scheduled-notifications)
 - [Sharing](PACKAGING.md#sharing): share story text or UTF-8 files through Android’s Sharesheet.
+- [Save as](PACKAGING.md#save-as) and [choosing a file from the phone](PACKAGING.md#choosing-a-file-from-the-phone).
 - [Text to Speech](PACKAGING.md#text-to-speech) and [Device Translation](PACKAGING.md#device-translation)
 - [Text Selection Menu](PACKAGING.md#text-selection-menu)
 - [Native GitHub subapp updates](PACKAGING.md#native-github-subapp-updates): the `manifest.json` publisher contract
 - [Starter Demo browser development](PACKAGING.md#starter-demo-browser-development): `dev_server.py` and the AI mock
 - [Workspace operation guarantees](PACKAGING.md#workspace-operation-guarantees)
+
+## 10. Verify before handing back the app
+
+- Run the subapp's existing tests. Add behavioral tests for data changes, import/export validation,
+  failed saves and cancellation; do not freeze UI wording.
+- Preview a disposable workspace copy with `python3 dev_server.py` (optionally `--mock-ai`). Do not
+  test destructive actions against real records. Confirm no credentials or remote inference are
+  needed for deterministic tests.
+- Check phone-width layout, safe areas, keyboard-visible and hidden states, and standalone mode.
+- Test an export/import round trip and persistence after reload when changing storage. Keep invalid
+  files and cancelled operations from altering existing data.
+- Browser previews do not prove native permissions, notifications, picker lifecycle or Android
+  behavior. Host integration tests belong in the App² repository and use disposable emulator apps;
+  domain-format tests belong in the subapp repository.
+- Report what actually ran and any unsupported-host behavior. Do not claim a native feature exists
+  merely because its JavaScript wrapper is present; handle connection and capability failures.

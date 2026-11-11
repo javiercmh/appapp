@@ -56,7 +56,16 @@ App² Dev installs next to App² with its own data, so you can try new features 
 
 ## Make your own app
 
-Apps are plain HTML, CSS and JavaScript. Start from the [Starter Demo](app/src/main/assets/starter_template/) and see the [packaging and bridge reference](app/src/main/assets/starter_template/PACKAGING.md). AI, speech, translation and updates are covered there too.
+Apps are plain HTML, CSS and JavaScript. Start from the [Starter Demo](app/src/main/assets/starter_template/).
+
+**For an agent building or editing a subapp:** read the [subapp author guide](app/src/main/assets/starter_template/AGENTS.md),
+then the relevant section of the [runtime contract](app/src/main/assets/starter_template/PACKAGING.md).
+The repository-root `AGENTS.md` is for Android host development.
+
+For file workflows, [open a phone file](app/src/main/assets/starter_template/PACKAGING.md#choosing-a-file-from-the-phone),
+[save an export](app/src/main/assets/starter_template/PACKAGING.md#save-as), or
+[share with another app](app/src/main/assets/starter_template/PACKAGING.md#sharing).
+Records and settings belong in [workspace data files](app/src/main/assets/starter_template/PACKAGING.md#storage-and-persistence).
 
 To preview an app in your browser (Python 3.9+), run:
 
