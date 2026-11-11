@@ -1,0 +1,4 @@
+• Apps can save files to a place you choose on your phone with Save as
+• Apps can share text and files with other apps through Android's share sheet
+• Long AI answers no longer fail as too large or time out
+• Multi-step AI tasks keep going while the app is in the background
