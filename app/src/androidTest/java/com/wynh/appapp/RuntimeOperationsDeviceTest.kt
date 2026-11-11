@@ -113,6 +113,34 @@ class RuntimeOperationsDeviceTest {
             }
         } finally { repository.delete(record.id); repository.delete(other.id) }
     }
+    @Test fun rotationResizesTheSamePageWithoutReloading() {
+        val repository = SubappRepository(context); repository.ensureMigrated()
+        val record = repository.createStarter()
+        try {
+            File(record.workspaceDir, "index.html").writeText(page)
+            launch(record).use { scenario ->
+                lateinit var activity: SubappRuntimeActivity
+                lateinit var web: WebView
+                scenario.onActivity { activity = it; web = findWeb(it.findViewById(android.R.id.content))!! }
+                await(web, "window.ready === true")
+                val loads = js(web, "Number(localStorage.loads)")
+                js(web, "window.unsaved = 'keep me'; history.pushState({view: 'reader'}, ''); window.resized = 0; addEventListener('resize', () => window.resized++)")
+                try {
+                    instrumentation.runOnMainSync { activity.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
+                    await(web, "innerWidth > innerHeight && window.resized > 0")
+                    scenario.onActivity { assertSame(activity, it); assertSame(web, findWeb(it.findViewById(android.R.id.content))) }
+                    instrumentation.runOnMainSync { activity.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT }
+                    await(web, "innerHeight > innerWidth")
+                    scenario.onActivity { assertSame(activity, it) }
+                    assertEquals("\"keep me\"", js(web, "window.unsaved"))
+                    assertEquals("\"reader\"", js(web, "history.state && history.state.view"))
+                    assertEquals(loads, js(web, "Number(localStorage.loads)"))
+                } finally {
+                    instrumentation.runOnMainSync { activity.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED }
+                }
+            }
+        } finally { repository.delete(record.id) }
+    }
     @Test fun rendererDeathOffersReloadAndKeepsWorkspaceData() {
         val repository = SubappRepository(context); repository.ensureMigrated()
         val record = repository.createStarter()

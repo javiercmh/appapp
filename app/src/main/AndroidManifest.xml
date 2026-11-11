@@ -47,8 +47,10 @@
 
         <!-- Exported for already pinned shortcuts from the former single-workspace release. -->
         <activity android:name=".MainActivity" android:exported="true" />
+        <!-- Rotation and resizing only resize the page: recreating the activity would destroy the WebView, its history and its AI session. -->
         <activity
             android:name=".SubappRuntimeActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
             android:exported="true"
             android:launchMode="standard"
             android:documentLaunchMode="intoExisting"
