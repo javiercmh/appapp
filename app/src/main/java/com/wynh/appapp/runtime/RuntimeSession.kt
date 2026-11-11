@@ -33,6 +33,7 @@ class RuntimeSession(
     val storage: NativeStorageBridge,
     private val chooser: RuntimeFileChooser,
     shareLauncher: com.wynh.appapp.share.ShareLauncher,
+    saveLauncher: com.wynh.appapp.saveas.SaveAsLauncher,
     private val log: (String) -> Unit,
     cacheMode: Int,
     ready: (WebView) -> Unit,
@@ -40,6 +41,7 @@ class RuntimeSession(
 ) {
     private val speech = SpeechSession(activity, web, record.id)
     private val share = com.wynh.appapp.share.ShareSession(activity, web, record.id, record.workspaceDir, shareLauncher)
+    private val save = com.wynh.appapp.saveas.SaveAsSession(activity, web, record.id, record.workspaceDir, saveLauncher)
     private val translation = TranslationSession(activity, web, record.id)
     private var closed = false
     private var suspended = false
@@ -47,7 +49,7 @@ class RuntimeSession(
     private var reloadPending = false
     init {
         SubappWebViews.configure(web, cacheMode)
-        speech.install(); translation.install(); share.install()
+        speech.install(); translation.install(); share.install(); save.install()
         SubappWebViews.installStorageBridge(web, record.id, storage, log)
         (activity.application as? AppAiApplication)?.ai?.let { AiWebMessageBridge(activity, web, record.id, activity.taskId, it).install() }
         UpdateWebMessageBridge(activity, web, record).install()
@@ -62,7 +64,7 @@ class RuntimeSession(
             SubappGrants.isGranted(activity, record.id, SubappCapability.NETWORK)
         }) {
             override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
-                chooser.complete(null); speech.pageChanged(); share.pageChanged(); web.selectionMenuSuppressed = false; storage.pageStarted()
+                chooser.complete(null); speech.pageChanged(); share.pageChanged(); save.pageChanged(); web.selectionMenuSuppressed = false; storage.pageStarted()
                 // A new page cannot hold the previous page's session; a running request keeps running.
                 (activity.application as? AppAiApplication)?.ai?.releaseTask(activity.taskId)
                 super.onPageStarted(view, url, favicon)
@@ -84,7 +86,7 @@ class RuntimeSession(
             }
         }
     }
-    fun pause() { if (!closed) { speech.pause(); translation.pause(); share.pause() } }
+    fun pause() { if (!closed) { speech.pause(); translation.pause(); share.pause(); save.pause() } }
 
     /**
      * Called from the activity's onResume, before the lifecycle state reads RESUMED. It also
@@ -93,7 +95,7 @@ class RuntimeSession(
     fun resume() {
         if (closed || suspended) return
         if (webPaused) { web.onResume(); webPaused = false }
-        speech.resume(); translation.resume(); share.resume()
+        speech.resume(); translation.resume(); share.resume(); save.resume()
         if (reloadPending) { reloadPending = false; web.reload() }
     }
 
@@ -110,5 +112,5 @@ class RuntimeSession(
         suspended = false; reloadPending = true; web.visibility = View.VISIBLE
         if (activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) resume()
     }
-    fun close() { if (!closed) { closed = true; chooser.complete(null); speech.close(); translation.close(); share.close() } }
+    fun close() { if (!closed) { closed = true; chooser.complete(null); speech.close(); translation.close(); share.close(); save.close() } }
 }

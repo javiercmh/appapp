@@ -480,6 +480,45 @@ export const share = {
   file: options => shareCommand('file', options)
 };
 
+// Request/reply helper for the AppSave channel. There is deliberately no wrapper timeout: the host
+// answers every well-formed request, a save waits on the user, and a timer here could report a
+// failure for an operation that then succeeds.
+function hostChannel(name, label) {
+  const channel = window[name] || null;
+  const pending = new Map();
+  if (channel) channel.onmessage = event => {
+    let message;
+    try { message = JSON.parse(event.data); } catch { return; }
+    const request = pending.get(message && message.id);
+    if (!request) return;
+    pending.delete(message.id);
+    if (message.error) request.reject(Object.assign(new Error(message.error.message), {code: message.error.code}));
+    else request.resolve(message.value);
+  };
+  return {
+    available: Boolean(channel),
+    command(action, options) {
+      if (!channel) return Promise.reject(Object.assign(new Error(`${label} requires a supported App² host.`), {code: 'unavailable'}));
+      const id = `${name}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      return new Promise((resolve, reject) => {
+        pending.set(id, {resolve, reject});
+        try { channel.postMessage(JSON.stringify({id, action, options})); }
+        catch (error) { pending.delete(id); reject(error); }
+      });
+    }
+  };
+}
+
+// Save as: resolves {saved: true, name} only after the destination was written, or
+// {saved: false, cancelled: true}. After a page reload the outcome of an earlier call is unknown.
+const saveChannel = hostChannel('AppSave', 'Save');
+export const save = {
+  available: saveChannel.available,
+  availability: () => saveChannel.available ? saveChannel.command('availability') : Promise.resolve({available: false, file: false}),
+  text: options => saveChannel.command('text', options),
+  file: options => saveChannel.command('file', options)
+};
+
 // Hides Android's floating text-selection menu for this page load. Selection handles and
 // selection events keep working, so the app must provide its own actions (Copy included).
 export const selectionMenu = {

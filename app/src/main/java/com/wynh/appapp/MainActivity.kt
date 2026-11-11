@@ -115,7 +115,8 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
     private var lastInsets: Insets = Insets.NONE
     private var lastImeVisible: Boolean = false
 
-    internal val shareLauncher =com.wynh.appapp.share.ShareLauncher(this)
+    internal val shareLauncher = com.wynh.appapp.share.ShareLauncher(this)
+    internal val saveLauncher = com.wynh.appapp.saveas.SaveAsLauncher(this)
     private val runtimeChooser = com.wynh.appapp.runtime.RuntimeFileChooser(this, ::appendLog)
 
     // Android refuses to show the runtime prompt again once it has been denied, so after a denial
@@ -346,7 +347,7 @@ class MainActivity : AppCompatActivity(), UpdatableSubappSession {
 
     private fun setupWebView() {
         runtimeSession = com.wynh.appapp.runtime.RuntimeSession(
-            this, binding.webView, subapp, workspaceManager, storageBridge, runtimeChooser, shareLauncher, ::appendLog,
+            this, binding.webView, subapp, workspaceManager, storageBridge, runtimeChooser, shareLauncher, saveLauncher, ::appendLog,
             WebSettings.LOAD_NO_CACHE,
             ready = { binding.progressBar.visibility = View.GONE; pushInsetsToWebView() },
             progress = { value ->

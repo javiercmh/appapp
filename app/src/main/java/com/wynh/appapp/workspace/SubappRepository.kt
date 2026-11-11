@@ -100,6 +100,7 @@ class SubappRepository(private val context: Context) {
             context.getSharedPreferences("runtime_scheduled_alarms_$id", Context.MODE_PRIVATE).edit().clear().commit()
             context.getSharedPreferences("runtime_notifications_$id", Context.MODE_PRIVATE).edit().clear().commit()
             com.wynh.appapp.grants.SubappGrants.clear(context, id)
+            com.wynh.appapp.saveas.SaveAsStagingRoot.of(context).deleteApp(id)
             com.wynh.appapp.updates.SubappUpdateIndicators.of(context).clear(id)
             writeIndex(list().map { it.id }.filterNot { it == id })
         }

@@ -59,10 +59,10 @@ object SharePolicy {
 
 /** No activity or WebView references: late I/O completions can only use their original document. */
 class ShareSessionState(private val origin: String) {
-    var closed = false
+    @Volatile var closed = false
         private set
-    var foreground = false
-    var generation = 0
+    @Volatile var foreground = false
+    @Volatile var generation = 0
         private set
     fun accepts(source: String, mainFrame: Boolean) = !closed && mainFrame && source.trimEnd('/') == origin
     fun current(page: Int) = !closed && page == generation
