@@ -1,6 +1,6 @@
 # App² privacy policy
 
-Effective date: 8 November 2026. This policy covers the App² Android application
+Effective date: 11 November 2026. This policy covers the App² Android application
 (`com.wynh.appapp`) published by Javier Melo. App² has no developer-operated servers, accounts,
 analytics, advertising or crash reporting. The developer does not receive your data.
 
@@ -29,6 +29,7 @@ clearing its storage removes everything App² stores.
 | OpenRouter connection | OpenRouter (`openrouter.ai`) and the model provider it routes to | Your API key, model catalogue requests, and each generation's instructions and input. OpenRouter's and the routed provider's policies apply. |
 | GitHub import and Update app | GitHub (`api.github.com`, `raw.githubusercontent.com`) | Requests for the public repository you choose. No GitHub account is used. |
 | Manual update check | GitHub (`api.github.com`, `raw.githubusercontent.com`) | Requests for App² release metadata and the configured public repository/branch and manifest of linked subapps. No workspace contents or credentials are uploaded. Confirmed update versions and commits are cached locally. |
+| Sharing | The app you select in Android’s Sharesheet | Text or a UTF-8 file supplied by a subapp. The receiving app’s policy applies. Temporary shared files are kept in App²’s cache and swept after 24 hours on startup or subsequent use; Android may remove them earlier. |
 | Translation | The Android translation app you pick | The text you chose to translate. That app's policy applies. |
 | Text to speech | Your device's configured speech engine | Text a subapp asks to speak. Some engines use online voices. |
 | Subapp network access | Hosts a subapp loads or contacts | Whatever that subapp sends. Subapps are code you or their authors wrote; App² does not review them. Only install subapps you trust. |

@@ -294,3 +294,44 @@ During native save, restore, backup capture, or update operations, the affected 
 Text version history covers known UTF-8 text formats only. Binary and unknown files, and files with a text extension that are not valid UTF-8, remain untouched on text-history restore; use full-library backup for all workspace bytes. Preview and standalone execution share single/multiple file selection and renderer recovery.
 
 Internet-granted apps have broad web networking. Known local/private host names and literal IP addresses are filtered, but this is not complete isolation against DNS, redirect, or other networking paths. Do not treat the host's filter as a complete network sandbox.
+
+## Sharing
+
+Import `share` from `js/bridge.js`. `share.available` reports whether `window.AppShare`
+exists. `await share.availability()` returns `{available: true, file: true}` on a supported
+host, or `{available: false, file: false}` in a browser or older host.
+
+- `await share.text({text, title?})` opens Android's Sharesheet with `text/plain` text.
+  Text must be nonempty and at most 100,000 UTF-16 units. The optional title (at most
+  200 UTF-16 units) is sent as the subject and chooser title; Android controls its display.
+- `await share.file({name, mimeType, content})` shares UTF-8 text as a temporary file,
+  capped at 10 MiB of encoded bytes. Empty content is allowed. Supported MIME types
+  are `text/plain`, `application/json`, `text/markdown`, and `text/csv`; the host forces
+  `.txt`, `.json`, `.md`, and `.csv` respectively. Names are sanitized to ASCII letters,
+  digits, dots, underscores, and hyphens and capped at 120 characters, without path separators.
+
+Both operations resolve `{launched: true}` when the chooser launches. This does not
+confirm target selection, delivery, or completion; dismissal produces no cancellation event.
+The user chooses the external recipient, which can read the supplied text or file. No
+separate App² capability grant is required. Shared files are outside the workspace and
+backups, remain available after dismissal, and are swept after 24 hours on startup or
+subsequent use. Android may evict cache files earlier.
+
+Errors carry `error.code`: `unavailable`, `invalid_arguments`, `too_large`, `busy`,
+`not_foreground`, or `failed`. The wrapper can also report `timeout`. Every command,
+including `availability()`, requires an active foreground page with no workspace
+reservation: while the app is not resumed it rejects with `not_foreground`, and while a
+save, restore, backup, or update holds the workspace it rejects with `busy`. Such a
+rejection says nothing about host support; use `share.available` for that, and retry
+later. Only one file preparation or share chooser may occupy an activity; backgrounding
+and rotation do not release an outstanding chooser. Retry after returning to the app.
+A message larger than the host limit (sized for a maximal file with every character
+escaped) is refused with `too_large`, and too many messages still being read are refused
+with `busy`.
+
+The raw owning-main-frame channel is `window.AppShare`. Send JSON strings through
+`postMessage({id, action, options})` after JSON serialization, with a string ID of 1–100
+UTF-16 units and action `availability`, `text`, or `file`. Replies are JSON strings
+`{id, value}` or `{id, error: {code, message}}`. The channel is absent on foreign origins
+and unsupported WebViews; same-origin child frames cannot issue commands. A document
+change or session disposal invalidates pending preparation and replies.

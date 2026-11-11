@@ -247,6 +247,7 @@ before using a capability:
 - [Subapp AI guide](PACKAGING.md#subapp-ai-guide): providers, models, requests, operation sessions, failures
 - [Permissions and offline mode](PACKAGING.md#permissions-and-offline-mode): AI, notifications and Internet grants
 - [Scheduled notifications](PACKAGING.md#scheduled-notifications)
+- [Sharing](PACKAGING.md#sharing): share story text or UTF-8 files through Android’s Sharesheet.
 - [Text to Speech](PACKAGING.md#text-to-speech) and [Device Translation](PACKAGING.md#device-translation)
 - [Text Selection Menu](PACKAGING.md#text-selection-menu)
 - [Native GitHub subapp updates](PACKAGING.md#native-github-subapp-updates): the `manifest.json` publisher contract

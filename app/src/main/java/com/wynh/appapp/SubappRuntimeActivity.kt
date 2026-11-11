@@ -28,6 +28,7 @@ class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
     private var activeId: String? = null
     private var historyBackPending = false
     private var didInitialResume = false
+    internal val shareLauncher =com.wynh.appapp.share.ShareLauncher(this)
     private val runtimeChooser = com.wynh.appapp.runtime.RuntimeFileChooser(this) { message ->
         webView?.post { activeId?.let { id ->
             com.wynh.appapp.workspace.WorkspaceLog.append(applicationContext, java.io.File(filesDir, "subapps/$id/workspace"), message)
@@ -105,7 +106,7 @@ class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
                 runOnUiThread { web.selectionMenuSuppressed = suppressed }
             }
         )
-        runtimeSession = com.wynh.appapp.runtime.RuntimeSession(this, web, record, manager, bridge, runtimeChooser, log,
+        runtimeSession = com.wynh.appapp.runtime.RuntimeSession(this, web, record, manager, bridge, runtimeChooser, shareLauncher, log,
             WebSettings.LOAD_DEFAULT, ready = { view -> installWebHistoryTracking(view); ViewCompat.requestApplyInsets(root) })
         web.loadUrl(SubappWebViews.entryUrl(record.id, manager))
         NativeStorageBridge.reschedulePersistedAlarms(this, record.id)

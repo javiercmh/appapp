@@ -444,6 +444,42 @@ export const translation = {
   open: options => translationCommand('open', options)
 };
 
+// Resolution means Android launched the Sharesheet, not that sharing completed.
+const SHARE = window.AppShare || null;
+const shareRequests = new Map();
+if (SHARE) SHARE.onmessage = event => {
+  let message;
+  try { message = JSON.parse(event.data); } catch { return; }
+  const pending = shareRequests.get(message.id);
+  if (!pending) return;
+  shareRequests.delete(message.id);
+  clearTimeout(pending.timer);
+  if (message.error) {
+    const error = new Error(message.error.message);
+    error.code = message.error.code;
+    pending.reject(error);
+  } else pending.resolve(message.value);
+};
+function shareCommand(action, options) {
+  if (!SHARE) return Promise.reject(Object.assign(new Error('Share requires a supported App² host.'), {code: 'unavailable'}));
+  const id = `share-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      shareRequests.delete(id);
+      reject(Object.assign(new Error('Share command timed out.'), {code: 'timeout'}));
+    }, 15000);
+    shareRequests.set(id, {resolve, reject, timer});
+    try { SHARE.postMessage(JSON.stringify({id, action, options})); }
+    catch (error) { clearTimeout(timer); shareRequests.delete(id); reject(error); }
+  });
+}
+export const share = {
+  available: Boolean(SHARE),
+  availability: () => SHARE ? shareCommand('availability') : Promise.resolve({available: false, file: false}),
+  text: options => shareCommand('text', options),
+  file: options => shareCommand('file', options)
+};
+
 // Hides Android's floating text-selection menu for this page load. Selection handles and
 // selection events keep working, so the app must provide its own actions (Copy included).
 export const selectionMenu = {

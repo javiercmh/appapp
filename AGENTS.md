@@ -23,6 +23,7 @@ This document provides architectural context, coding standards, and operational 
 | `com.wynh.appapp.workspace.WorkspacePackageManager` | Handles selective ZIP export/packaging, Android Sharesheet integration, direct stream export, and secure ZIP extraction with Zip-Slip defense and auto-backup snapshots. |
 | `com.wynh.appapp.bridge.NativeStorageBridge` | Native implementation behind `window.AndroidStorage`, `window.AndroidMemory`, and `window.AndroidNotification` (its `jsMethods` table is the whole JavaScript surface). Manages persistent key-value state, unified file I/O directly in `workspace/`, native system notifications, and `AlarmManager`-backed scheduled notifications. |
 | `com.wynh.appapp.ai` | App-owned AI provider settings, encrypted ChatGPT credentials and OpenRouter API key, native model/inference requests, background request service and the origin-restricted asynchronous web message API. |
+| `com.wynh.appapp.share` | Origin-restricted `window.AppShare` channel for Android Sharesheet text and UTF-8 file sharing: bounded off-UI-thread message parsing, temporary `cacheDir/shares/` files behind the FileProvider, and activity-owned chooser exclusion that survives rotation. |
 | `com.wynh.appapp.bridge.TokenGatedBridge` | The only `@JavascriptInterface` object: one `call(token, method, argsJson)` method that rejects calls without the per-WebView secret and validates arguments against `jsMethods`. Also builds the document-start shim. |
 | `com.wynh.appapp.SelectionAwareWebView` | The WebView for editor and runtime. Empties Android's floating selection menu when the page asks (`setSelectionMenuSuppressed`), and ignores window-focus loss while the soft keyboard is visible: Gboard's language picker (spacebar hold) is an IME dialog that takes window focus, and the WebView would otherwise hide the keyboard and close the picker with it. Focus gain is still forwarded. |
 | `com.wynh.appapp.runtime.SubappWebViews` / `SubappWebViewClient` | Shared hardened WebView setup for editor and runtime: settings, origin-only bridge installation, navigation policy, workspace asset serving and static 404s. |
@@ -200,7 +201,7 @@ When adding new bridge methods for the runtime web app:
 2. Keep return types primitive (`String`, `Boolean`, `Int`) or JSON-encoded strings for complex objects.
 3. Ensure methods run safely and handle exceptions gracefully; an exception becomes a JS `Error`.
 4. Asynchronous or main-frame-only capabilities should use an origin-restricted
-   `WebViewCompat.addWebMessageListener` channel instead (see `ai`, `speech`, `translation`).
+   `WebViewCompat.addWebMessageListener` channel instead (see `ai`, `speech`, `translation`, `share`).
 5. Document the change in the starter `PACKAGING.md` and mirror it in the template's `bridge.js`.
 
 ### Per-subapp permissions and network policy
@@ -391,7 +392,7 @@ binary file that the current subapp's origin interceptor can then serve via `<im
 ## 8. Subapp-facing API and AI host notes
 
 The web API that subapps use (bridge calls, permissions, AI, operation sessions, text to speech,
-device translation, GitHub updates, browser development and workspace guarantees) is documented
+device translation, sharing, GitHub updates, browser development and workspace guarantees) is documented
 once, in the starter template's [`PACKAGING.md`](app/src/main/assets/starter_template/PACKAGING.md),
 which ships inside every new subapp. Its `AGENTS.md` links to it for app authors. Change that file
 (and the template's `bridge.js`) when the bridge changes; do not copy its sections here.

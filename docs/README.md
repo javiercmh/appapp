@@ -4,7 +4,7 @@
 
 **Building apps for App²:** the Starter Demo's [`AGENTS.md`](../app/src/main/assets/starter_template/AGENTS.md)
 (how to build an app) and [`PACKAGING.md`](../app/src/main/assets/starter_template/PACKAGING.md) (the runtime
-contract: bridge, permissions, AI, speech, translation, updates). Both ship inside every new subapp.
+contract: bridge, permissions, AI, speech, translation, sharing, updates). Both ship inside every new subapp.
 
 **Working on App²:** start with the root [`AGENTS.md`](../AGENTS.md), then:
 
