@@ -37,7 +37,7 @@ jobs:
           node-version: '22'
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: '3.12'
       - uses: android-actions/setup-android@v3
         with:
           packages: platform-tools
@@ -111,5 +111,7 @@ jobs:
         with:
           name: dev-check-reports
           path: |
+            runtime/build/reports/
+            runtime/build/test-results/
             app/build/reports/
             app/build/test-results/
