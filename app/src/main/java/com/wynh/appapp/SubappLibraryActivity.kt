@@ -316,7 +316,7 @@ class SubappLibraryActivity : AppCompatActivity() {
                     header.newApp.isEnabled = !task.busy
                     if (task.busy) {
                         if (operationProgress == null) operationProgress = MaterialAlertDialogBuilder(this@SubappLibraryActivity)
-                            .setTitle(task.message).setMessage(R.string.workspace_working).setCancelable(false)
+                            .setTitle(task.message).setMessage(com.wynh.appapp.runtime.R.string.workspace_working).setCancelable(false)
                             .setNegativeButton(R.string.cancel) { _, _ -> library.cancel() }.show()
                         operationProgress?.setTitle(task.message)
                         operationProgress?.getButton(android.content.DialogInterface.BUTTON_NEGATIVE)?.apply {
@@ -640,7 +640,7 @@ class SubappLibraryActivity : AppCompatActivity() {
             val record = displayedRecords[position - 1]
             val row = holder.row
             val metadata = rowMetadata[record.id]
-            val name = metadata?.name?.ifBlank { getString(R.string.library_untitled) } ?: getString(R.string.library_untitled)
+            val name = metadata?.name?.ifBlank { getString(com.wynh.appapp.runtime.R.string.library_untitled) } ?: getString(com.wynh.appapp.runtime.R.string.library_untitled)
             val bitmap = metadata?.icon
             row.appIcon.shapeAppearanceModel = ShapeAppearanceModel.builder()
                 .setAllCorners(com.google.android.material.shape.CornerFamily.ROUNDED, resources.displayMetrics.density * 12f)
@@ -751,7 +751,7 @@ class SubappLibraryActivity : AppCompatActivity() {
 
     private fun open(record: SubappRecord) {
         if (com.wynh.appapp.workspace.WorkspaceOperations.isBusy(record.workspaceDir)) {
-            Toast.makeText(this, R.string.workspace_working, Toast.LENGTH_SHORT).show(); return
+            Toast.makeText(this, com.wynh.appapp.runtime.R.string.workspace_working, Toast.LENGTH_SHORT).show(); return
         }
         startActivity(Intent(this, SubappRuntimeActivity::class.java).apply {
             action = Intent.ACTION_VIEW

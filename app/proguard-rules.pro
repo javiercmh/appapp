@@ -1,4 +1,1 @@
-# Proguard rules for AppApp runtime bridge
--keepclassmembers class com.wynh.appapp.bridge.TokenGatedBridge {
-    @android.webkit.JavascriptInterface <methods>;
-}
+# The runtime bridge keep rules ship with :runtime (runtime/consumer-rules.pro).

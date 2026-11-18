@@ -120,7 +120,7 @@ class ServerTest(unittest.TestCase):
 
 class StorageContractTest(unittest.TestCase):
     def test_shared_native_path_fixture(self):
-        fixtures = Path(__file__).resolve().parents[1] / 'app/src/test/resources/workspace-paths.json'
+        fixtures = Path(__file__).resolve().parents[1] / 'runtime/src/test/resources/workspace-paths.json'
         for row in json.loads(fixtures.read_text()):
             with self.subTest(path=row['input']):
                 if row['normalized'] is None:

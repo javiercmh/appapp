@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="library_untitled">Untitled app</string>
+    <string name="permission_ai_title">Allow %1$s to use AI?</string>
+    <string name="permission_allow">Allow</string>
+    <string name="permission_deny">Don\'t allow</string>
+    <string name="permission_notifications_message">%1$s will be able to post notifications and schedule reminders that appear even when it is closed. You can change this later in the library: app menu → Permissions.</string>
+    <string name="permission_notifications_title">Allow %1$s to send notifications?</string>
+    <string name="runtime_reload">Reload app</string>
+    <string name="runtime_stopped_message">The web renderer stopped. Your workspace files are kept. Reload to open the app again.</string>
+    <string name="runtime_stopped_title">App stopped</string>
+    <string name="workspace_failed">Operation failed</string>
+    <string name="workspace_working">Working…</string>
+</resources>

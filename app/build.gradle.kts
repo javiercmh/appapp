@@ -33,9 +33,6 @@ android {
         targetSdk = 37
         versionCode = 18
         versionName = "1.11.1"
-        // Update-contract level checked against minimumHostVersionCode. Shared by every build
-        // type; unlike versionCode it is not touched by releases or the Dev run counter.
-        buildConfigField("int", "HOST_COMPATIBILITY_LEVEL", "11")
         manifestPlaceholders["appLinkScheme"] = "appapp"
         buildConfigField("String", "APP_LINK_SCHEME", "\"appapp\"")
 
@@ -128,6 +125,7 @@ kotlin {
 }
 
 dependencies {
+    implementation(project(":runtime"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.recyclerview)
     implementation(libs.androidx.appcompat)

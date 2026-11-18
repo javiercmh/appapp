@@ -157,7 +157,7 @@ class RuntimeOperationsDeviceTest {
                     try {
                         // Target the dialog window: the default root matcher can latch onto the activity
                         // while the dialog is shown but not yet focused.
-                        androidx.test.espresso.Espresso.onView(androidx.test.espresso.matcher.ViewMatchers.withText(R.string.runtime_stopped_title))
+                        androidx.test.espresso.Espresso.onView(androidx.test.espresso.matcher.ViewMatchers.withText(com.wynh.appapp.runtime.R.string.runtime_stopped_title))
                             .inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog())
                             .check(androidx.test.espresso.assertion.ViewAssertions.matches(androidx.test.espresso.matcher.ViewMatchers.isDisplayed()))
                         break
@@ -172,7 +172,7 @@ class RuntimeOperationsDeviceTest {
                     java.io.FileOutputStream(File(context.cacheDir, "renderer-dialog.png")).use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
                     bitmap.recycle()
                 }
-                androidx.test.espresso.Espresso.onView(androidx.test.espresso.matcher.ViewMatchers.withText(R.string.runtime_reload))
+                androidx.test.espresso.Espresso.onView(androidx.test.espresso.matcher.ViewMatchers.withText(com.wynh.appapp.runtime.R.string.runtime_reload))
                     .inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog())
                     .perform(androidx.test.espresso.action.ViewActions.click())
                 lateinit var freshWeb: WebView

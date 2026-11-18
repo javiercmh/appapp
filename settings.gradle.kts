@@ -21,3 +21,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "AppApp"
 include(":app")
+include(":runtime")

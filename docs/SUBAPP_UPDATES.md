@@ -25,8 +25,8 @@ A public repository's root `manifest.json` must declare:
 
 `minimumHostVersionCode` is a wire-format name kept for compatibility; its value is
 a **host compatibility level**, not an APK version code. The host compares it with
-`BuildConfig.HOST_COMPATIBILITY_LEVEL` (currently `11`, defined once in
-`defaultConfig` and identical in release, Dev and debug builds). The check is strict:
+`HostCompatibility.LEVEL` (currently `11`, a constant of the `:runtime` module and
+therefore identical in release, Dev and debug builds). The check is strict:
 a package requiring a higher level than the host supports (for example `12` on a
 level-`11` host) is rejected after reading the manifest, before downloading package assets, with a message naming
 both levels and advising the user to update App². Packages requiring a lower or equal

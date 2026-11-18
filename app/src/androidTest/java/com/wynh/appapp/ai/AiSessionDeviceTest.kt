@@ -21,7 +21,8 @@ import java.util.concurrent.TimeUnit
  */
 @RunWith(AndroidJUnit4::class)
 class AiSessionDeviceTest : AiDeviceFixture() {
-    private fun timings(idle: Long = AiLeaseTable.IDLE_MS, max: Long = AiLeaseTable.MAX_MS, handshake: Long = AppAiManager.HANDSHAKE_MS) {
+    private companion object { val DEFAULT = AppAiManager.Timings() }
+    private fun timings(idle: Long = DEFAULT.idleMs, max: Long = DEFAULT.maxMs, handshake: Long = AppAiManager.HANDSHAKE_MS) {
         manager.timings = AppAiManager.Timings(idle, max, handshake)
     }
 

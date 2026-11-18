@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Same values as App²'s primary and on_surface_muted, for runtime-owned layouts. -->
+    <color name="runtime_accent">#3B82F6</color>
+    <color name="runtime_muted">#94A3B8</color>
+</resources>

@@ -32,6 +32,8 @@ This document provides architectural context, coding standards, and operational 
 | `com.wynh.appapp.bridge.AlarmBootReceiver` | Re-arms persisted scheduled notifications after `BOOT_COMPLETED` / `MY_PACKAGE_REPLACED`, which clear pending alarms. |
 | `com.wynh.appapp.templates.DefaultWebApp` | Loads the starter template files dynamically from standalone assets (`app/src/main/assets/starter_template/`). |
 
+**Modules.** `:runtime` (Android library, `runtime/`) holds the subapp runtime: `bridge`, `workspace`, `runtime`, `channel`, `share`, `saveas`, `speech`, `translation`, `ai`, `grants`, `updates`, `settings`, `templates` and `host`. `:app` (`app/`) holds App²'s screens and identity: `SubappLibraryActivity`, `MainActivity`, `SubappRuntimeActivity`, `editor`, the library, backup and update-review controllers, `AiSettingsController` and the `Application`, which implements `host.RuntimeHost`. Runtime code must not reference `:app` classes or App²'s `BuildConfig`; add what it needs to `RuntimeHost` instead. Runtime unit tests and their fixtures are in `runtime/src/test`; device tests stay in `app/src/androidTest` because they drive App²'s activities, and test hooks they use are public with `@VisibleForTesting`. Runtime strings and layouts live in `runtime/src/main/res` and are referenced as `com.wynh.appapp.runtime.R`.
+
 The Kotlin namespace is `com.wynh.appapp`. The production installed application ID is `com.wynh.appapp`; the separate Dev variant uses `com.wynh.appapp.dev`. Keep source declarations and ProGuard rules in the Kotlin namespace. Use the actual installed application ID for ADB package commands such as `pm path`, `run-as`, `force-stop`, and `monkey`. Dev shortcut links use `appapp-dev`; production uses `appapp`. See [Dev distribution and signing](docs/DEV_DISTRIBUTION.md).
 
 ---
@@ -141,7 +143,7 @@ Each app's `WebView` loads `https://<id>.app.local/index.html`. Requests for tha
      `main` has commits `dev` lacks.
    - Do **not** create other branches for the work unless the request explicitly asks for one.
    - Do not push with failing tests. Fix the implementation or the test, then verify the complete required suite passes on the final changes. A passing isolated retry does not override a failed full run. Inspect test reports as well as the Gradle exit status; report missing prerequisites and skips explicitly.
-   - Before pushing a native change, run `./gradlew :app:testDebugUnitTest` and the instrumented
+   - Before pushing a native change, run `./gradlew :runtime:testDebugUnitTest :app:testDebugUnitTest` and the instrumented
      tests (`./gradlew :app:connectedDebugAndroidTest` on the `Medium_Phone` emulator with
      animations off, see the emulator section). GitHub Checks then cover lint, the release and
      Dev builds and the rest on every branch.

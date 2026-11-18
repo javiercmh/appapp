@@ -2,21 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- User-facing reminders need precise delivery. Users grant this special access in Settings. -->
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
-    <!-- Pending alarms are dropped on reboot; the boot receiver re-arms them. -->
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-
-    <queries>
-        <intent><action android:name="android.intent.action.TRANSLATE" /></intent>
-        <intent><action android:name="android.intent.action.TTS_SERVICE" /></intent>
-    </queries>
-
+    <!-- Permissions, the AI service, notification receivers and the file provider come from :runtime. -->
     <application
         android:name=".ai.AppAiApplication"
         android:allowBackup="true"
@@ -40,11 +26,6 @@
             </intent-filter>
         </activity>
 
-        <service
-            android:name=".ai.AiRequestService"
-            android:exported="false"
-            android:foregroundServiceType="dataSync" />
-
         <!-- Exported for already pinned shortcuts from the former single-workspace release. -->
         <activity android:name=".MainActivity" android:exported="true" />
         <!-- Rotation and resizing only resize the page: recreating the activity would destroy the WebView, its history and its AI session. -->
@@ -62,31 +43,6 @@
                 <data android:scheme="${appLinkScheme}" android:host="subapp" />
             </intent-filter>
         </activity>
-
-        <receiver
-            android:name=".bridge.ScheduledNotificationReceiver"
-            android:exported="false" />
-
-        <receiver
-            android:name=".bridge.AlarmBootReceiver"
-            android:exported="true"
-            android:enabled="true">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
-                <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
-            </intent-filter>
-        </receiver>
-
-        <provider
-            android:name="androidx.core.content.FileProvider"
-            android:authorities="${applicationId}.fileprovider"
-            android:exported="false"
-            android:grantUriPermissions="true">
-            <meta-data
-                android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/file_paths" />
-        </provider>
     </application>
 
 </manifest>

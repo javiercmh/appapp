@@ -25,7 +25,7 @@ class UpdateController(
 ) {
     private val updater = WorkspaceUpdater(record.directory)
     private val ai get() = (activity.application as AppAiApplication).ai
-    private val hostCompatibilityLevel = com.wynh.appapp.BuildConfig.HOST_COMPATIBILITY_LEVEL.toLong()
+    private val hostCompatibilityLevel = com.wynh.appapp.host.HostCompatibility.LEVEL.toLong()
     private fun error(e: Exception) { if (!activity.isFinishing) MaterialAlertDialogBuilder(activity).setTitle("Update unavailable").setMessage(e.message ?: "Update failed").setPositiveButton("Close", null).show() }
 
     fun open() {
