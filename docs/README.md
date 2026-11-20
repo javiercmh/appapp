@@ -5,6 +5,7 @@
 **Building apps for App² (including agents):** read the Starter Demo's [`AGENTS.md`](../app/src/main/assets/starter_template/AGENTS.md)
 (author workflow and data-safety rules), then [`PACKAGING.md`](../app/src/main/assets/starter_template/PACKAGING.md) (the runtime
 contract: bridge, permissions, AI, speech, translation, sharing, save as, choosing a phone file, updates). Both ship inside every new subapp.
+To list an app in Discover, follow [CONTRIBUTING.md](../CONTRIBUTING.md).
 
 For subapp file import/export, read [choosing a file from the phone](../app/src/main/assets/starter_template/PACKAGING.md#choosing-a-file-from-the-phone)
 and [Save as](../app/src/main/assets/starter_template/PACKAGING.md#save-as).
