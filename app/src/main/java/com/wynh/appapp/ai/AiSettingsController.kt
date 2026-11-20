@@ -73,6 +73,13 @@ object AiSettingsController {
                 active != null -> "Reconnect ChatGPT"
                 else -> "Connect ChatGPT"
             }
+            val connected = active?.canInfer == true
+            primary.backgroundTintList = android.content.res.ColorStateList.valueOf(
+                ContextCompat.getColor(activity, if (connected) R.color.surface_variant else R.color.primary)
+            )
+            primary.setTextColor(
+                ContextCompat.getColor(activity, if (connected) R.color.on_surface else R.color.on_primary)
+            )
             primary.isEnabled = !busy
             more.isEnabled = !busy
         }

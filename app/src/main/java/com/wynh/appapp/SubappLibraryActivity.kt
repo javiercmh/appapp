@@ -324,6 +324,7 @@ class SubappLibraryActivity : AppCompatActivity() {
                         backupProgress?.dismiss(); backupProgress = null
                         if (status.message.isNotEmpty()) {
                             refreshRows()
+                            refreshSettingsPermissions?.invoke()
                             MaterialAlertDialogBuilder(this@SubappLibraryActivity)
                                 .setTitle(if (status.error) R.string.backup_failed else R.string.backup_complete)
                                 .setMessage(status.message).setPositiveButton(android.R.string.ok, null).show()
@@ -642,32 +643,63 @@ class SubappLibraryActivity : AppCompatActivity() {
         librarySettingsDialog = dialog
         dialog.findViewById<View>(R.id.settings_check_host).setOnClickListener { showUpdates(checkHost = true) }
 
+        val notificationsRow = dialog.findViewById<View>(R.id.settings_notifications_row)
         val tvNotifications = dialog.findViewById<TextView>(R.id.settings_tv_notification_status)
+        val notificationsChevron = dialog.findViewById<View>(R.id.settings_notifications_chevron)
+        val notificationsActions = dialog.findViewById<View>(R.id.settings_notifications_actions)
         val btnNotifications = dialog.findViewById<MaterialButton>(R.id.settings_btn_notification_permission)
         val tvExactAlarms = dialog.findViewById<TextView>(R.id.settings_tv_exact_alarm_status)
         val btnExactAlarms = dialog.findViewById<MaterialButton>(R.id.settings_btn_exact_alarm_permission)
-        val refreshNotificationRow = {
-            val allowed = notificationsAllowed()
-            tvNotifications?.text = getString(if (allowed) R.string.settings_notifications_allowed else R.string.settings_notifications_blocked)
-            tvNotifications?.setTextColor(ContextCompat.getColor(this, if (allowed) R.color.accent_green else R.color.accent_red))
-            btnNotifications?.text = getString(if (!allowed && canPromptForNotifications()) R.string.settings_notifications_allow else R.string.settings_notifications_open)
+        val backupSummary = dialog.findViewById<TextView>(R.id.settings_backup_summary)
+
+        val openAppNotificationSettings = {
+            startActivity(Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName))
         }
-        refreshNotificationRow()
+        val refreshNotificationsSection = {
+            val notifAllowed = notificationsAllowed()
+            val exactAllowed = NativeStorageBridge.canScheduleExact(this)
+            val allAllowed = notifAllowed && exactAllowed
+            notificationsChevron?.visibility = if (allAllowed) View.VISIBLE else View.GONE
+            notificationsActions?.visibility = if (allAllowed) View.GONE else View.VISIBLE
+            notificationsRow?.isClickable = allAllowed
+            notificationsRow?.isFocusable = allAllowed
+            notificationsRow?.setOnClickListener(if (allAllowed) View.OnClickListener { openAppNotificationSettings() } else null)
+            tvNotifications?.text = getString(when {
+                allAllowed -> R.string.settings_notifications_all_allowed
+                !notifAllowed -> R.string.settings_notifications_blocked
+                else -> R.string.settings_exact_alarms_blocked
+            })
+            tvNotifications?.setTextColor(ContextCompat.getColor(this, if (allAllowed) R.color.accent_green else R.color.accent_red))
+            btnNotifications?.visibility = if (notifAllowed) View.GONE else View.VISIBLE
+            btnNotifications?.text = getString(if (canPromptForNotifications()) R.string.settings_notifications_allow else R.string.settings_notifications_open)
+            tvExactAlarms?.visibility = if (!notifAllowed && !exactAllowed) View.VISIBLE else View.GONE
+            btnExactAlarms?.visibility = if (exactAllowed) View.GONE else View.VISIBLE
+            btnExactAlarms?.text = getString(R.string.settings_exact_alarms_allow)
+        }
+        val refreshBackupSummary = {
+            val lastBackup = settingsManager.lastBackupAtMillis
+            backupSummary?.text = if (lastBackup > 0L) {
+                getString(
+                    R.string.backup_last_backed_up,
+                    android.text.format.DateUtils.getRelativeTimeSpanString(
+                        lastBackup,
+                        System.currentTimeMillis(),
+                        android.text.format.DateUtils.MINUTE_IN_MILLIS,
+                    )
+                )
+            } else {
+                getString(R.string.backup_short_summary)
+            }
+        }
+        refreshNotificationsSection()
+        refreshBackupSummary()
 
         btnNotifications?.setOnClickListener {
             if (!notificationsAllowed() && canPromptForNotifications()) promptNotificationPermission()
-            else startActivity(Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName))
+            else openAppNotificationSettings()
         }
-        val refreshExactAlarmRow = {
-            val allowed = NativeStorageBridge.canScheduleExact(this)
-            tvExactAlarms?.text = getString(if (allowed) R.string.settings_exact_alarms_allowed else R.string.settings_exact_alarms_blocked)
-            tvExactAlarms?.setTextColor(ContextCompat.getColor(this, if (allowed) R.color.accent_green else R.color.accent_red))
-            btnExactAlarms?.text = getString(if (allowed) R.string.settings_exact_alarms_allowed_button else R.string.settings_exact_alarms_allow)
-            btnExactAlarms?.visibility = if (allowed) View.GONE else View.VISIBLE
-        }
-        refreshExactAlarmRow()
-        refreshSettingsPermissions = { refreshNotificationRow(); refreshExactAlarmRow() }
+        refreshSettingsPermissions = { refreshNotificationsSection(); refreshBackupSummary() }
         var aiSettingsJob: kotlinx.coroutines.Job? = null
         dialog.setOnDismissListener {
             aiSettingsJob?.cancel()
@@ -690,7 +722,7 @@ class SubappLibraryActivity : AppCompatActivity() {
             dialog.findViewById<TextView>(R.id.settings_tv_app_version)?.text = settingsManager.getAppVersion()
             dialog.findViewById<TextView>(R.id.settings_tv_webview_version)?.text = settingsManager.getWebViewEngineVersion()
         }
-        dialog.findViewById<MaterialButton>(R.id.settings_btn_privacy_policy)?.setOnClickListener {
+        dialog.findViewById<View>(R.id.settings_btn_privacy_policy)?.setOnClickListener {
             try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(getString(R.string.settings_privacy_policy_url)))) }
             catch (_: android.content.ActivityNotFoundException) {
                 Toast.makeText(this, R.string.settings_privacy_policy_open_failed, Toast.LENGTH_SHORT).show()

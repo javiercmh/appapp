@@ -41,6 +41,7 @@ class SubappBackupController(application: Application) : AndroidViewModel(applic
                 context.contentResolver.openOutputStream(uri, "wt")?.use { output -> archive.inputStream().use { it.copyTo(output) } }
                     ?: error("Cannot write selected backup destination")
                 val count = verify(context.contentResolver.openInputStream(uri) ?: error("Cannot reopen saved backup for verification"), temporary, "verify-saved", com.wynh.appapp.updates.digest(archive))
+                com.wynh.appapp.settings.AppSettingsManager(context).lastBackupAtMillis = System.currentTimeMillis()
                 "Backed up $count subapps. Saved archive verified."
             }
         } finally { withContext(Dispatchers.IO) { temporary.deleteRecursively() } }

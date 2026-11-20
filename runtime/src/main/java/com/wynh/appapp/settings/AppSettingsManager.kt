@@ -17,6 +17,7 @@ class AppSettingsManager(private val context: Context) {
     companion object {
         private const val PREFS_NAME = "appapp_settings"
         const val KEY_MAX_HISTORY_SNAPSHOTS = "max_history_snapshots"
+        const val KEY_LAST_BACKUP_AT = "last_backup_at_millis"
 
         const val DEFAULT_MAX_HISTORY_SNAPSHOTS = 4
     }
@@ -25,6 +26,12 @@ class AppSettingsManager(private val context: Context) {
         get() = prefs.getInt(KEY_MAX_HISTORY_SNAPSHOTS, DEFAULT_MAX_HISTORY_SNAPSHOTS)
         set(value) {
             prefs.edit().putInt(KEY_MAX_HISTORY_SNAPSHOTS, value).apply()
+        }
+
+    var lastBackupAtMillis: Long
+        get() = prefs.getLong(KEY_LAST_BACKUP_AT, 0L)
+        set(value) {
+            prefs.edit().putLong(KEY_LAST_BACKUP_AT, value).apply()
         }
 
     /**

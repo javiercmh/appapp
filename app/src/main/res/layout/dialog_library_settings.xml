@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:layout_width="match_parent"
     android:id="@+id/settings_root"
+    android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/background"
     android:orientation="vertical"
     android:padding="16dp">
 
-    <!-- Dialog Header -->
+    <!-- Header -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -39,7 +39,7 @@
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:layout_marginTop="8dp"
-        android:layout_marginBottom="14dp"
+        android:layout_marginBottom="12dp"
         android:background="@color/surface_variant" />
 
     <!-- Scrollable Content -->
@@ -48,64 +48,123 @@
         android:layout_height="0dp"
         android:layout_weight="1"
         android:clipToPadding="false"
-        android:paddingBottom="12dp">
+        android:paddingBottom="16dp">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
+            <!-- Section: AI -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:layout_marginBottom="8dp"
+                android:accessibilityHeading="true"
+                android:letterSpacing="0.06"
+                android:text="@string/settings_group_ai"
+                android:textAllCaps="true"
+                android:textColor="@color/on_surface_subtle"
+                android:textSize="11sp"
+                android:textStyle="bold" />
 
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="12dp"
+                android:layout_marginBottom="18dp"
                 app:cardBackgroundColor="@color/surface"
                 app:cardCornerRadius="16dp"
                 app:cardElevation="0dp"
                 app:strokeColor="@color/border_color"
                 app:strokeWidth="1dp">
+
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
                     android:padding="16dp">
+
                     <LinearLayout
                         android:id="@+id/settings_ai_header"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:minHeight="48dp"
                         android:background="?attr/selectableItemBackground"
                         android:clickable="true"
                         android:focusable="true"
                         android:gravity="center_vertical"
+                        android:minHeight="48dp"
                         android:orientation="horizontal">
-                        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
-                            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="AI services" android:textAppearance="@style/TextAppearance.Material3.TitleMedium" android:textColor="@color/on_surface" />
-                            <TextView android:id="@+id/settings_tv_ai_summary" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:text="No services added" android:textColor="@color/on_surface_muted" android:textSize="13sp" android:accessibilityLiveRegion="polite" />
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="AI services"
+                                android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+                                android:textColor="@color/on_surface" />
+
+                            <TextView
+                                android:id="@+id/settings_tv_ai_summary"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:accessibilityLiveRegion="polite"
+                                android:text="No services added"
+                                android:textColor="@color/on_surface_muted"
+                                android:textSize="13sp" />
                         </LinearLayout>
-                        <ImageView android:id="@+id/settings_iv_ai_chevron" android:layout_width="24dp" android:layout_height="24dp" android:src="@drawable/ic_arrow_down" android:importantForAccessibility="no" app:tint="@color/on_surface_muted" />
+
+                        <ImageView
+                            android:id="@+id/settings_iv_ai_chevron"
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
+                            android:importantForAccessibility="no"
+                            android:src="@drawable/ic_arrow_down"
+                            app:tint="@color/on_surface_muted" />
                     </LinearLayout>
-                    <LinearLayout android:id="@+id/settings_ai_body" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:orientation="vertical" android:visibility="gone">
-                        <LinearLayout android:id="@+id/settings_group_chatgpt" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+
+                    <LinearLayout
+                        android:id="@+id/settings_ai_body"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:orientation="vertical"
+                        android:visibility="gone">
+
+                        <LinearLayout
+                            android:id="@+id/settings_group_chatgpt"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:visibility="gone">
+
                             <LinearLayout
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:gravity="center_vertical"
                                 android:orientation="horizontal">
+
                                 <ImageView
                                     android:layout_width="44dp"
                                     android:layout_height="44dp"
                                     android:background="@drawable/bg_ai_provider_icon"
+                                    android:importantForAccessibility="no"
                                     android:padding="9dp"
-                                    android:src="@drawable/ic_chatgpt"
-                                    android:importantForAccessibility="no" />
+                                    android:src="@drawable/ic_chatgpt" />
+
                                 <LinearLayout
                                     android:layout_width="0dp"
                                     android:layout_height="wrap_content"
-                                    android:layout_weight="1"
                                     android:layout_marginStart="12dp"
+                                    android:layout_weight="1"
                                     android:orientation="vertical">
+
                                     <TextView
                                         android:layout_width="wrap_content"
                                         android:layout_height="wrap_content"
@@ -113,16 +172,18 @@
                                         android:textColor="@color/on_surface"
                                         android:textSize="17sp"
                                         android:textStyle="bold" />
+
                                     <TextView
                                         android:id="@+id/settings_tv_ai_connection"
                                         android:layout_width="wrap_content"
                                         android:layout_height="wrap_content"
                                         android:layout_marginTop="2dp"
+                                        android:accessibilityLiveRegion="polite"
                                         android:text="Not connected"
                                         android:textColor="@color/on_surface_muted"
-                                        android:textSize="12sp"
-                                        android:accessibilityLiveRegion="polite" />
+                                        android:textSize="12sp" />
                                 </LinearLayout>
+
                                 <ImageButton
                                     android:id="@+id/settings_btn_ai_more"
                                     android:layout_width="48dp"
@@ -132,45 +193,64 @@
                                     android:src="@drawable/ic_more_vertical"
                                     app:tint="@color/on_surface_muted" />
                             </LinearLayout>
+
                             <TextView
                                 android:id="@+id/settings_tv_ai_status"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:layout_marginTop="14dp"
+                                android:layout_marginTop="12dp"
+                                android:accessibilityLiveRegion="polite"
                                 android:text="Connect your account to use AI in your apps."
                                 android:textColor="@color/on_surface_muted"
-                                android:textSize="13sp"
-                                android:accessibilityLiveRegion="polite" />
+                                android:textSize="13sp" />
+
                             <com.google.android.material.button.MaterialButton
                                 android:id="@+id/settings_btn_ai_signin"
-                                style="@style/Widget.Material3.Button"
+                                style="@style/Widget.Material3.Button.TonalButton"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="12dp"
                                 android:minHeight="48dp"
-                                android:text="Connect ChatGPT" />
-                            <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginVertical="16dp" android:background="@color/border_color" />
+                                android:text="Connect ChatGPT"
+                                android:textAllCaps="false"
+                                app:cornerRadius="12dp" />
+
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:layout_marginVertical="16dp"
+                                android:background="@color/border_color" />
                         </LinearLayout>
-                        <LinearLayout android:id="@+id/settings_group_openrouter" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
+
+                        <LinearLayout
+                            android:id="@+id/settings_group_openrouter"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:visibility="gone">
+
                             <LinearLayout
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:gravity="center_vertical"
                                 android:orientation="horizontal">
+
                                 <ImageView
                                     android:layout_width="44dp"
                                     android:layout_height="44dp"
                                     android:background="@drawable/bg_ai_provider_icon"
+                                    android:importantForAccessibility="no"
                                     android:padding="9dp"
                                     android:src="@drawable/ic_openrouter"
-                                    android:importantForAccessibility="no"
                                     app:tint="@color/on_surface" />
+
                                 <LinearLayout
                                     android:layout_width="0dp"
                                     android:layout_height="wrap_content"
-                                    android:layout_weight="1"
                                     android:layout_marginStart="12dp"
+                                    android:layout_weight="1"
                                     android:orientation="vertical">
+
                                     <TextView
                                         android:layout_width="wrap_content"
                                         android:layout_height="wrap_content"
@@ -178,16 +258,18 @@
                                         android:textColor="@color/on_surface"
                                         android:textSize="17sp"
                                         android:textStyle="bold" />
+
                                     <TextView
                                         android:id="@+id/settings_tv_openrouter_connection"
                                         android:layout_width="wrap_content"
                                         android:layout_height="wrap_content"
                                         android:layout_marginTop="2dp"
+                                        android:accessibilityLiveRegion="polite"
                                         android:text="Not connected"
                                         android:textColor="@color/on_surface_muted"
-                                        android:textSize="12sp"
-                                        android:accessibilityLiveRegion="polite" />
+                                        android:textSize="12sp" />
                                 </LinearLayout>
+
                                 <ImageButton
                                     android:id="@+id/settings_btn_openrouter_more"
                                     android:layout_width="48dp"
@@ -197,14 +279,65 @@
                                     android:src="@drawable/ic_more_vertical"
                                     app:tint="@color/on_surface_muted" />
                             </LinearLayout>
-                            <TextView android:id="@+id/settings_tv_openrouter_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="Not connected" android:textColor="@color/on_surface_muted" android:textSize="13sp" android:accessibilityLiveRegion="polite" />
-                            <com.google.android.material.button.MaterialButton android:id="@+id/settings_btn_openrouter_key" style="@style/Widget.Material3.Button" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:minHeight="48dp" android:text="Add OpenRouter key" />
-                            <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/settings_switch_openrouter_paid" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp" android:text="Allow paid OpenRouter models" android:textColor="@color/on_surface" />
-                            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Free models have rate and daily limits and may be unavailable. Paid models use your OpenRouter credits. Prices are checked before generation." android:textColor="@color/on_surface_muted" android:textSize="12sp" />
-                            <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginVertical="16dp" android:background="@color/border_color" />
+
+                            <TextView
+                                android:id="@+id/settings_tv_openrouter_status"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="8dp"
+                                android:accessibilityLiveRegion="polite"
+                                android:text="Not connected"
+                                android:textColor="@color/on_surface_muted"
+                                android:textSize="13sp" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/settings_btn_openrouter_key"
+                                style="@style/Widget.Material3.Button.TonalButton"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="12dp"
+                                android:minHeight="48dp"
+                                android:text="Add OpenRouter key"
+                                android:textAllCaps="false"
+                                android:textColor="@color/on_surface"
+                                app:backgroundTint="@color/surface_variant"
+                                app:cornerRadius="12dp" />
+
+                            <com.google.android.material.materialswitch.MaterialSwitch
+                                android:id="@+id/settings_switch_openrouter_paid"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:minHeight="48dp"
+                                android:text="Allow paid OpenRouter models"
+                                android:textColor="@color/on_surface" />
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="Free models have rate and daily limits and may be unavailable. Paid models use your OpenRouter credits. Prices are checked before generation."
+                                android:textColor="@color/on_surface_muted"
+                                android:textSize="12sp" />
+
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:layout_marginVertical="16dp"
+                                android:background="@color/border_color" />
                         </LinearLayout>
-                        <LinearLayout android:id="@+id/settings_group_custom" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
-                            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+
+                        <LinearLayout
+                            android:id="@+id/settings_group_custom"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:visibility="gone">
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal">
+
                                 <ImageView
                                     android:layout_width="44dp"
                                     android:layout_height="44dp"
@@ -214,22 +347,120 @@
                                     android:padding="10dp"
                                     android:src="@drawable/ic_terminal"
                                     app:tint="@color/accent_blue" />
-                                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
-                                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Custom endpoint" android:textColor="@color/on_surface" android:textSize="17sp" android:textStyle="bold" />
-                                    <TextView android:id="@+id/settings_tv_custom_connection" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:text="Not connected" android:textColor="@color/on_surface_muted" android:textSize="12sp" android:accessibilityLiveRegion="polite" />
+
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="Custom endpoint"
+                                        android:textColor="@color/on_surface"
+                                        android:textSize="17sp"
+                                        android:textStyle="bold" />
+
+                                    <TextView
+                                        android:id="@+id/settings_tv_custom_connection"
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:layout_marginTop="2dp"
+                                        android:accessibilityLiveRegion="polite"
+                                        android:text="Not connected"
+                                        android:textColor="@color/on_surface_muted"
+                                        android:textSize="12sp" />
                                 </LinearLayout>
-                                <ImageButton android:id="@+id/settings_btn_custom_more" android:layout_width="48dp" android:layout_height="48dp" android:background="?attr/selectableItemBackgroundBorderless" android:contentDescription="Custom endpoint options" android:src="@drawable/ic_more_vertical" app:tint="@color/on_surface_muted" />
+
+                                <ImageButton
+                                    android:id="@+id/settings_btn_custom_more"
+                                    android:layout_width="48dp"
+                                    android:layout_height="48dp"
+                                    android:background="?attr/selectableItemBackgroundBorderless"
+                                    android:contentDescription="Custom endpoint options"
+                                    android:src="@drawable/ic_more_vertical"
+                                    app:tint="@color/on_surface_muted" />
                             </LinearLayout>
-                            <TextView android:id="@+id/settings_tv_custom_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="Add any OpenAI-compatible service by its HTTPS URL and API key." android:textColor="@color/on_surface_muted" android:textSize="13sp" android:accessibilityLiveRegion="polite" />
-                            <com.google.android.material.button.MaterialButton android:id="@+id/settings_btn_custom_set" style="@style/Widget.Material3.Button" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:minHeight="48dp" android:text="Add custom endpoint" />
-                            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Uses the /models and /chat/completions routes. Prompts from your apps are sent to this service, which applies its own billing and privacy terms." android:textColor="@color/on_surface_muted" android:textSize="12sp" />
-                            <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginVertical="16dp" android:background="@color/border_color" />
+
+                            <TextView
+                                android:id="@+id/settings_tv_custom_status"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="8dp"
+                                android:accessibilityLiveRegion="polite"
+                                android:text="Add any OpenAI-compatible service by its HTTPS URL and API key."
+                                android:textColor="@color/on_surface_muted"
+                                android:textSize="13sp" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/settings_btn_custom_set"
+                                style="@style/Widget.Material3.Button.TonalButton"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="12dp"
+                                android:minHeight="48dp"
+                                android:text="Add custom endpoint"
+                                android:textAllCaps="false"
+                                android:textColor="@color/on_surface"
+                                app:backgroundTint="@color/surface_variant"
+                                app:cornerRadius="12dp" />
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="Uses the /models and /chat/completions routes. Prompts from your apps are sent to this service, which applies its own billing and privacy terms."
+                                android:textColor="@color/on_surface_muted"
+                                android:textSize="12sp" />
+
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:layout_marginVertical="16dp"
+                                android:background="@color/border_color" />
                         </LinearLayout>
-                        <com.google.android.material.button.MaterialButton android:id="@+id/settings_btn_ai_add" style="@style/Widget.Material3.Button.OutlinedButton.Icon" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="48dp" android:text="Add another service" app:icon="@drawable/ic_add" />
-                        <LinearLayout android:id="@+id/settings_group_exposure" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
-                            <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginVertical="16dp" android:background="@color/border_color" />
-                            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Available to subapps" android:textColor="@color/on_surface" android:textSize="17sp" android:textStyle="bold" />
-                            <TextView android:id="@+id/settings_tv_ai_exposure" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:textColor="@color/on_surface_muted" android:textSize="13sp" android:accessibilityLiveRegion="polite" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/settings_btn_ai_add"
+                            style="@style/Widget.Material3.Button.OutlinedButton.Icon"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:minHeight="48dp"
+                            android:text="Add another service"
+                            android:textAllCaps="false"
+                            app:cornerRadius="12dp"
+                            app:icon="@drawable/ic_add" />
+
+                        <LinearLayout
+                            android:id="@+id/settings_group_exposure"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:visibility="gone">
+
+                            <View
+                                android:layout_width="match_parent"
+                                android:layout_height="1dp"
+                                android:layout_marginVertical="16dp"
+                                android:background="@color/border_color" />
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="Available to subapps"
+                                android:textColor="@color/on_surface"
+                                android:textSize="17sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/settings_tv_ai_exposure"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="8dp"
+                                android:accessibilityLiveRegion="polite"
+                                android:textColor="@color/on_surface_muted"
+                                android:textSize="13sp" />
+
                             <com.google.android.material.textfield.TextInputLayout
                                 android:id="@+id/settings_input_ai_exposure"
                                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
@@ -237,31 +468,54 @@
                                 android:layout_height="wrap_content"
                                 android:layout_marginTop="12dp"
                                 android:hint="Provider">
+
                                 <com.google.android.material.textfield.MaterialAutoCompleteTextView
                                     android:id="@+id/settings_dropdown_ai_exposure"
                                     android:layout_width="match_parent"
                                     android:layout_height="wrap_content"
-                                    android:inputType="none"
                                     android:importantForAutofill="no"
+                                    android:inputType="none"
                                     android:minHeight="48dp"
                                     android:textColor="@color/on_surface" />
                             </com.google.android.material.textfield.TextInputLayout>
                         </LinearLayout>
-                        <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginVertical="16dp" android:background="@color/border_color" />
-                        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Request limit per app" android:textColor="@color/on_surface" android:textSize="17sp" android:textStyle="bold" />
-                        <TextView android:id="@+id/settings_tv_ai_start_limit" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:textColor="@color/on_surface_muted" android:textSize="13sp" android:accessibilityLiveRegion="polite" />
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:layout_marginVertical="16dp"
+                            android:background="@color/border_color" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Request limit per app"
+                            android:textColor="@color/on_surface"
+                            android:textSize="17sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/settings_tv_ai_start_limit"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:accessibilityLiveRegion="polite"
+                            android:textColor="@color/on_surface_muted"
+                            android:textSize="13sp" />
+
                         <com.google.android.material.textfield.TextInputLayout
                             style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="12dp"
                             android:hint="Requests per minute">
+
                             <com.google.android.material.textfield.MaterialAutoCompleteTextView
                                 android:id="@+id/settings_dropdown_ai_start_limit"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:inputType="none"
                                 android:importantForAutofill="no"
+                                android:inputType="none"
                                 android:minHeight="48dp"
                                 android:textColor="@color/on_surface" />
                         </com.google.android.material.textfield.TextInputLayout>
@@ -269,11 +523,24 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- 1. Version History Retention Card -->
+            <!-- Section: Apps & data -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:layout_marginBottom="8dp"
+                android:accessibilityHeading="true"
+                android:letterSpacing="0.06"
+                android:text="@string/settings_group_apps_data"
+                android:textAllCaps="true"
+                android:textColor="@color/on_surface_subtle"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="12dp"
+                android:layout_marginBottom="18dp"
                 app:cardBackgroundColor="@color/surface"
                 app:cardCornerRadius="16dp"
                 app:cardElevation="0dp"
@@ -281,55 +548,135 @@
                 app:strokeWidth="1dp">
 
                 <LinearLayout
-                    android:id="@+id/settings_history_row"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:minHeight="64dp"
-                    android:background="?attr/selectableItemBackground"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal"
-                    android:padding="16dp"
-                    android:screenReaderFocusable="true">
+                    android:orientation="vertical">
 
+                    <!-- Subapp backup -->
                     <LinearLayout
-                        android:layout_width="0dp"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:orientation="vertical">
+                        android:orientation="vertical"
+                        android:padding="16dp">
 
                         <TextView
-                            android:layout_width="wrap_content"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:text="@string/settings_history_title"
+                            android:text="@string/backup_title"
                             android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
                             android:textColor="@color/on_surface" />
 
                         <TextView
-                            android:id="@+id/settings_history_summary"
-                            android:layout_width="wrap_content"
+                            android:id="@+id/settings_backup_summary"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="2dp"
+                            android:text="@string/backup_short_summary"
                             android:textColor="@color/on_surface_muted"
                             android:textSize="13sp" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:orientation="horizontal">
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/settings_backup_export"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginEnd="8dp"
+                                android:layout_weight="1"
+                                android:minHeight="48dp"
+                                android:text="@string/backup_export_short"
+                                android:textAllCaps="false"
+                                app:cornerRadius="12dp" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/settings_backup_restore"
+                                style="@style/Widget.Material3.Button.OutlinedButton"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:minHeight="48dp"
+                                android:text="@string/backup_restore_short"
+                                android:textAllCaps="false"
+                                app:cornerRadius="12dp" />
+                        </LinearLayout>
                     </LinearLayout>
 
-                    <ImageView
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
-                        android:layout_marginStart="12dp"
-                        android:importantForAccessibility="no"
-                        android:src="@drawable/ic_chevron_end"
-                        app:tint="@color/on_surface_muted" />
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginHorizontal="16dp"
+                        android:alpha="0.5"
+                        android:background="@color/border_color" />
+
+                    <!-- Version history -->
+                    <LinearLayout
+                        android:id="@+id/settings_history_row"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="?attr/selectableItemBackground"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center_vertical"
+                        android:minHeight="64dp"
+                        android:orientation="horizontal"
+                        android:padding="16dp"
+                        android:screenReaderFocusable="true">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/settings_history_title"
+                                android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+                                android:textColor="@color/on_surface" />
+
+                            <TextView
+                                android:id="@+id/settings_history_summary"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:textColor="@color/on_surface_muted"
+                                android:textSize="13sp" />
+                        </LinearLayout>
+
+                        <ImageView
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
+                            android:layout_marginStart="12dp"
+                            android:importantForAccessibility="no"
+                            android:src="@drawable/ic_chevron_end"
+                            app:tint="@color/on_surface_muted" />
+                    </LinearLayout>
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- 4. Notification Permission Card -->
+            <!-- Section: Permissions -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:layout_marginBottom="8dp"
+                android:accessibilityHeading="true"
+                android:letterSpacing="0.06"
+                android:text="@string/settings_group_permissions"
+                android:textAllCaps="true"
+                android:textColor="@color/on_surface_subtle"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="12dp"
+                android:layout_marginBottom="18dp"
                 app:cardBackgroundColor="@color/surface"
                 app:cardCornerRadius="16dp"
                 app:cardElevation="0dp"
@@ -339,141 +686,139 @@
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="16dp">
+                    android:orientation="vertical">
 
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/settings_section_notifications"
-                        android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
-                        android:textColor="@color/on_surface" />
-
-                    <TextView
-                        android:id="@+id/settings_tv_notification_status"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:text="@string/settings_notifications_allowed"
-                        android:textColor="@color/accent_green"
-                        android:textSize="13sp" />
-
-                    <TextView
+                    <!-- Compact header row (tappable to open Android settings when all allowed) -->
+                    <LinearLayout
+                        android:id="@+id/settings_notifications_row"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="6dp"
-                        android:layout_marginBottom="12dp"
-                        android:text="@string/settings_section_notifications_desc"
-                        android:textColor="@color/on_surface_muted"
-                        android:textSize="13sp" />
+                        android:background="?attr/selectableItemBackground"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center_vertical"
+                        android:minHeight="64dp"
+                        android:orientation="horizontal"
+                        android:padding="16dp">
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/settings_btn_notification_permission"
-                        style="@style/Widget.Material3.Button.TonalButton"
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/settings_section_notifications"
+                                android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+                                android:textColor="@color/on_surface" />
+
+                            <TextView
+                                android:id="@+id/settings_tv_notification_status"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:text="@string/settings_notifications_all_allowed"
+                                android:textColor="@color/accent_green"
+                                android:textSize="13sp" />
+                        </LinearLayout>
+
+                        <ImageView
+                            android:id="@+id/settings_notifications_chevron"
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
+                            android:layout_marginStart="12dp"
+                            android:importantForAccessibility="no"
+                            android:src="@drawable/ic_chevron_end"
+                            app:tint="@color/on_surface_muted" />
+                    </LinearLayout>
+
+                    <!-- Expanded action controls (shown only when a permission is missing) -->
+                    <LinearLayout
+                        android:id="@+id/settings_notifications_actions"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:minHeight="48dp"
-                        android:text="@string/settings_notifications_allow"
-                        android:textAllCaps="false"
-                        android:textColor="@color/on_surface"
-                        app:backgroundTint="@color/surface_variant"
-                        app:cornerRadius="12dp"
-                        app:icon="@drawable/ic_notifications"
-                        app:iconGravity="textStart"
-                        app:iconPadding="8dp"
-                        app:iconSize="18dp"
-                        app:iconTint="@color/accent_blue" />
+                        android:orientation="vertical"
+                        android:paddingHorizontal="16dp"
+                        android:paddingBottom="16dp"
+                        android:visibility="gone">
 
-                    <TextView
-                        android:id="@+id/settings_tv_exact_alarm_status"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:text="@string/settings_exact_alarms_allowed"
-                        android:textColor="@color/accent_green"
-                        android:textSize="13sp" />
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginBottom="10dp"
+                            android:text="@string/settings_notifications_missing_desc"
+                            android:textColor="@color/on_surface_muted"
+                            android:textSize="13sp" />
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/settings_btn_exact_alarm_permission"
-                        style="@style/Widget.Material3.Button.TonalButton"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:minHeight="48dp"
-                        android:text="@string/settings_exact_alarms_allow"
-                        android:textAllCaps="false"
-                        android:textColor="@color/on_surface"
-                        app:backgroundTint="@color/surface_variant"
-                        app:cornerRadius="12dp"
-                        app:icon="@drawable/ic_notifications"
-                        app:iconGravity="textStart"
-                        app:iconPadding="8dp"
-                        app:iconSize="18dp"
-                        app:iconTint="@color/accent_blue" />
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/settings_btn_notification_permission"
+                            style="@style/Widget.Material3.Button.TonalButton"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:minHeight="48dp"
+                            android:text="@string/settings_notifications_allow"
+                            android:textAllCaps="false"
+                            android:textColor="@color/on_surface"
+                            app:backgroundTint="@color/surface_variant"
+                            app:cornerRadius="12dp"
+                            app:icon="@drawable/ic_notifications"
+                            app:iconGravity="textStart"
+                            app:iconPadding="8dp"
+                            app:iconSize="18dp"
+                            app:iconTint="@color/accent_blue" />
+
+                        <TextView
+                            android:id="@+id/settings_tv_exact_alarm_status"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="10dp"
+                            android:text="@string/settings_exact_alarms_blocked"
+                            android:textColor="@color/accent_red"
+                            android:textSize="13sp"
+                            android:visibility="gone" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/settings_btn_exact_alarm_permission"
+                            style="@style/Widget.Material3.Button.TonalButton"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:minHeight="48dp"
+                            android:text="@string/settings_exact_alarms_allow"
+                            android:textAllCaps="false"
+                            android:textColor="@color/on_surface"
+                            app:backgroundTint="@color/surface_variant"
+                            app:cornerRadius="12dp"
+                            app:icon="@drawable/ic_notifications"
+                            app:iconGravity="textStart"
+                            app:iconPadding="8dp"
+                            app:iconSize="18dp"
+                            app:iconTint="@color/accent_blue" />
+                    </LinearLayout>
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- Backup and restore -->
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
+            <!-- Section: About -->
+            <TextView
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="12dp"
-                app:cardBackgroundColor="@color/surface"
-                app:cardCornerRadius="16dp"
-                app:cardElevation="0dp"
-                app:strokeColor="@color/border_color"
-                app:strokeWidth="1dp">
+                android:layout_marginStart="4dp"
+                android:layout_marginBottom="8dp"
+                android:accessibilityHeading="true"
+                android:letterSpacing="0.06"
+                android:text="@string/settings_group_about"
+                android:textAllCaps="true"
+                android:textColor="@color/on_surface_subtle"
+                android:textSize="11sp"
+                android:textStyle="bold" />
 
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="16dp">
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/backup_title"
-                        android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
-                        android:textColor="@color/on_surface" />
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="6dp"
-                        android:text="@string/backup_description"
-                        android:textColor="@color/on_surface_muted"
-                        android:textSize="13sp" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/settings_backup_export"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:minHeight="48dp"
-                        android:text="@string/backup_export"
-                        android:textAllCaps="false"
-                        app:cornerRadius="12dp" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/settings_backup_restore"
-                        style="@style/Widget.Material3.Button.OutlinedButton"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:minHeight="48dp"
-                        android:text="@string/backup_restore"
-                        android:textAllCaps="false"
-                        app:cornerRadius="12dp" />
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
-            <!-- 5. Compact, Aligned About App² Card -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/settings_card_about"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="12dp"
+                android:layout_marginBottom="8dp"
                 app:cardBackgroundColor="@color/surface"
                 app:cardCornerRadius="16dp"
                 app:cardElevation="0dp"
@@ -483,52 +828,78 @@
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="16dp">
+                    android:orientation="vertical">
 
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginBottom="8dp"
-                        android:text="@string/settings_section_about"
-                        android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
-                        android:textColor="@color/on_surface" />
-
-                    <!-- App Version Row -->
+                    <!-- App² version + inline Check updates -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:gravity="center_vertical"
+                        android:minHeight="60dp"
                         android:orientation="horizontal"
-                        android:paddingVertical="3dp">
+                        android:paddingStart="16dp"
+                        android:paddingEnd="8dp"
+                        android:paddingVertical="10dp">
 
-                        <TextView
+                        <LinearLayout
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="@string/settings_app_version_label"
-                            android:textColor="@color/on_surface_muted"
-                            android:textSize="13sp" />
+                            android:orientation="vertical">
 
-                        <TextView
-                            android:id="@+id/settings_tv_app_version"
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/app_name"
+                                android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+                                android:textColor="@color/on_surface" />
+
+                            <TextView
+                                android:id="@+id/settings_tv_app_version"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="2dp"
+                                android:ellipsize="end"
+                                android:fontFamily="monospace"
+                                android:maxLines="1"
+                                android:text="1.0 (Build 1)"
+                                android:textColor="@color/on_surface_muted"
+                                android:textSize="12sp" />
+                        </LinearLayout>
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/settings_check_host"
+                            style="@style/Widget.Material3.Button.TextButton"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:ellipsize="end"
-                            android:fontFamily="monospace"
-                            android:maxLines="1"
-                            android:text="1.0 (Build 1)"
-                            android:textColor="@color/on_surface"
-                            android:textSize="13sp" />
+                            android:minWidth="0dp"
+                            android:minHeight="48dp"
+                            android:paddingHorizontal="10dp"
+                            android:text="@string/updates_check_short"
+                            android:textAllCaps="false"
+                            android:textColor="@color/accent_blue"
+                            app:icon="@drawable/ic_refresh"
+                            app:iconPadding="6dp"
+                            app:iconSize="18dp"
+                            app:iconTint="@color/accent_blue" />
                     </LinearLayout>
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginHorizontal="16dp"
+                        android:alpha="0.5"
+                        android:background="@color/border_color" />
 
                     <!-- WebView Version Row -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:gravity="center_vertical"
+                        android:minHeight="48dp"
                         android:orientation="horizontal"
-                        android:paddingVertical="3dp">
+                        android:paddingHorizontal="16dp"
+                        android:paddingVertical="10dp">
 
                         <TextView
                             android:layout_width="0dp"
@@ -536,7 +907,7 @@
                             android:layout_weight="1"
                             android:text="@string/settings_webview_version_label"
                             android:textColor="@color/on_surface_muted"
-                            android:textSize="13sp" />
+                            android:textSize="14sp" />
 
                         <TextView
                             android:id="@+id/settings_tv_webview_version"
@@ -547,43 +918,48 @@
                             android:maxLines="1"
                             android:text="System Default"
                             android:textColor="@color/on_surface"
-                            android:textSize="13sp" />
+                            android:textSize="12sp" />
                     </LinearLayout>
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/settings_check_host"
-                        style="@style/Widget.Material3.Button.TonalButton"
+                    <View
                         android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:minHeight="48dp"
-                        android:text="@string/updates_check_host"
-                        android:textAllCaps="false"
-                        android:textColor="@color/on_surface"
-                        app:backgroundTint="@color/surface_variant"
-                        app:cornerRadius="12dp"
-                        app:icon="@drawable/ic_refresh"
-                        app:iconGravity="textStart"
-                        app:iconPadding="8dp"
-                        app:iconSize="18dp"
-                        app:iconTint="@color/accent_blue" />
+                        android:layout_height="1dp"
+                        android:layout_marginHorizontal="16dp"
+                        android:alpha="0.5"
+                        android:background="@color/border_color" />
 
-                    <com.google.android.material.button.MaterialButton
+                    <!-- Privacy policy row -->
+                    <LinearLayout
                         android:id="@+id/settings_btn_privacy_policy"
-                        style="@style/Widget.Material3.Button.OutlinedButton"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:minHeight="48dp"
-                        android:text="@string/settings_privacy_policy"
-                        android:textAllCaps="false"
-                        android:textColor="@color/on_surface"
-                        app:cornerRadius="12dp" />
+                        android:background="?attr/selectableItemBackground"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center_vertical"
+                        android:minHeight="52dp"
+                        android:orientation="horizontal"
+                        android:paddingHorizontal="16dp"
+                        android:paddingVertical="12dp"
+                        android:screenReaderFocusable="true">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/settings_privacy_policy"
+                            android:textColor="@color/on_surface"
+                            android:textSize="14sp" />
+
+                        <ImageView
+                            android:layout_width="20dp"
+                            android:layout_height="20dp"
+                            android:importantForAccessibility="no"
+                            android:src="@drawable/ic_open_in_new"
+                            app:tint="@color/on_surface_muted" />
+                    </LinearLayout>
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
-
-
-
         </LinearLayout>
     </ScrollView>
 
