@@ -20,14 +20,13 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** Compact, manual check summary owned by one Settings dialog. */
+/** Compact, manual update check for both App² and all linked subapps. */
 class SettingsUpdateController(
     private val activity: AppCompatActivity,
     private val dialog: Dialog,
     private val records: () -> List<SubappRecord>,
     private val changed: () -> Unit,
     private val review: (List<SubappRecord>) -> Unit,
-    private val checkHost: Boolean,
     private val checker: VersionUpdateChecker = VersionUpdateChecker(),
 ) {
     private val indicators = SubappUpdateIndicators.of(activity)
@@ -48,33 +47,29 @@ class SettingsUpdateController(
         check.visibility = View.GONE
         progress?.visibility = View.VISIBLE
         check.setText(R.string.updates_checking)
-        host.visibility = if (checkHost) View.VISIBLE else View.GONE
+        host.visibility = View.VISIBLE
         host.setText(R.string.updates_host_checking)
-        subapps.visibility = if (checkHost) View.GONE else View.VISIBLE
+        subapps.visibility = View.VISIBLE
         subapps.setText(R.string.updates_subapps_checking)
         release.visibility = View.GONE
         reviews.visibility = View.GONE
         job = activity.lifecycleScope.launch {
             var failed = false
             try {
-                if (checkHost) {
-                    try {
-                        val latest = withContext(Dispatchers.IO) { checker.hostRelease(BuildConfig.BUILD_TYPE == "dev") }
-                        val newer = latest?.isNewer(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE.toLong(), BuildConfig.BUILD_TYPE == "dev") == true
-                        host.text = if (latest == null) activity.getString(R.string.updates_no_release)
-                            else activity.getString(if (newer) R.string.updates_host_new else R.string.updates_host_current, latest.version)
-                        if (newer) {
-                            release.visibility = View.VISIBLE
-                            release.setOnClickListener {
-                                try { activity.startActivity(Intent(Intent.ACTION_VIEW, latest.url.toUri())) }
-                                catch (_: ActivityNotFoundException) { Toast.makeText(activity, R.string.updates_browser_missing, Toast.LENGTH_SHORT).show() }
-                            }
+                try {
+                    val latest = withContext(Dispatchers.IO) { checker.hostRelease(BuildConfig.BUILD_TYPE == "dev") }
+                    val newer = latest?.isNewer(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE.toLong(), BuildConfig.BUILD_TYPE == "dev") == true
+                    host.text = if (latest == null) activity.getString(R.string.updates_no_release)
+                        else activity.getString(if (newer) R.string.updates_host_new else R.string.updates_host_current, latest.version)
+                    if (newer) {
+                        release.visibility = View.VISIBLE
+                        release.setOnClickListener {
+                            try { activity.startActivity(Intent(Intent.ACTION_VIEW, latest.url.toUri())) }
+                            catch (_: ActivityNotFoundException) { Toast.makeText(activity, R.string.updates_browser_missing, Toast.LENGTH_SHORT).show() }
                         }
-                    } catch (e: CancellationException) { throw e }
-                    catch (_: Exception) { failed = true; host.setText(R.string.updates_host_failed) }
-
-                    return@launch
-                }
+                    }
+                } catch (e: CancellationException) { throw e }
+                catch (_: Exception) { failed = true; host.setText(R.string.updates_host_failed) }
 
                 val apps = withContext(Dispatchers.IO) { records() }
                 val lookups = mutableMapOf<GitHubSource, Result<VersionUpdateChecker.PublishedVersion>>()
@@ -128,7 +123,7 @@ class SettingsUpdateController(
                 progress?.visibility = View.GONE
                 check.isEnabled = true
                 check.visibility = View.VISIBLE
-                check.setText(if (failed) R.string.updates_retry else if (checkHost) R.string.updates_check_host else R.string.updates_check_subapps)
+                check.setText(if (failed) R.string.updates_retry else R.string.updates_check)
             }
         }
     }

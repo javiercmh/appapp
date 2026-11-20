@@ -74,19 +74,19 @@ class VersionUpdatesDeviceTest {
         try {
             scenario.onActivity { activity ->
                 dialog = Dialog(activity).apply { setContentView(R.layout.dialog_update_check) }
-                val controller = SettingsUpdateController(activity, dialog, { records }, {}, {}, checkHost = false, checker = checker)
+                val controller = SettingsUpdateController(activity, dialog, { records }, {}, {}, checker = checker)
                 dialog.setOnDismissListener { controller.close() }
                 dialog.show()
                 dialog.findViewById<View>(R.id.settings_check_updates).performClick()
             }
             waitUntil { var enabled = false; scenario.onActivity { enabled = dialog.findViewById<View>(R.id.settings_check_updates).isEnabled }; enabled }
             scenario.onActivity {
-                assertEquals(View.GONE, dialog.findViewById<View>(R.id.settings_view_release).visibility)
+                assertEquals(View.VISIBLE, dialog.findViewById<View>(R.id.settings_view_release).visibility)
                 assertEquals(View.VISIBLE, dialog.findViewById<View>(R.id.settings_review_updates).visibility)
                 assertEquals(View.VISIBLE, dialog.findViewById<View>(R.id.settings_subapp_update_status).visibility)
                 assertNotNull(SubappUpdateIndicators.of(context).available(records[0]))
                 assertNull(SubappUpdateIndicators.of(context).available(records[1]))
-                assertEquals(2, urls.size) // One shared commit lookup and manifest
+                assertEquals(3, urls.size) // host + one shared commit lookup and manifest
                 fail.set(true)
                 dialog.findViewById<View>(R.id.settings_check_updates).performClick()
             }

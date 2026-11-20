@@ -484,7 +484,7 @@ class SubappLibraryActivity : AppCompatActivity() {
         })
         touchHelper.attachToRecyclerView(binding.appList)
         header.emptyImportApp.setOnClickListener { showNewAppMenu() }
-        header.checkAppUpdates.setOnClickListener { showUpdates(checkHost = false) }
+        header.checkAppUpdates.setOnClickListener { showUpdates() }
         header.emptyBrowseApps.setOnClickListener { selectTab(R.id.nav_discover) }
 
         binding.libraryBottomNav.selectedItemId = selectedTabId
@@ -558,7 +558,7 @@ class SubappLibraryActivity : AppCompatActivity() {
             updateRecord != null -> reviewUpdates(listOf(updateRecord))
             copies.size == 1 -> open(copies.single())
             state.hostCompatible -> library.installCatalogApp(state.app)
-            else -> showUpdates(checkHost = true)
+            else -> showUpdates()
         }
     }
 
@@ -593,7 +593,7 @@ class SubappLibraryActivity : AppCompatActivity() {
             cachedIcon = currentMarketplace.cachedIcons[state.app.id],
             taskBusy = library.task.value.busy,
             onInstall = { app -> library.installCatalogApp(app) },
-            onCheckHostUpdate = { showUpdates(checkHost = true) },
+            onCheckHostUpdate = { showUpdates() },
             onOpen = { record -> open(record) },
             onCreateShortcut = { record ->
                 if (!AppIdentityManager(this, record).requestInstall()) {
@@ -620,17 +620,16 @@ class SubappLibraryActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun showUpdates(checkHost: Boolean) {
-        val title = if (checkHost) R.string.updates_check_host else R.string.updates_check_subapps
+    private fun showUpdates() {
         val content = layoutInflater.inflate(R.layout.dialog_update_check, null)
         val dialog = MaterialAlertDialogBuilder(this)
-            .setTitle(title)
+            .setTitle(R.string.updates_check)
             .setView(content)
             .setNegativeButton(R.string.close, null)
             .show()
         val controller = com.wynh.appapp.updates.SettingsUpdateController(
             this, dialog, records = { repository.list() }, changed = ::refreshUpdateIndicators,
-            review = { reviewUpdates(it) }, checkHost = checkHost
+            review = { librarySettingsDialog?.dismiss(); reviewUpdates(it) }
         )
         dialog.setOnDismissListener { controller.close() }
         controller.start()
@@ -641,7 +640,7 @@ class SubappLibraryActivity : AppCompatActivity() {
         val dialog = Dialog(this, R.style.Theme_AppApp_FullScreenDialog)
         dialog.setContentView(R.layout.dialog_library_settings)
         librarySettingsDialog = dialog
-        dialog.findViewById<View>(R.id.settings_check_host).setOnClickListener { showUpdates(checkHost = true) }
+        dialog.findViewById<View>(R.id.settings_check_host).setOnClickListener { showUpdates() }
 
         val notificationsRow = dialog.findViewById<View>(R.id.settings_notifications_row)
         val tvNotifications = dialog.findViewById<TextView>(R.id.settings_tv_notification_status)
