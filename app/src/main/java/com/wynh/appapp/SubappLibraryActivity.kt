@@ -1,10 +1,8 @@
 package com.wynh.appapp
 
-import java.util.Locale
 
 import androidx.core.content.FileProvider
 
-import com.google.android.material.checkbox.MaterialCheckBox
 
 import android.view.LayoutInflater
 
@@ -53,7 +51,6 @@ import com.wynh.appapp.workspace.SubappRepository
 import com.wynh.appapp.workspace.WorkspaceActionController
 import com.wynh.appapp.workspace.WorkspaceHistoryManager
 import com.wynh.appapp.workspace.WorkspaceSnapshot
-import com.wynh.appapp.workspace.WorkspaceManager
 import com.wynh.appapp.workspace.AppIdentityManager
 import com.wynh.appapp.editor.ImageCropManager
 import android.graphics.Bitmap
@@ -143,147 +140,41 @@ class SubappLibraryActivity : AppCompatActivity() {
     private var pendingExportId: String? = null
     private val saveZipLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri: Uri? ->
         val id = pendingExportId
-        if (uri != null && id != null) library.export(id, null, uri, "app")
+        if (uri != null && id != null) library.export(id, uri, "app")
         pendingExportId = null
     }
 
     internal fun showPackageDialog(record: SubappRecord): Dialog {
-        val workspaceManager = WorkspaceManager(this, workspaceDir = record.workspaceDir)
-        val dialog = Dialog(this, com.google.android.material.R.style.ThemeOverlay_Material3_MaterialAlertDialog)
-        dialog.setContentView(R.layout.dialog_package)
+        val dialog = Dialog(this)
+        val content = com.wynh.appapp.databinding.DialogPackageBinding.inflate(layoutInflater)
+        dialog.setContentView(content.root)
+        val name = AppIdentityManager(this, record).load().name
+        content.packageAppName.text = name
+        content.packageNameInput.setText(WorkspacePackageManager.sanitizePackageName(name.lowercase(), "my_app"))
+
+        val choices = mapOf(
+            R.id.package_both_files to (LibraryController.ExportFiles.BOTH to R.string.package_both_summary),
+            R.id.package_app_files to (LibraryController.ExportFiles.APP to R.string.package_app_summary),
+            R.id.package_user_files to (LibraryController.ExportFiles.USER to R.string.package_user_summary),
+        )
+        content.packageFileSelection.addOnButtonCheckedListener { _, id, checked ->
+            if (checked) content.packageSelectionSummary.setText(choices.getValue(id).second)
+        }
+        content.packageBtnShareZip.setOnClickListener {
+            if (library.task.value.busy) return@setOnClickListener
+            val selected = choices.getValue(content.packageFileSelection.checkedButtonId).first
+            val filename = WorkspacePackageManager.sanitizePackageName(content.packageNameInput.text.toString(), "my_app")
+            dialog.dismiss()
+            library.export(record.id, null, filename, selected)
+        }
+        content.packageBtnClose.setOnClickListener { dialog.dismiss() }
+        content.packageHeaderClose.setOnClickListener { dialog.dismiss() }
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        dialog.show()
         dialog.window?.setLayout(
-            ViewGroup.LayoutParams.MATCH_PARENT,
+            minOf((resources.displayMetrics.widthPixels * 0.94).toInt(), (resources.displayMetrics.density * 460).toInt()),
             ViewGroup.LayoutParams.WRAP_CONTENT
         )
-
-        val filesContainer = dialog.findViewById<LinearLayout>(R.id.package_files_container)
-        val nameInput = dialog.findViewById<EditText>(R.id.package_name_input)
-        val masterCheckbox = dialog.findViewById<MaterialCheckBox>(R.id.package_master_checkbox)
-        val masterCheckboxRow = dialog.findViewById<LinearLayout>(R.id.package_master_checkbox_row)
-        val btnShareZip = dialog.findViewById<MaterialButton>(R.id.package_btn_share_zip)
-        val btnClose = dialog.findViewById<MaterialButton>(R.id.package_btn_close)
-        val filesToggleRow = dialog.findViewById<LinearLayout>(R.id.package_files_toggle_row)
-        val filesToggleLabel = dialog.findViewById<TextView>(R.id.package_files_toggle_label)
-        val filesChevron = dialog.findViewById<View>(R.id.package_files_chevron)
-        val filesSection = dialog.findViewById<LinearLayout>(R.id.package_files_section)
-
-        // Attempt to prefill package name from manifest.json
-        val defaultPackageName = try {
-            val config = AppIdentityManager(this, record).load()
-            config.name.lowercase().replace(Regex("[^a-z0-9_-]"), "_")
-        } catch (_: Exception) {
-            "my_app"
-        }
-        nameInput.setText(defaultPackageName)
-
-        val workspaceFiles = workspaceManager.listFiles()
-        val selectedFiles = workspaceFiles.map { it.name }.toMutableSet()
-        val checkboxMap = mutableMapOf<String, MaterialCheckBox>()
-
-        fun updateMasterCheckboxState() {
-            masterCheckbox.checkedState = when {
-                workspaceFiles.isEmpty() || selectedFiles.isEmpty() -> MaterialCheckBox.STATE_UNCHECKED
-                selectedFiles.size == workspaceFiles.size -> MaterialCheckBox.STATE_CHECKED
-                else -> MaterialCheckBox.STATE_INDETERMINATE
-            }
-            filesToggleLabel.text = getString(R.string.package_files_toggle, selectedFiles.size, workspaceFiles.size)
-        }
-
-        // The individual files stay collapsed by default; the selection is kept either way.
-        fun setFilesExpanded(expanded: Boolean) {
-            filesSection.visibility = if (expanded) View.VISIBLE else View.GONE
-            filesChevron.rotation = if (expanded) 180f else 0f
-            ViewCompat.setStateDescription(
-                filesToggleRow,
-                getString(if (expanded) R.string.package_files_expanded else R.string.package_files_collapsed)
-            )
-        }
-        setFilesExpanded(false)
-        filesToggleRow.setOnClickListener { setFilesExpanded(filesSection.visibility != View.VISIBLE) }
-
-        fun formatFileSize(bytes: Long): String {
-            return when {
-                bytes < 1024 -> "$bytes B"
-                bytes < 1024 * 1024 -> String.format(Locale.getDefault(), "%.1f KB", bytes / 1024.0)
-                else -> String.format(Locale.getDefault(), "%.1f MB", bytes / (1024.0 * 1024.0))
-            }
-        }
-
-        fun getFileEmoji(name: String): String {
-            val lower = name.lowercase()
-            return when {
-                lower.endsWith(".html") || lower.endsWith(".htm") -> "🌐"
-                lower.endsWith(".css") -> "🎨"
-                lower.endsWith(".js") || lower.endsWith(".mjs") -> "⚡"
-                lower.endsWith(".json") -> "📦"
-                else -> "📄"
-            }
-        }
-
-        filesContainer.removeAllViews()
-        val inflater = LayoutInflater.from(this)
-
-        for (file in workspaceFiles) {
-            val itemView = inflater.inflate(R.layout.item_export_file_checkbox, filesContainer, false)
-            val iconView = itemView.findViewById<TextView>(R.id.export_item_icon)
-            val nameView = itemView.findViewById<TextView>(R.id.export_item_name)
-            val sizeView = itemView.findViewById<TextView>(R.id.export_item_size)
-            val checkBox = itemView.findViewById<MaterialCheckBox>(R.id.export_item_checkbox)
-
-            iconView.text = getFileEmoji(file.name)
-            nameView.text = file.name
-            sizeView.text = formatFileSize(file.size)
-            checkBox.isChecked = true
-            checkboxMap[file.name] = checkBox
-
-            val toggleAction = {
-                val newState = !checkBox.isChecked
-                checkBox.isChecked = newState
-                if (newState) selectedFiles.add(file.name) else selectedFiles.remove(file.name)
-                updateMasterCheckboxState()
-            }
-
-            itemView.setOnClickListener { toggleAction() }
-            checkBox.setOnClickListener {
-                if (checkBox.isChecked) selectedFiles.add(file.name) else selectedFiles.remove(file.name)
-                updateMasterCheckboxState()
-            }
-
-            filesContainer.addView(itemView)
-        }
-
-        val toggleMaster = {
-            val shouldSelectAll = selectedFiles.size < workspaceFiles.size
-            selectedFiles.clear()
-            if (shouldSelectAll) selectedFiles.addAll(checkboxMap.keys)
-            checkboxMap.values.forEach { it.isChecked = shouldSelectAll }
-            updateMasterCheckboxState()
-        }
-
-        masterCheckbox.setOnClickListener { toggleMaster() }
-        masterCheckboxRow.setOnClickListener { toggleMaster() }
-
-        updateMasterCheckboxState()
-
-        btnShareZip.setOnClickListener {
-            if (selectedFiles.isEmpty()) {
-                Toast.makeText(this, R.string.export_no_files_selected, Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-
-            val rawName = nameInput.text?.toString() ?: ""
-            val customPackageName = WorkspacePackageManager.sanitizePackageName(rawName, "my_app")
-
-            if (library.task.value.busy) return@setOnClickListener
-            dialog.dismiss()
-            library.export(record.id, selectedFiles.toSet(), null, customPackageName)
-        }
-
-        btnClose.setOnClickListener {
-            dialog.dismiss()
-        }
-
-        dialog.show()
         return dialog
     }
 

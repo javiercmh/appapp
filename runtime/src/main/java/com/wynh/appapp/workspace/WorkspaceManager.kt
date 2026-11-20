@@ -2,7 +2,10 @@ package com.wynh.appapp.workspace
 
 import android.content.Context
 import com.wynh.appapp.templates.DefaultWebApp
+import com.wynh.appapp.updates.UpdatePackage
+import com.wynh.appapp.updates.WorkspaceUpdater
 import com.wynh.appapp.updates.WorkspaceLocks
+import org.json.JSONObject
 import java.io.File
 
 data class WorkspaceFile(val name: String, val size: Long, val lastModified: Long, val isCore: Boolean)
@@ -25,6 +28,35 @@ class WorkspaceManager(
         WorkspaceOperations.replace(workspaceDir) { staged ->
             val target = WorkspaceFiles(staged)
             DefaultWebApp.getStarterFiles(context).forEach { (name, content) -> target.writeText(name, content) }
+        }
+    }
+
+    fun appFilePaths(appDirectory: File, previousManifest: String? = null): Set<String> {
+        val installed = runCatching { WorkspaceUpdater(appDirectory).installed() }.getOrNull()
+        val managed = linkedSetOf("index.html", "manifest.json")
+        val seeds = installed?.seeds.orEmpty().toMutableSet()
+        managed += installed?.hashes?.keys.orEmpty()
+
+        val currentManifest = runCatching { readFile("manifest.json") }.getOrNull()
+        for (manifest in listOfNotNull(currentManifest, previousManifest)) {
+            val update = runCatching { UpdatePackage.parse(manifest) }.getOrNull()
+            if (update != null) {
+                managed += update.managed
+                seeds += update.seeds
+            } else {
+                val files = runCatching {
+                    val json = JSONObject(manifest)
+                    if (json.has("app2Update")) null else json.optJSONArray("files")
+                }.getOrNull()
+                if (files != null) {
+                    for (i in 0 until files.length()) managed += files.optString(i)
+                }
+            }
+        }
+        // Data and seed files are editable by the user, even when the publisher ships defaults.
+        return managed.filterTo(linkedSetOf()) {
+            it !in seeds && it != "app.log" && it != "data" && !it.startsWith("data/") &&
+                WorkspaceFiles.normalize(it) == it
         }
     }
 

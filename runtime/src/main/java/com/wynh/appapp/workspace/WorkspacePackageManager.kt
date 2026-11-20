@@ -43,10 +43,16 @@ object WorkspacePackageManager {
         }
 
         val cleanName = sanitizePackageName(baseName, "my-app")
-        val zipFile = File(exportsDir, "$cleanName.zip")
-
-        FileOutputStream(zipFile).use { fos ->
-            exportToOutputStream(workspaceManager, selectedFiles, fos)
+        // Keep the display name while giving each Sharesheet URI its own immutable file.
+        val archiveDir = java.nio.file.Files.createTempDirectory(exportsDir.toPath(), "package-").toFile()
+        val zipFile = File(archiveDir, "$cleanName.zip")
+        try {
+            FileOutputStream(zipFile).use { fos ->
+                exportToOutputStream(workspaceManager, selectedFiles, fos)
+            }
+        } catch (e: Exception) {
+            archiveDir.deleteRecursively()
+            throw e
         }
 
         return zipFile
@@ -61,19 +67,19 @@ object WorkspacePackageManager {
         outputStream: OutputStream
     ) {
         ZipOutputStream(BufferedOutputStream(outputStream)).use { zos ->
-            for (fileName in selectedFiles) {
-                val file = workspaceManager.getFile(fileName)
-                if (file.exists() && file.isFile) {
-                    val entry = ZipEntry(fileName).apply {
-                        time = file.lastModified()
-                        size = file.length()
-                    }
-                    zos.putNextEntry(entry)
-                    FileInputStream(file).use { fis ->
-                        fis.copyTo(zos, bufferSize = 8192)
-                    }
-                    zos.closeEntry()
+            val root = workspaceManager.workspaceDir
+            for (file in WorkspaceFiles.regularFiles(root)) {
+                val fileName = file.relativeTo(root).invariantSeparatorsPath
+                if (fileName !in selectedFiles) continue
+                val entry = ZipEntry(fileName).apply {
+                    time = file.lastModified()
+                    size = file.length()
                 }
+                zos.putNextEntry(entry)
+                FileInputStream(file).use { fis ->
+                    fis.copyTo(zos, bufferSize = 8192)
+                }
+                zos.closeEntry()
             }
             zos.finish()
         }
