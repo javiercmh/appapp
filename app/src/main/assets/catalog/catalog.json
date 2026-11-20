@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "apps": [
+    {
+      "id": "lingomage",
+      "name": "LingoMage",
+      "author": "Javier Melo",
+      "category": "Language",
+      "license": "MIT",
+      "summary": "AI-powered stories tailored to your interests and reading level.",
+      "description": "Learn languages with interactive AI-generated stories tailored to your interests and reading level, with vocabulary notes, audio playback, and progress tracking.",
+      "capabilities": ["ai", "speech"],
+      "offlineOnly": false,
+      "minHostCompatibility": 4,
+      "iconKey": "lingomage",
+      "source": {
+        "type": "github",
+        "owner": "javiercmh",
+        "repository": "lingomage",
+        "branch": "main",
+        "publisherAppId": "com.wynh.lingomage"
+      }
+    },
+    {
+      "id": "working-hours",
+      "name": "Working Hours",
+      "author": "Javier Melo",
+      "category": "Productivity",
+      "license": "MIT",
+      "summary": "Track shifts, breaks, and overtime with end-of-day reminders.",
+      "description": "Track daily working hours, breaks, and overtime balance on your phone. Works completely offline with optional end-of-day reminder notifications.",
+      "capabilities": ["reminders"],
+      "offlineOnly": true,
+      "minHostCompatibility": 1,
+      "iconKey": "working_hours",
+      "source": {
+        "type": "github",
+        "owner": "javiercmh",
+        "repository": "working-hours",
+        "branch": "main",
+        "publisherAppId": "com.wynh.workinghours"
+      }
+    },
+    {
+      "id": "starter-demo",
+      "name": "Starter Demo",
+      "author": "App\u00b2",
+      "category": "Template",
+      "license": "MIT",
+      "summary": "Editable starter showcasing storage, photos, speech, and AI.",
+      "description": "An interactive starter demo included in App\u00b2. Try local file storage, photo selection, reminders, speech, and AI, or edit its HTML, CSS, and JavaScript to build your own subapp.",
+      "capabilities": ["template"],
+      "offlineOnly": true,
+      "minHostCompatibility": 1,
+      "iconKey": "starter_demo",
+      "source": {
+        "type": "bundled_starter"
+      }
+    }
+  ]
+}

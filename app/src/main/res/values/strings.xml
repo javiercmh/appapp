@@ -106,10 +106,12 @@
     <string name="settings_reset_success">App² has been reset to factory defaults</string>
     <string name="template_upgrade_available">A new starter template is available. Your files were left untouched — load it from &lt;/&gt; → History → Official Starter Template.</string>
     <string name="library_title">Your apps</string>
-    <string name="library_subtitle">A home for the apps you make. Long press an app to reorder.</string>
+    <string name="library_subtitle">Long press an app to reorder.</string>
     <string name="library_move_up">Move app up</string>
     <string name="library_move_down">Move app down</string>
     <string name="library_new">New app</string>
+    <string name="library_import_button">Import</string>
+    <string name="library_import_title">Import app</string>
     <string name="library_import">Import</string>
     <string name="library_import_zip">ZIP file</string>
     <string name="library_import_zip_desc">Choose an app archive from your device.</string>
@@ -130,7 +132,7 @@
     <string name="library_open_app">Open %1$s</string>
     <string name="library_edit_app">Edit %1$s</string>
     <string name="library_app_fallback">Personal app</string>
-    <string name="library_empty">Your first app starts here. Create a starter app or import a ZIP or GitHub folder to get going.</string>
+    <string name="library_empty">Your apps live here. Discover supported subapps or import a ZIP or GitHub link.</string>
     <plurals name="library_count">
         <item quantity="one">%d app</item>
         <item quantity="other">%d apps</item>
@@ -213,4 +215,57 @@
         <item quantity="one">Update available for %d subapp.</item>
         <item quantity="other">Updates available for %d subapps.</item>
     </plurals>
+
+    <!-- Marketplace / Discover -->
+    <string name="nav_your_apps">Your apps</string>
+    <string name="nav_discover">Discover</string>
+    <string name="marketplace_title">Discover</string>
+    <string name="marketplace_subtitle">Curated subapps built for App²</string>
+    <string name="marketplace_refresh">Refresh catalog</string>
+    <string name="marketplace_refreshing">Refreshing catalog…</string>
+    <string name="marketplace_synced">✓ Synced from GitHub</string>
+    <string name="marketplace_refresh_failed">Couldn’t refresh catalog</string>
+    <string name="marketplace_action_get">Get</string>
+    <string name="marketplace_action_install">Install</string>
+    <string name="marketplace_action_open">Open</string>
+    <string name="marketplace_action_view">View</string>
+    <string name="marketplace_action_update">Update</string>
+    <string name="marketplace_action_update_host">Update App²</string>
+    <string name="marketplace_installed_badge">✓ Installed</string>
+    <string name="marketplace_installed_label">Installed</string>
+    <string name="marketplace_by_author">by %1$s</string>
+    <string name="marketplace_edit_code">Edit code</string>
+    <string name="marketplace_menu_create_shortcut">Create shortcut</string>
+    <string name="marketplace_more_actions">More actions</string>
+    <string name="marketplace_open_github">Open on GitHub</string>
+    <string name="marketplace_spec_category">Category</string>
+    <string name="marketplace_spec_uses">Uses</string>
+    <string name="marketplace_spec_license">License</string>
+    <string name="marketplace_spec_version">Version</string>
+    <string name="marketplace_uses_local_only">Local only</string>
+    <string name="marketplace_host_required">Requires App² compatibility level %1$d (this version supports level %2$d). Update App² first.</string>
+    <string name="marketplace_byo_title">Bring your own app</string>
+    <string name="marketplace_byo_subtitle">Import any public GitHub repository or ZIP archive.</string>
+    <string name="marketplace_browser_missing">No browser is available to open this repository.</string>
+    <string name="marketplace_installing_app">Installing %1$s…</string>
+    <string name="marketplace_download_progress">Downloading files (%1$d of %2$d)…</string>
+    <string name="marketplace_installed_notice">%1$s added</string>
+    <string name="marketplace_installed_offline_notice">%1$s added. Runs offline by default.</string>
+    <string name="marketplace_browse_apps">Browse apps</string>
+    <string name="marketplace_action_view_copies">Show in Your apps</string>
+    <plurals name="marketplace_copies_note">
+        <item quantity="one">Installed %1$d time. Open, edit or remove each copy in Your apps.</item>
+        <item quantity="other">Installed %1$d times. Open, edit or remove each copy in Your apps.</item>
+    </plurals>
+    <string name="marketplace_already_installed">%1$s is already installed. To add another copy, use + in Your apps.</string>
+    <string name="marketplace_card_meta_with_author">%1$s · by %2$s</string>
+    <string name="marketplace_cap_ai">AI</string>
+    <string name="marketplace_cap_speech">Speech</string>
+    <string name="marketplace_cap_reminders">Reminders</string>
+    <string name="marketplace_cap_internet">Internet</string>
+    <string name="marketplace_cap_template">Template</string>
+    <string name="marketplace_cap_files">Files</string>
+    <string name="marketplace_cap_share">Share</string>
+    <string name="marketplace_cap_offline">Offline</string>
+    <string name="marketplace_cap_builtin">Built-in</string>
 </resources>

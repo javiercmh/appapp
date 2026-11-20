@@ -3,7 +3,7 @@
     <color name="primary">#3B82F6</color>
     <color name="primary_variant">#2563EB</color>
     <color name="on_primary">#FFFFFF</color>
-    
+
     <color name="secondary">#0F172A</color>
     <color name="secondary_variant">#1E293B</color>
     <color name="on_secondary">#F8FAFC</color>
@@ -12,6 +12,7 @@
     <color name="surface">#0F172A</color>
     <color name="surface_variant">#1E293B</color>
     <color name="surface_elevated">#26334D</color>
+    <color name="surface_trust">#162033</color>
     <color name="on_surface">#F9FAFB</color>
     <color name="on_surface_muted">#94A3B8</color>
     <color name="on_surface_subtle">#64748B</color>
@@ -25,4 +26,11 @@
     <color name="code_editor_bg">#0B0F19</color>
     <color name="tab_active_bg">#1E293B</color>
     <color name="tab_inactive_bg">#0F172A</color>
+
+    <color name="nav_active_indicator">#383B82F6</color>
+    <color name="nav_active_icon">#60A5FA</color>
+    <color name="chip_installed_bg">#2410B981</color>
+    <color name="chip_installed_text">#34D399</color>
+    <color name="chip_sync_bg">#1A38BDF8</color>
+    <color name="chip_sync_border">#5938BDF8</color>
 </resources>

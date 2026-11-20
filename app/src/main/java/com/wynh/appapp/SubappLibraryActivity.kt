@@ -40,6 +40,14 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.appcompat.app.AlertDialog
 import com.wynh.appapp.bridge.NativeStorageBridge
+import com.google.android.material.bottomsheet.BottomSheetDialog
+import com.google.android.material.snackbar.Snackbar
+import com.wynh.appapp.marketplace.CatalogItemState
+import com.wynh.appapp.marketplace.DiscoverAdapter
+import com.wynh.appapp.marketplace.InstalledProvenance
+import com.wynh.appapp.marketplace.MarketplaceMatcher
+import com.wynh.appapp.marketplace.MarketplaceUi
+import com.wynh.appapp.workspace.LibraryController
 import com.wynh.appapp.workspace.SubappRecord
 import com.wynh.appapp.workspace.SubappRepository
 import com.wynh.appapp.workspace.WorkspaceManager
@@ -73,7 +81,10 @@ class SubappLibraryActivity : AppCompatActivity() {
     private var guidedUpdates: com.wynh.appapp.updates.GuidedUpdatesController? = null
     private var librarySettingsDialog: Dialog? = null
     private fun refreshUpdateIndicators() {
-        if (rowsReady) libraryAdapter.notifyItemRangeChanged(1, displayedRecords.size)
+        if (rowsReady) {
+            libraryAdapter.notifyItemRangeChanged(1, displayedRecords.size)
+            refreshDiscover()
+        }
     }
     internal fun reviewUpdates(records: List<SubappRecord>, downloader: com.wynh.appapp.updates.GitHubUpdateDownloader = com.wynh.appapp.updates.GitHubUpdateDownloader(cacheDir)) {
         guidedUpdates?.stop()
@@ -277,10 +288,15 @@ class SubappLibraryActivity : AppCompatActivity() {
     private val displayedRecords = mutableListOf<SubappRecord>()
     private lateinit var header: LibraryHeaderBinding
     private lateinit var libraryAdapter: LibraryAdapter
+    private lateinit var discoverAdapter: DiscoverAdapter
     private lateinit var touchHelper: ItemTouchHelper
     private var reorderOriginal = emptyList<SubappRecord>()
     private var dragCancelled = false
     private val stableIds = mutableMapOf<String, Long>()
+    private var selectedTabId: Int = R.id.nav_your_apps
+    private var currentProvenance = emptyMap<String, InstalledProvenance>()
+    private var currentMarketplace = LibraryController.MarketplaceState()
+    private var detailSheet: BottomSheetDialog? = null
     private val importLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) importApp(uri)
     }
@@ -290,6 +306,7 @@ class SubappLibraryActivity : AppCompatActivity() {
         repository = SubappRepository(this)
         pendingExportId = savedInstanceState?.getString("export_app_id")
         pendingExportFiles = savedInstanceState?.getStringArrayList("export_files")?.toSet()
+        selectedTabId = savedInstanceState?.getInt(STATE_SELECTED_TAB, R.id.nav_your_apps) ?: R.id.nav_your_apps
         showLibrary()
         com.wynh.appapp.runtime.WorkspaceOperationUi.bindWithFailures(this, onFailure = { guidedUpdates?.failed(it) == true }) { completion ->
             if (completion.kind == com.wynh.appapp.workspace.WorkspaceActionController.Kind.UPDATED) {
@@ -312,13 +329,24 @@ class SubappLibraryActivity : AppCompatActivity() {
                         if (reorderOriginal.isEmpty() && rowsReady) applyCatalog(value)
                     }
                 } }
+                launch { library.marketplace.collect { state ->
+                    currentMarketplace = state
+                    state.refreshError?.let { errorMessage ->
+                        Toast.makeText(this@SubappLibraryActivity, errorMessage, Toast.LENGTH_LONG).show()
+                        library.clearMarketplaceRefreshError()
+                    }
+                    if (rowsReady) refreshDiscover()
+                } }
                 launch { library.task.collect { task ->
                     header.newApp.isEnabled = !task.busy
+                    if (rowsReady) refreshDiscover()
                     if (task.busy) {
+                        val detailText = task.detail.ifEmpty { getString(com.wynh.appapp.runtime.R.string.workspace_working) }
                         if (operationProgress == null) operationProgress = MaterialAlertDialogBuilder(this@SubappLibraryActivity)
-                            .setTitle(task.message).setMessage(com.wynh.appapp.runtime.R.string.workspace_working).setCancelable(false)
+                            .setTitle(task.message).setMessage(detailText).setCancelable(false)
                             .setNegativeButton(R.string.cancel) { _, _ -> library.cancel() }.show()
                         operationProgress?.setTitle(task.message)
+                        operationProgress?.setMessage(detailText)
                         operationProgress?.getButton(android.content.DialogInterface.BUTTON_NEGATIVE)?.apply {
                             visibility = if (task.cancellable) View.VISIBLE else View.GONE
                             setOnClickListener { library.cancel() }
@@ -330,8 +358,11 @@ class SubappLibraryActivity : AppCompatActivity() {
                             SubappSessionRegistry.close(id)
                         }
                         if (task.message.isNotEmpty()) {
-                            if (task.created != null) edit(task.created)
-                            else if (task.share != null) {
+                            if (task.installedFromCatalog != null) {
+                                showInstalledSnackbar(task.installedFromCatalog, task.installedName, task.message, task.installedOfflineNote)
+                            } else if (task.created != null) {
+                                edit(task.created)
+                            } else if (task.share != null) {
                                 val uri = FileProvider.getUriForFile(this@SubappLibraryActivity, "$packageName.fileprovider", task.share)
                                 startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
                                     type = "application/zip"; putExtra(Intent.EXTRA_STREAM, uri); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -367,6 +398,7 @@ class SubappLibraryActivity : AppCompatActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putString("export_app_id", pendingExportId)
         pendingExportFiles?.let { outState.putStringArrayList("export_files", ArrayList(it)) }
+        outState.putInt(STATE_SELECTED_TAB, selectedTabId)
         super.onSaveInstanceState(outState)
     }
 
@@ -378,6 +410,7 @@ class SubappLibraryActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        detailSheet?.dismiss(); detailSheet = null
         librarySettingsDialog?.dismiss(); librarySettingsDialog = null
         guidedUpdates?.stop()
         backupProgress?.dismiss()
@@ -402,21 +435,45 @@ class SubappLibraryActivity : AppCompatActivity() {
                 isAppearanceLightNavigationBars = false
             }
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
-            view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            view.setPadding(bars.left, bars.top, bars.right, 0)
             insets
+        }
+        val initialNavBottom = binding.libraryBottomNav.paddingBottom
+        ViewCompat.setOnApplyWindowInsetsListener(binding.libraryBottomNav) { view, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            view.setPadding(view.paddingLeft, view.paddingTop, view.paddingRight, initialNavBottom + bars.bottom)
+            WindowInsetsCompat.CONSUMED
         }
         ViewCompat.requestApplyInsets(binding.root)
         binding.libraryToolbar.setOnMenuItemClickListener { item ->
-            if (item.itemId == R.id.action_settings) {
-                showLibrarySettings()
-                true
-            } else false
+            when (item.itemId) {
+                R.id.action_settings -> {
+                    showLibrarySettings()
+                    true
+                }
+                R.id.action_refresh_catalog -> {
+                    library.refreshMarketplace()
+                    true
+                }
+                else -> false
+            }
         }
         binding.appList.layoutManager = LinearLayoutManager(this)
         header = LibraryHeaderBinding.inflate(layoutInflater, binding.appList, false)
         libraryAdapter = LibraryAdapter()
         binding.appList.adapter = libraryAdapter
         binding.appList.onDragCancelled = { dragCancelled = true }
+
+        binding.discoverList.layoutManager = LinearLayoutManager(this)
+        discoverAdapter = DiscoverAdapter(
+            inflater = layoutInflater,
+            onCardClick = { state -> showCatalogDetail(state) },
+            onPrimaryAction = { state -> handleCatalogPrimaryAction(state) },
+            onImportGitHub = { showNewAppMenu(focusGithub = true) },
+            onImportZip = { launchZipImport() },
+        )
+        binding.discoverList.adapter = discoverAdapter
+
         touchHelper = ItemTouchHelper(object : ItemTouchHelper.Callback() {
             override fun getMovementFlags(rv: RecyclerView, holder: RecyclerView.ViewHolder): Int =
                 makeMovementFlags(if (holder is AppHolder && displayedRecords.size > 1) ItemTouchHelper.UP or ItemTouchHelper.DOWN else 0, 0)
@@ -455,8 +512,111 @@ class SubappLibraryActivity : AppCompatActivity() {
         })
         touchHelper.attachToRecyclerView(binding.appList)
         header.newApp.setOnClickListener { showNewAppMenu() }
+        header.emptyBrowseApps.setOnClickListener { selectTab(R.id.nav_discover) }
+
+        binding.libraryBottomNav.selectedItemId = selectedTabId
+        binding.libraryBottomNav.setOnItemSelectedListener { item ->
+            selectTab(item.itemId)
+            true
+        }
+        binding.libraryBottomNav.setOnItemReselectedListener { item ->
+            if (item.itemId == R.id.nav_discover) binding.discoverList.smoothScrollToPosition(0)
+            else binding.appList.smoothScrollToPosition(0)
+        }
+
         rowsReady = true
+        applySelectedTab()
+        refreshDiscover()
         refreshRows()
+    }
+
+    private fun selectTab(tabId: Int) {
+        if (selectedTabId == tabId) return
+        if (tabId != R.id.nav_your_apps) finishReorder(commit = false)
+        selectedTabId = tabId
+        if (binding.libraryBottomNav.selectedItemId != tabId) {
+            binding.libraryBottomNav.selectedItemId = tabId
+        }
+        applySelectedTab()
+    }
+
+    private fun applySelectedTab() {
+        val isDiscover = selectedTabId == R.id.nav_discover
+        binding.appList.visibility = if (isDiscover) View.GONE else View.VISIBLE
+        binding.discoverList.visibility = if (isDiscover) View.VISIBLE else View.GONE
+        binding.libraryToolbar.menu.findItem(R.id.action_refresh_catalog)?.isVisible = isDiscover
+    }
+
+    private fun refreshDiscover() {
+        if (!rowsReady) return
+        val states = MarketplaceMatcher.match(
+            apps = currentMarketplace.apps,
+            records = displayedRecords,
+            provenance = currentProvenance,
+            updateAvailable = { updateIndicators.available(it) != null },
+        )
+        discoverAdapter.submit(
+            newItems = states,
+            icons = currentMarketplace.cachedIcons,
+            synced = currentMarketplace.syncedFromRemote,
+            isRefreshing = currentMarketplace.refreshing,
+            busy = library.task.value.busy,
+        )
+    }
+
+    private fun handleCatalogPrimaryAction(state: CatalogItemState) {
+        val copies = state.installedRecords
+        val updateRecord = state.updateRecord
+        when {
+            copies.size > 1 -> showCopiesInLibrary(copies)
+            updateRecord != null -> reviewUpdates(listOf(updateRecord))
+            copies.size == 1 -> open(copies.single())
+            state.hostCompatible -> library.installCatalogApp(state.app)
+        }
+    }
+
+    /** Several copies were added manually; each is managed from its own row in Your apps. */
+    private fun showCopiesInLibrary(copies: List<SubappRecord>) {
+        selectTab(R.id.nav_your_apps)
+        val first = displayedRecords.indexOfFirst { record -> copies.any { it.id == record.id } }
+        if (first >= 0) binding.appList.scrollToPosition(first + 1)
+    }
+
+    private fun recordDisplayName(record: SubappRecord, fallback: String): String =
+        rowMetadata[record.id]?.name?.ifBlank { fallback } ?: fallback
+
+    private fun showCatalogDetail(state: CatalogItemState) {
+        detailSheet?.dismiss()
+        detailSheet = MarketplaceUi.showDetailSheet(
+            activity = this,
+            state = state,
+            cachedIcon = currentMarketplace.cachedIcons[state.app.id],
+            taskBusy = library.task.value.busy,
+            onInstall = { app -> library.installCatalogApp(app) },
+            onOpen = { record -> open(record) },
+            onCreateShortcut = { record ->
+                if (!AppIdentityManager(this, record).requestInstall()) {
+                    Toast.makeText(this, R.string.shortcut_request_failed, Toast.LENGTH_LONG).show()
+                }
+            },
+            onShare = { record -> showPackageDialog(record) },
+            onEdit = { record -> edit(record) },
+            onPermissions = { record -> showPermissions(record, recordDisplayName(record, state.app.name)) },
+            onDelete = { record -> confirmDelete(record, recordDisplayName(record, state.app.name)) },
+            onUpdate = { record -> reviewUpdates(listOf(record)) },
+            onShowCopies = { showCopiesInLibrary(state.installedRecords) },
+        )
+    }
+
+    private fun showInstalledSnackbar(record: SubappRecord, installedName: String?, message: String, offlineNote: Boolean) {
+        val text = if (offlineNote && !installedName.isNullOrBlank()) {
+            getString(R.string.marketplace_installed_offline_notice, installedName)
+        } else {
+            message
+        }
+        Snackbar.make(binding.libraryContent, text, Snackbar.LENGTH_LONG)
+            .setAction(R.string.marketplace_action_open) { open(record) }
+            .show()
     }
 
     /** Opens library-wide preferences without creating or selecting a subapp workspace. */
@@ -599,9 +759,11 @@ class SubappLibraryActivity : AppCompatActivity() {
                 return oldMetadata[id]?.stamp == value.metadata[id]?.stamp
             }
         })
-        displayedRecords.clear(); displayedRecords.addAll(value.records); rowMetadata = value.metadata
+        displayedRecords.clear(); displayedRecords.addAll(value.records); rowMetadata = value.metadata; currentProvenance = value.provenance
         header.appCount.text = resources.getQuantityString(R.plurals.library_count, displayedRecords.size, displayedRecords.size)
-        header.emptyState.visibility = if (displayedRecords.isEmpty()) View.VISIBLE else View.GONE
+        val emptyVis = if (displayedRecords.isEmpty()) View.VISIBLE else View.GONE
+        header.emptyState.visibility = emptyVis
+        header.emptyBrowseApps.visibility = emptyVis
         diff.dispatchUpdatesTo(object : androidx.recyclerview.widget.ListUpdateCallback {
             override fun onInserted(position: Int, count: Int) { libraryAdapter.notifyItemRangeInserted(position + 1, count) }
             override fun onRemoved(position: Int, count: Int) { libraryAdapter.notifyItemRangeRemoved(position + 1, count) }
@@ -773,19 +935,23 @@ class SubappLibraryActivity : AppCompatActivity() {
 
     private fun importApp(uri: Uri) { library.importZip(uri) }
 
-    private fun showNewAppMenu() {
+    private fun launchZipImport() {
+        importLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "*/*"))
+    }
+
+    private fun showNewAppMenu(focusGithub: Boolean = false) {
         val content = com.wynh.appapp.databinding.DialogLibraryImportBinding.inflate(layoutInflater)
         val dialog = Dialog(this)
         dialog.setContentView(content.root)
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-        content.createStarter.setOnClickListener {
-            dialog.dismiss()
-            library.create()
-        }
         content.importClose.setOnClickListener { dialog.dismiss() }
         content.importZip.setOnClickListener {
             dialog.dismiss()
-            importLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "*/*"))
+            launchZipImport()
+        }
+        content.createStarter.setOnClickListener {
+            dialog.dismiss()
+            library.create()
         }
         content.importGithub.setOnClickListener {
             val url = content.githubUrl.text.toString().trim()
@@ -802,7 +968,12 @@ class SubappLibraryActivity : AppCompatActivity() {
             ViewGroup.LayoutParams.WRAP_CONTENT
         )
         dialog.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        if (focusGithub) content.githubUrl.requestFocus()
     }
 
     private fun importFromGitHub(url: String) { library.importGitHub(url) }
+
+    companion object {
+        private const val STATE_SELECTED_TAB = "library_selected_tab"
+    }
 }

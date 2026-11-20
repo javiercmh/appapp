@@ -13,6 +13,7 @@ This document provides architectural context, coding standards, and operational 
 | Package / File | Purpose |
 | :--- | :--- |
 | `com.wynh.appapp.SubappLibraryActivity` | Launcher library for opening, editing, installing, importing, and deleting saved subapps. |
+| `com.wynh.appapp.marketplace` | Discover tab: catalog parsing and offline/cached loading with manual Refresh (`MarketplaceCatalogRepository`), provenance-only matching of installed apps (`MarketplaceMatcher`), and the cards and detail sheet (`DiscoverAdapter`). Rules in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). |
 | `com.wynh.appapp.MainActivity` | Editor whose tools and WebView remain bound to one subapp ID. |
 | `com.wynh.appapp.SubappRuntimeActivity` | Standalone document task launched by each subapp shortcut. Handles rotation and size changes itself, so the page is resized rather than reloaded and keeps its history and AI session. |
 | `com.wynh.appapp.editor.SyntaxHighlighter` | Fast regex-based syntax highlighter for HTML, CSS, JavaScript, and JSON code in `EditText`. |
