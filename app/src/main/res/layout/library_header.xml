@@ -16,20 +16,11 @@
         android:textAppearance="@style/TextAppearance.Material3.HeadlineLarge"
         android:textColor="@color/on_surface" />
 
-    <TextView
-        android:id="@+id/reorder_hint"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:text="@string/library_subtitle"
-        android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
-        android:textColor="@color/on_surface_muted" />
-
     <LinearLayout
         android:id="@+id/app_count_row"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
+        android:layout_marginTop="8dp"
         android:layout_marginBottom="4dp"
         android:gravity="center_vertical"
         android:orientation="horizontal">

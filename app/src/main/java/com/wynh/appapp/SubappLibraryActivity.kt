@@ -789,6 +789,8 @@ class SubappLibraryActivity : AppCompatActivity() {
                 return oldMetadata[id]?.stamp == value.metadata[id]?.stamp
             }
         })
+        val hadFooter = previous.size >= 2
+        val hasFooter = value.records.size >= 2
         displayedRecords.clear(); displayedRecords.addAll(value.records); rowMetadata = value.metadata; currentProvenance = value.provenance
         header.appCount.text = resources.getQuantityString(R.plurals.library_count, displayedRecords.size, displayedRecords.size)
         val emptyVis = if (displayedRecords.isEmpty()) View.VISIBLE else View.GONE
@@ -798,7 +800,6 @@ class SubappLibraryActivity : AppCompatActivity() {
         header.emptyImportApp.visibility = emptyVis
         header.appCountRow.visibility = if (displayedRecords.isEmpty()) View.GONE else View.VISIBLE
         header.appCount.visibility = header.appCountRow.visibility
-        header.reorderHint.visibility = if (displayedRecords.size >= 2) View.VISIBLE else View.GONE
         header.checkAppUpdates.visibility = header.appCountRow.visibility
         diff.dispatchUpdatesTo(object : androidx.recyclerview.widget.ListUpdateCallback {
             override fun onInserted(position: Int, count: Int) { libraryAdapter.notifyItemRangeInserted(position + 1, count) }
@@ -806,6 +807,8 @@ class SubappLibraryActivity : AppCompatActivity() {
             override fun onMoved(from: Int, to: Int) { libraryAdapter.notifyItemMoved(from + 1, to + 1) }
             override fun onChanged(position: Int, count: Int, payload: Any?) { libraryAdapter.notifyItemRangeChanged(position + 1, count, payload) }
         })
+        if (!hadFooter && hasFooter) libraryAdapter.notifyItemInserted(displayedRecords.size + 1)
+        else if (hadFooter && !hasFooter) libraryAdapter.notifyItemRemoved(displayedRecords.size + 1)
         // A followed source can change without changing the workspace metadata stamp.
         refreshUpdateIndicators()
     }
@@ -813,12 +816,21 @@ class SubappLibraryActivity : AppCompatActivity() {
     private class AppHolder(val row: ItemSubappBinding) : RecyclerView.ViewHolder(row.root)
     private inner class LibraryAdapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
         init { setHasStableIds(true) }
-        override fun getItemCount() = displayedRecords.size + 1
-        override fun getItemViewType(position: Int) = if (position == 0) 0 else 1
-        override fun getItemId(position: Int): Long = if (position == 0) Long.MIN_VALUE else
-            stableIds.getOrPut(displayedRecords[position - 1].id) { stableIds.size.toLong() }
+        private val showFooter get() = displayedRecords.size >= 2
+        override fun getItemCount() = displayedRecords.size + 1 + if (showFooter) 1 else 0
+        override fun getItemViewType(position: Int) = when {
+            position == 0 -> 0
+            position == displayedRecords.size + 1 -> 2
+            else -> 1
+        }
+        override fun getItemId(position: Int): Long = when {
+            position == 0 -> Long.MIN_VALUE
+            position == displayedRecords.size + 1 -> Long.MIN_VALUE + 1
+            else -> stableIds.getOrPut(displayedRecords[position - 1].id) { stableIds.size.toLong() }
+        }
         override fun onCreateViewHolder(parent: ViewGroup, type: Int): RecyclerView.ViewHolder {
             if (type == 0) return object : RecyclerView.ViewHolder(header.root) {}
+            if (type == 2) return object : RecyclerView.ViewHolder(layoutInflater.inflate(R.layout.library_footer, parent, false)) {}
             val row = ItemSubappBinding.inflate(layoutInflater, parent, false)
             (row.root.layoutParams as ViewGroup.MarginLayoutParams).apply {
                 leftMargin = (20 * resources.displayMetrics.density).toInt()

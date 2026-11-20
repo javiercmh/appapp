@@ -88,7 +88,7 @@
     <string name="settings_storage_label">Workspace Footprint</string>
     <string name="template_upgrade_available">A new starter template is available. Your files were left untouched — load it from &lt;/&gt; → History → Official Starter Template.</string>
     <string name="library_title">Your apps</string>
-    <string name="library_subtitle">Long press an app to reorder.</string>
+    <string name="library_subtitle">Hold and drag any app to reorder</string>
     <string name="library_move_up">Move app up</string>
     <string name="library_move_down">Move app down</string>
     <string name="library_new">New app</string>
