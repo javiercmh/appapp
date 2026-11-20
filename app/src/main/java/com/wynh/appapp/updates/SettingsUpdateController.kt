@@ -27,10 +27,12 @@ class SettingsUpdateController(
     private val records: () -> List<SubappRecord>,
     private val changed: () -> Unit,
     private val review: (List<SubappRecord>) -> Unit,
+    private val checkHost: Boolean,
     private val checker: VersionUpdateChecker = VersionUpdateChecker(),
 ) {
     private val indicators = SubappUpdateIndicators.of(activity)
     private val check = dialog.findViewById<MaterialButton>(R.id.settings_check_updates)
+    private val progress = dialog.findViewById<View>(R.id.settings_update_progress)
     private val host = dialog.findViewById<TextView>(R.id.settings_host_update_status)
     private val subapps = dialog.findViewById<TextView>(R.id.settings_subapp_update_status)
     private val release = dialog.findViewById<MaterialButton>(R.id.settings_view_release)
@@ -40,33 +42,39 @@ class SettingsUpdateController(
     init { check.setOnClickListener { start() } }
     fun close() { job?.cancel() }
 
-    private fun start() {
+    fun start() {
         if (job?.isActive == true) return
         check.isEnabled = false
+        check.visibility = View.GONE
+        progress?.visibility = View.VISIBLE
         check.setText(R.string.updates_checking)
-        host.visibility = View.VISIBLE
+        host.visibility = if (checkHost) View.VISIBLE else View.GONE
         host.setText(R.string.updates_host_checking)
-        subapps.visibility = View.VISIBLE
+        subapps.visibility = if (checkHost) View.GONE else View.VISIBLE
         subapps.setText(R.string.updates_subapps_checking)
         release.visibility = View.GONE
         reviews.visibility = View.GONE
         job = activity.lifecycleScope.launch {
             var failed = false
             try {
-                try {
-                    val latest = withContext(Dispatchers.IO) { checker.hostRelease(BuildConfig.BUILD_TYPE == "dev") }
-                    val newer = latest?.isNewer(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE.toLong(), BuildConfig.BUILD_TYPE == "dev") == true
-                    host.text = if (latest == null) activity.getString(R.string.updates_no_release)
-                        else activity.getString(if (newer) R.string.updates_host_new else R.string.updates_host_current, latest.version)
-                    if (newer) {
-                        release.visibility = View.VISIBLE
-                        release.setOnClickListener {
-                            try { activity.startActivity(Intent(Intent.ACTION_VIEW, latest.url.toUri())) }
-                            catch (_: ActivityNotFoundException) { Toast.makeText(activity, R.string.updates_browser_missing, Toast.LENGTH_SHORT).show() }
+                if (checkHost) {
+                    try {
+                        val latest = withContext(Dispatchers.IO) { checker.hostRelease(BuildConfig.BUILD_TYPE == "dev") }
+                        val newer = latest?.isNewer(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE.toLong(), BuildConfig.BUILD_TYPE == "dev") == true
+                        host.text = if (latest == null) activity.getString(R.string.updates_no_release)
+                            else activity.getString(if (newer) R.string.updates_host_new else R.string.updates_host_current, latest.version)
+                        if (newer) {
+                            release.visibility = View.VISIBLE
+                            release.setOnClickListener {
+                                try { activity.startActivity(Intent(Intent.ACTION_VIEW, latest.url.toUri())) }
+                                catch (_: ActivityNotFoundException) { Toast.makeText(activity, R.string.updates_browser_missing, Toast.LENGTH_SHORT).show() }
+                            }
                         }
-                    }
-                } catch (e: CancellationException) { throw e }
-                catch (_: Exception) { failed = true; host.setText(R.string.updates_host_failed) }
+                    } catch (e: CancellationException) { throw e }
+                    catch (_: Exception) { failed = true; host.setText(R.string.updates_host_failed) }
+
+                    return@launch
+                }
 
                 val apps = withContext(Dispatchers.IO) { records() }
                 val lookups = mutableMapOf<GitHubSource, Result<VersionUpdateChecker.PublishedVersion>>()
@@ -117,8 +125,10 @@ class SettingsUpdateController(
             } catch (e: CancellationException) { throw e }
             catch (_: Exception) { failed = true; subapps.setText(R.string.updates_subapps_incomplete) }
             finally {
+                progress?.visibility = View.GONE
                 check.isEnabled = true
-                check.setText(if (failed) R.string.updates_retry else R.string.updates_check)
+                check.visibility = View.VISIBLE
+                check.setText(if (failed) R.string.updates_retry else if (checkHost) R.string.updates_check_host else R.string.updates_check_subapps)
             }
         }
     }

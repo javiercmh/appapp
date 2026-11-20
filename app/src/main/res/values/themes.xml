@@ -9,7 +9,7 @@
     </style>
 
     <!-- Fullscreen Dialog Theme that matches parent dimensions 100% without floating margins -->
-    <style name="Theme.AppApp.FullScreenDialog" parent="Theme.Material3.Dark.NoActionBar">
+    <style name="Theme.AppApp.FullScreenDialog" parent="Theme.RuntimeWebCompiler">
         <item name="android:windowIsFloating">false</item>
         <item name="android:windowBackground">@color/background</item>
         <item name="android:statusBarColor">@android:color/transparent</item>

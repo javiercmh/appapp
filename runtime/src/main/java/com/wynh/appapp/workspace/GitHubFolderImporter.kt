@@ -95,6 +95,18 @@ object GitHubFolderImporter {
         }
     }
 
+    /** Resolves supported shorthand and checks the link before a download is started. */
+    fun normalizeLink(input: String): String {
+        val link = input.trim()
+        val url = when {
+            link.startsWith("github.com/", ignoreCase = true) -> "https://$link"
+            link.matches(Regex("[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")) -> "https://github.com/$link"
+            else -> link
+        }
+        parse(url)
+        return url
+    }
+
     private fun parse(link: String): FolderLink {
         val uri = runCatching { URL(link) }.getOrElse { throw IllegalArgumentException("Enter a valid GitHub folder URL") }
         require(uri.protocol == "https" && uri.host.equals("github.com", ignoreCase = true) && uri.userInfo.isNullOrEmpty()) {

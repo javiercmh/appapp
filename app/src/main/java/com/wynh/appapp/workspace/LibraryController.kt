@@ -41,17 +41,20 @@ class LibraryController(private val app: Application) : AndroidViewModel(app) {
         val error: Boolean = false,
         val share: File? = null,
         val created: SubappRecord? = null,
+        val imported: SubappRecord? = null,
         val cancellable: Boolean = false,
         val deleted: String? = null,
         val installedFromCatalog: SubappRecord? = null,
         val installedName: String? = null,
         val installedOfflineNote: Boolean = false,
         val detail: String = "",
+        val showProgress: Boolean = true,
     )
 
     data class MarketplaceState(
         val apps: List<MarketplaceApp> = emptyList(),
         val syncedFromRemote: Boolean = false,
+        val syncedAtMillis: Long? = null,
         val refreshing: Boolean = false,
         val refreshError: String? = null,
         val cachedIcons: Map<String, Bitmap> = emptyMap(),
@@ -99,6 +102,7 @@ class LibraryController(private val app: Application) : AndroidViewModel(app) {
                 it.copy(
                     apps = result.apps,
                     syncedFromRemote = result.syncedFromRemote,
+                    syncedAtMillis = result.syncedAtMillis,
                     cachedIcons = icons,
                 )
             }
@@ -120,6 +124,7 @@ class LibraryController(private val app: Application) : AndroidViewModel(app) {
                 marketplaceValue.value = MarketplaceState(
                     apps = result.apps,
                     syncedFromRemote = result.syncedFromRemote,
+                    syncedAtMillis = result.syncedAtMillis,
                     refreshing = false,
                     refreshError = null,
                     cachedIcons = icons,
@@ -181,10 +186,10 @@ class LibraryController(private val app: Application) : AndroidViewModel(app) {
         if (!taskValue.value.busy) taskValue.value = Task()
     }
 
-    private fun run(message: String, cancellable: Boolean = false, action: () -> Task) {
+    private fun run(message: String, cancellable: Boolean = false, showProgress: Boolean = true, action: () -> Task) {
         if (taskValue.value.busy) return
         gate.reset()
-        taskValue.value = Task(busy = true, message = message, cancellable = cancellable)
+        taskValue.value = Task(busy = true, message = message, cancellable = cancellable, showProgress = showProgress)
         viewModelScope.launch {
             taskValue.value = withContext(Dispatchers.IO) {
                 synchronized(workerLock) { worker = Thread.currentThread() }
@@ -201,7 +206,7 @@ class LibraryController(private val app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun reorder(ids: List<String>) = run(app.getString(R.string.library_task_reorder)) {
+    fun reorder(ids: List<String>) = run(app.getString(R.string.library_task_reorder), showProgress = false) {
         repository.reorder(ids)
         Task()
     }
@@ -240,7 +245,7 @@ class LibraryController(private val app: Application) : AndroidViewModel(app) {
                 requireNotInstalled(item)
                 val hostLevel = HostCompatibility.LEVEL.toLong()
                 require(item.minHostCompatibility <= hostLevel) {
-                    app.getString(R.string.marketplace_host_required, item.minHostCompatibility, hostLevel)
+                    app.getString(R.string.marketplace_host_required)
                 }
                 val installer = subappInstallerOverride ?: GitHubSubappInstaller(app.cacheDir)
                 val downloaded = installer.download(source.source, hostLevel) { done, total ->
@@ -277,7 +282,7 @@ class LibraryController(private val app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * Discover installs one copy per catalog entry; more copies come only from Your apps → +.
+     * Discover installs one copy per catalog entry. Import can add another copy from its source.
      * Checked against the repository on the worker thread, not the last published list, so a tap
      * landing just after another install finished cannot slip through before the list refreshes.
      */
@@ -295,8 +300,7 @@ class LibraryController(private val app: Application) : AndroidViewModel(app) {
                 WorkspacePackageManager.extractZip(it, staged)
             }
             beforePublication()
-            repository.createImportedFrom(staged)
-            Task(message = app.getString(R.string.library_import_offline_note))
+            importedTask(repository.createImportedFrom(staged))
         } finally {
             staged.deleteRecursively()
         }
@@ -307,11 +311,19 @@ class LibraryController(private val app: Application) : AndroidViewModel(app) {
         try {
             val source = JSONObject().put("url", "https://github.com" + java.net.URL(url).path).put("commit", imported.commit).toString()
             beforePublication()
-            repository.createImportedFrom(imported.directory, source)
-            Task(message = app.getString(R.string.library_import_offline_note))
+            importedTask(repository.createImportedFrom(imported.directory, source))
         } finally {
             imported.directory.deleteRecursively()
         }
+    }
+
+    private fun importedTask(record: SubappRecord): Task {
+        val name = SubappMetadataLoader.load(record.workspaceDir).name
+            .ifBlank { app.getString(com.wynh.appapp.runtime.R.string.library_untitled) }
+        return Task(
+            message = app.getString(R.string.marketplace_installed_offline_notice, name),
+            imported = record,
+        )
     }
 
     enum class ExportFiles { BOTH, APP, USER }

@@ -47,7 +47,7 @@
       "author": "App\u00b2",
       "category": "Template",
       "license": "MIT",
-      "summary": "Editable starter showcasing storage, photos, speech, and AI.",
+      "summary": "A sample app for exploring storage, photos, speech, and AI in App².",
       "description": "An interactive starter demo included in App\u00b2. Try local file storage, photo selection, reminders, speech, and AI, or edit its HTML, CSS, and JavaScript to build your own subapp.",
       "capabilities": ["template"],
       "offlineOnly": true,

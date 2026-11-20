@@ -27,7 +27,10 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -72,6 +75,9 @@ class AppAiManager(context: Context) {
     val exposure: String get() = registry.exposure
     /** Serializes only the Settings model check; generation requests from different subapps run concurrently. */
     private val checkLock = Mutex()
+    private val connectionRevision = MutableStateFlow(0L)
+    val connectionChanges = connectionRevision.asStateFlow()
+
     private val notificationIds = java.util.concurrent.atomic.AtomicInteger()
     /** Generation starts per subapp per minute, across all of its tasks; set in Settings → AI (0 = no limit). */
     private val startLimiter = AiStartRateLimiter(
@@ -105,6 +111,7 @@ class AppAiManager(context: Context) {
         com.google.gson.Gson().toJson(mapOf("event" to "connection", "data" to mapOf("providerId" to provider.id, "connected" to provider.connected)))
 
     private fun broadcastConnection(provider: ExposedProvider = registry.exposed()) {
+        connectionRevision.update { it + 1 }
         val message = connectionMessage(provider)
         webViews.forEach { (_, views) -> synchronized(views) {
             views.removeAll { ref ->

@@ -2,6 +2,7 @@ package com.wynh.appapp.updates
 
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
+import androidx.core.widget.doAfterTextChanged
 import android.widget.LinearLayout
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -49,27 +50,47 @@ class UpdateController(
         val repo = TextInputEditText(activity).apply { setSingleLine(); setText(initial?.let { "${it.owner}/${it.repository}" } ?: "") }
         val branch = TextInputEditText(activity).apply { setSingleLine(); setText(initial?.branch ?: "main") }
         val padding = (24 * activity.resources.displayMetrics.density).toInt()
+        val repoLayout = TextInputLayout(activity).apply {
+            hint = "Repository (owner/repository)"
+            addView(repo)
+        }
+        val branchLayout = TextInputLayout(activity).apply {
+            hint = "Branch"
+            addView(branch)
+            endIconMode = TextInputLayout.END_ICON_CUSTOM
+            setEndIconDrawable(com.wynh.appapp.R.drawable.ic_arrow_down)
+            endIconContentDescription = "Choose a branch"
+            setEndIconOnClickListener { pickBranch(repo, branch, repoLayout, this) }
+        }
+        repo.doAfterTextChanged { repoLayout.error = null }
+        branch.doAfterTextChanged { branchLayout.error = null }
         val form = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(padding * 5 / 6, 0, padding * 5 / 6, padding / 2)
-            addView(TextInputLayout(activity).apply { hint = "Repository (owner/repository)"; addView(repo) })
-            addView(TextInputLayout(activity).apply {
-                hint = "Branch"; addView(branch)
-                endIconMode = TextInputLayout.END_ICON_CUSTOM
-                setEndIconDrawable(com.wynh.appapp.R.drawable.ic_arrow_down)
-                endIconContentDescription = "Choose a branch"
-                setEndIconOnClickListener { pickBranch(repo, branch, this) }
-            })
+            addView(repoLayout)
+            addView(branchLayout)
         }
         showUpdateDialog(title, message, content = form, primary = Action("Check for updates") { dialog ->
-            try { val source = parseSource(repo.text.toString(), branch.text.toString()); dialog.dismiss(); check(source) }
-            catch (e: Exception) { repo.error = e.message }
+            val repository = repo.text.toString()
+            try {
+                parseSource(repository, "main")
+            } catch (error: IllegalArgumentException) {
+                repoLayout.error = error.message
+                return@Action
+            }
+            try {
+                val source = parseSource(repository, branch.text.toString())
+                dialog.dismiss()
+                check(source)
+            } catch (error: IllegalArgumentException) {
+                branchLayout.error = error.message
+            }
         })
     }
 
     /** Loads the repository's branches from GitHub and fills [branch] with the one the user picks. */
-    private fun pickBranch(repo: TextInputEditText, branch: TextInputEditText, layout: TextInputLayout) {
-        val target = try { parseSource(repo.text.toString(), "main") } catch (e: Exception) { repo.error = e.message; return }
+    private fun pickBranch(repo: TextInputEditText, branch: TextInputEditText, repoLayout: TextInputLayout, layout: TextInputLayout) {
+        val target = try { parseSource(repo.text.toString(), "main") } catch (e: Exception) { repoLayout.error = e.message; return }
         layout.error = null
         layout.helperText = "Loading branches…"
         activity.lifecycleScope.launch {

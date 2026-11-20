@@ -2,10 +2,11 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:background="@color/surface"
+    android:id="@+id/settings_root"
+    android:layout_height="match_parent"
+    android:background="@color/background"
     android:orientation="vertical"
-    android:padding="20dp">
+    android:padding="16dp">
 
     <!-- Dialog Header -->
     <LinearLayout
@@ -14,36 +15,40 @@
         android:gravity="center_vertical"
         android:orientation="horizontal">
 
-        <ImageView
-            android:layout_width="28dp"
-            android:layout_height="28dp"
-            android:contentDescription="@null"
-            android:src="@drawable/ic_settings"
-            app:tint="@color/accent_blue" />
+        <ImageButton
+            android:id="@+id/settings_btn_close"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/close"
+            android:src="@drawable/ic_arrow_back"
+            app:tint="@color/on_surface" />
 
         <TextView
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
+            android:layout_marginStart="8dp"
             android:layout_weight="1"
+            android:accessibilityHeading="true"
             android:text="@string/settings_title"
-            android:textColor="@color/on_surface"
-            android:textSize="18sp"
-            android:textStyle="bold" />
+            android:textAppearance="@style/TextAppearance.Material3.TitleLarge"
+            android:textColor="@color/on_surface" />
     </LinearLayout>
 
     <View
         android:layout_width="match_parent"
         android:layout_height="1dp"
-        android:layout_marginVertical="14dp"
-        android:background="@color/border_color" />
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="14dp"
+        android:background="@color/surface_variant" />
 
     <!-- Scrollable Content -->
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:maxHeight="480dp">
+        android:clipToPadding="false"
+        android:paddingBottom="12dp">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -55,8 +60,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="12dp"
-                app:cardBackgroundColor="@color/surface_variant"
-                app:cardCornerRadius="12dp"
+                app:cardBackgroundColor="@color/surface"
+                app:cardCornerRadius="16dp"
                 app:cardElevation="0dp"
                 app:strokeColor="@color/border_color"
                 app:strokeWidth="1dp">
@@ -200,6 +205,15 @@
                         </LinearLayout>
                         <LinearLayout android:id="@+id/settings_group_custom" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
                             <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                                <ImageView
+                                    android:layout_width="44dp"
+                                    android:layout_height="44dp"
+                                    android:layout_marginEnd="12dp"
+                                    android:background="@drawable/bg_ai_provider_icon"
+                                    android:contentDescription="@null"
+                                    android:padding="10dp"
+                                    android:src="@drawable/ic_terminal"
+                                    app:tint="@color/accent_blue" />
                                 <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
                                     <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Custom endpoint" android:textColor="@color/on_surface" android:textSize="17sp" android:textStyle="bold" />
                                     <TextView android:id="@+id/settings_tv_custom_connection" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:text="Not connected" android:textColor="@color/on_surface_muted" android:textSize="12sp" android:accessibilityLiveRegion="polite" />
@@ -260,128 +274,64 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="12dp"
-                app:cardBackgroundColor="@color/surface_variant"
-                app:cardCornerRadius="12dp"
+                app:cardBackgroundColor="@color/surface"
+                app:cardCornerRadius="16dp"
                 app:cardElevation="0dp"
                 app:strokeColor="@color/border_color"
                 app:strokeWidth="1dp">
 
                 <LinearLayout
+                    android:id="@+id/settings_history_row"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="14dp">
+                    android:minHeight="64dp"
+                    android:background="?attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:padding="16dp"
+                    android:screenReaderFocusable="true">
 
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/settings_history_title"
-                        android:textColor="@color/on_surface"
-                        android:textSize="14sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
-                        android:layout_marginBottom="10dp"
-                        android:text="@string/settings_history_desc"
-                        android:textColor="@color/on_surface_muted"
-                        android:textSize="12sp" />
-
-                    <!-- Version Limit Selector Buttons -->
                     <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="38dp"
-                        android:orientation="horizontal">
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
 
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/settings_btn_history_2"
-                            style="@style/Widget.Material3.Button.TonalButton"
-                            android:layout_width="0dp"
-                            android:layout_height="match_parent"
-                            android:layout_marginEnd="4dp"
-                            android:layout_weight="1"
-                            android:insetTop="0dp"
-                            android:insetBottom="0dp"
-                            android:minHeight="0dp"
-                            android:paddingHorizontal="0dp"
-                            android:text="2"
-                            android:textColor="@color/on_surface"
-                            android:textSize="12sp" />
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/settings_history_title"
+                            android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+                            android:textColor="@color/on_surface" />
 
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/settings_btn_history_4"
-                            style="@style/Widget.Material3.Button.TonalButton"
-                            android:layout_width="0dp"
-                            android:layout_height="match_parent"
-                            android:layout_marginEnd="4dp"
-                            android:layout_weight="1.3"
-                            android:insetTop="0dp"
-                            android:insetBottom="0dp"
-                            android:minHeight="0dp"
-                            android:paddingHorizontal="0dp"
-                            android:text="4 (Def)"
-                            android:textColor="@color/on_surface"
-                            android:textSize="11sp"
-                            android:textStyle="bold" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/settings_btn_history_6"
-                            style="@style/Widget.Material3.Button.TonalButton"
-                            android:layout_width="0dp"
-                            android:layout_height="match_parent"
-                            android:layout_marginEnd="4dp"
-                            android:layout_weight="1"
-                            android:insetTop="0dp"
-                            android:insetBottom="0dp"
-                            android:minHeight="0dp"
-                            android:paddingHorizontal="0dp"
-                            android:text="6"
-                            android:textColor="@color/on_surface"
-                            android:textSize="12sp" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/settings_btn_history_8"
-                            style="@style/Widget.Material3.Button.TonalButton"
-                            android:layout_width="0dp"
-                            android:layout_height="match_parent"
-                            android:layout_marginEnd="4dp"
-                            android:layout_weight="1"
-                            android:insetTop="0dp"
-                            android:insetBottom="0dp"
-                            android:minHeight="0dp"
-                            android:paddingHorizontal="0dp"
-                            android:text="8"
-                            android:textColor="@color/on_surface"
-                            android:textSize="12sp" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/settings_btn_history_10"
-                            style="@style/Widget.Material3.Button.TonalButton"
-                            android:layout_width="0dp"
-                            android:layout_height="match_parent"
-                            android:layout_weight="1"
-                            android:insetTop="0dp"
-                            android:insetBottom="0dp"
-                            android:minHeight="0dp"
-                            android:paddingHorizontal="0dp"
-                            android:text="10"
-                            android:textColor="@color/on_surface"
-                            android:textSize="12sp" />
+                        <TextView
+                            android:id="@+id/settings_history_summary"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:textColor="@color/on_surface_muted"
+                            android:textSize="13sp" />
                     </LinearLayout>
+
+                    <ImageView
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:layout_marginStart="12dp"
+                        android:importantForAccessibility="no"
+                        android:src="@drawable/ic_chevron_end"
+                        app:tint="@color/on_surface_muted" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
-
-
 
             <!-- 4. Notification Permission Card -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="12dp"
-                app:cardBackgroundColor="@color/surface_variant"
-                app:cardCornerRadius="12dp"
+                app:cardBackgroundColor="@color/surface"
+                app:cardCornerRadius="16dp"
                 app:cardElevation="0dp"
                 app:strokeColor="@color/border_color"
                 app:strokeWidth="1dp">
@@ -390,51 +340,48 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:padding="14dp">
+                    android:padding="16dp">
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="@string/settings_section_notifications"
-                        android:textColor="@color/on_surface"
-                        android:textSize="14sp"
-                        android:textStyle="bold" />
+                        android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+                        android:textColor="@color/on_surface" />
 
                     <TextView
                         android:id="@+id/settings_tv_notification_status"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:fontFamily="monospace"
                         android:text="@string/settings_notifications_allowed"
                         android:textColor="@color/accent_green"
-                        android:textSize="12sp" />
+                        android:textSize="13sp" />
 
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp"
-                        android:layout_marginBottom="10dp"
+                        android:layout_marginBottom="12dp"
                         android:text="@string/settings_section_notifications_desc"
                         android:textColor="@color/on_surface_muted"
-                        android:textSize="11sp" />
+                        android:textSize="13sp" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/settings_btn_notification_permission"
                         style="@style/Widget.Material3.Button.TonalButton"
                         android:layout_width="match_parent"
-                        android:layout_height="38dp"
-                        android:insetTop="0dp"
-                        android:insetBottom="0dp"
-                        android:minHeight="0dp"
+                        android:layout_height="wrap_content"
+                        android:minHeight="48dp"
                         android:text="@string/settings_notifications_allow"
+                        android:textAllCaps="false"
                         android:textColor="@color/on_surface"
-                        android:textSize="12sp"
-                        app:backgroundTint="@color/surface_elevated"
+                        app:backgroundTint="@color/surface_variant"
+                        app:cornerRadius="12dp"
                         app:icon="@drawable/ic_notifications"
                         app:iconGravity="textStart"
-                        app:iconPadding="6dp"
-                        app:iconSize="14dp"
+                        app:iconPadding="8dp"
+                        app:iconSize="18dp"
                         app:iconTint="@color/accent_blue" />
 
                     <TextView
@@ -442,39 +389,82 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="12dp"
-                        android:fontFamily="monospace"
                         android:text="@string/settings_exact_alarms_allowed"
                         android:textColor="@color/accent_green"
-                        android:textSize="12sp" />
+                        android:textSize="13sp" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/settings_btn_exact_alarm_permission"
                         style="@style/Widget.Material3.Button.TonalButton"
                         android:layout_width="match_parent"
-                        android:layout_height="38dp"
-                        android:layout_marginTop="4dp"
-                        android:insetTop="0dp"
-                        android:insetBottom="0dp"
-                        android:minHeight="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:minHeight="48dp"
                         android:text="@string/settings_exact_alarms_allow"
+                        android:textAllCaps="false"
                         android:textColor="@color/on_surface"
-                        android:textSize="12sp"
-                        app:backgroundTint="@color/surface_elevated"
+                        app:backgroundTint="@color/surface_variant"
+                        app:cornerRadius="12dp"
                         app:icon="@drawable/ic_notifications"
                         app:iconGravity="textStart"
-                        app:iconPadding="6dp"
-                        app:iconSize="14dp"
+                        app:iconPadding="8dp"
+                        app:iconSize="18dp"
                         app:iconTint="@color/accent_blue" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
             <!-- Backup and restore -->
-            <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="14dp" app:cardBackgroundColor="@color/surface_elevated" app:cardCornerRadius="16dp" app:cardElevation="0dp">
-                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
-                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/backup_title" android:textAppearance="@style/TextAppearance.Material3.TitleMedium" android:textColor="@color/on_surface" />
-                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="@string/backup_description" android:textColor="@color/on_surface_muted" />
-                    <com.google.android.material.button.MaterialButton android:id="@+id/settings_backup_export" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="@string/backup_export" />
-                    <com.google.android.material.button.MaterialButton android:id="@+id/settings_backup_restore" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/backup_restore" />
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                app:cardBackgroundColor="@color/surface"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="0dp"
+                app:strokeColor="@color/border_color"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/backup_title"
+                        android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+                        android:textColor="@color/on_surface" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="@string/backup_description"
+                        android:textColor="@color/on_surface_muted"
+                        android:textSize="13sp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/settings_backup_export"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:minHeight="48dp"
+                        android:text="@string/backup_export"
+                        android:textAllCaps="false"
+                        app:cornerRadius="12dp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/settings_backup_restore"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:minHeight="48dp"
+                        android:text="@string/backup_restore"
+                        android:textAllCaps="false"
+                        app:cornerRadius="12dp" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
@@ -484,8 +474,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="12dp"
-                app:cardBackgroundColor="@color/surface_variant"
-                app:cardCornerRadius="12dp"
+                app:cardBackgroundColor="@color/surface"
+                app:cardCornerRadius="16dp"
                 app:cardElevation="0dp"
                 app:strokeColor="@color/border_color"
                 app:strokeWidth="1dp">
@@ -494,16 +484,15 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:padding="12dp">
+                    android:padding="16dp">
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginBottom="8dp"
                         android:text="@string/settings_section_about"
-                        android:textColor="@color/on_surface"
-                        android:textSize="14sp"
-                        android:textStyle="bold" />
+                        android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+                        android:textColor="@color/on_surface" />
 
                     <!-- App Version Row -->
                     <LinearLayout
@@ -560,63 +549,36 @@
                             android:textColor="@color/on_surface"
                             android:textSize="13sp" />
                     </LinearLayout>
+
                     <com.google.android.material.button.MaterialButton
-                        android:id="@+id/settings_check_updates"
+                        android:id="@+id/settings_check_host"
                         style="@style/Widget.Material3.Button.TonalButton"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
                         android:minHeight="48dp"
-                        android:layout_marginTop="8dp"
-                        android:text="@string/updates_check" />
-                    <TextView
-                        android:id="@+id/settings_host_update_status"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
+                        android:text="@string/updates_check_host"
+                        android:textAllCaps="false"
                         android:textColor="@color/on_surface"
-                        android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
-                        android:accessibilityLiveRegion="polite"
-                        android:visibility="gone" />
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/settings_view_release"
-                        style="@style/Widget.Material3.Button.TonalButton"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:visibility="gone"
-                        android:minHeight="48dp"
-                        android:layout_marginTop="8dp"
-                        android:text="@string/updates_view_release" />
-                    <TextView
-                        android:id="@+id/settings_subapp_update_status"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:textColor="@color/on_surface"
-                        android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
-                        android:accessibilityLiveRegion="polite"
-                        android:visibility="gone" />
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/settings_review_updates"
-                        style="@style/Widget.Material3.Button.TonalButton"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:visibility="gone"
-                        android:minHeight="48dp"
-                        android:layout_marginTop="8dp"
-                        android:text="@string/updates_review" />
+                        app:backgroundTint="@color/surface_variant"
+                        app:cornerRadius="12dp"
+                        app:icon="@drawable/ic_refresh"
+                        app:iconGravity="textStart"
+                        app:iconPadding="8dp"
+                        app:iconSize="18dp"
+                        app:iconTint="@color/accent_blue" />
+
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/settings_btn_privacy_policy"
-                        style="@style/Widget.Material3.Button.TonalButton"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
                         android:layout_width="match_parent"
-                        android:layout_height="38dp"
+                        android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:insetTop="0dp"
-                        android:insetBottom="0dp"
-                        android:minHeight="0dp"
+                        android:minHeight="48dp"
                         android:text="@string/settings_privacy_policy"
+                        android:textAllCaps="false"
                         android:textColor="@color/on_surface"
-                        android:textSize="12sp"
-                        app:backgroundTint="@color/surface_elevated" />
+                        app:cornerRadius="12dp" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
@@ -624,23 +586,5 @@
 
         </LinearLayout>
     </ScrollView>
-
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:layout_marginTop="14dp"
-        android:layout_marginBottom="12dp"
-        android:background="@color/border_color" />
-
-    <!-- Close Button -->
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/settings_btn_close"
-        style="@style/Widget.Material3.Button.TonalButton"
-        android:layout_width="match_parent"
-        android:layout_height="42dp"
-        android:insetTop="0dp"
-        android:insetBottom="0dp"
-        android:text="@string/close"
-        android:textColor="@color/on_surface" />
 
 </LinearLayout>

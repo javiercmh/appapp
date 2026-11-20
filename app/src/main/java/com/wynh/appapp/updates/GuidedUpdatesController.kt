@@ -58,6 +58,7 @@ class GuidedUpdatesController(
         var loaded = false
         dialog = controller.showUpdateDialog("Preparing update ${index + 1} of ${records.size}",
             "$name\nChecking the selected update…", primary = null, dismissLabel = "Stop reviewing",
+            content = activity.layoutInflater.inflate(com.wynh.appapp.runtime.R.layout.dialog_workspace_progress, null),
             onDismissed = { if (!loaded) stop() })
         job = activity.lifecycleScope.launch {
             try {

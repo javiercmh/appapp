@@ -20,7 +20,6 @@ import com.wynh.appapp.ai.auth.AuthPhase
 import com.wynh.appapp.ai.network.ApiFailure
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 object AiSettingsController {
@@ -33,12 +32,13 @@ object AiSettingsController {
         val name: String,
         val group: View,
         val added: () -> Boolean,
+        val render: () -> Unit,
         val start: () -> Unit
     )
 
-    fun bind(activity: ComponentActivity, dialog: Dialog) {
+    fun bind(activity: ComponentActivity, dialog: Dialog): Job? {
         val ai = (activity.application as AppAiApplication).ai
-        val status = dialog.findViewById<TextView>(R.id.settings_tv_ai_status) ?: return
+        val status = dialog.findViewById<TextView>(R.id.settings_tv_ai_status) ?: return null
         val connection = dialog.findViewById<TextView>(R.id.settings_tv_ai_connection)
         val primary = dialog.findViewById<MaterialButton>(R.id.settings_btn_ai_signin)
         val more = dialog.findViewById<ImageButton>(R.id.settings_btn_ai_more)
@@ -159,16 +159,15 @@ object AiSettingsController {
             Service("chatgpt", "ChatGPT", dialog.findViewById(R.id.settings_group_chatgpt), {
                 val state = ai.auth.state.value
                 state.accounts.isNotEmpty() || state.phase != AuthPhase.IDLE || "chatgpt" in pending
-            }) { signIn() },
+            }, ::render) { signIn() },
             bindOpenRouter(activity, dialog),
             bindCustomEndpoint(activity, dialog)
         )
-        bindShell(activity, dialog, services, pending)
-        render()
-        activity.lifecycleScope.launch {
-            while (dialog.isShowing) {
-                delay(500)
-                render()
+        val renderShell = bindShell(activity, dialog, services, pending)
+        return activity.lifecycleScope.launch {
+            ai.connectionChanges.collect {
+                services.forEach { it.render() }
+                renderShell()
             }
         }
     }
@@ -254,10 +253,9 @@ object AiSettingsController {
             }
         }
         render()
-        activity.lifecycleScope.launch { while (dialog.isShowing) { delay(500); render() } }
         // Listed only once saved: setup and its errors happen in the dialog, so a failed attempt adds nothing.
         return Service("custom", "Custom endpoint", dialog.findViewById(R.id.settings_group_custom),
-            { ai.customConnected || ai.customRestoring || busy }) { openEntry() }
+            { ai.customConnected || ai.customRestoring || busy }, ::render) { openEntry() }
     }
 
     private fun bindOpenRouter(activity: ComponentActivity, dialog: Dialog): Service {
@@ -396,9 +394,8 @@ object AiSettingsController {
             }
         }
         render()
-        activity.lifecycleScope.launch { while (dialog.isShowing) { delay(500); render() } }
         return Service("openrouter", "OpenRouter", dialog.findViewById(R.id.settings_group_openrouter),
-            { ai.openRouterConnected || ai.openRouterRestoring || busy }) { openEntry() }
+            { ai.openRouterConnected || ai.openRouterRestoring || busy }, ::render) { openEntry() }
     }
 
     private fun textField(activity: ComponentActivity, password: Boolean) =
@@ -478,7 +475,7 @@ object AiSettingsController {
     }
 
     /** Collapsible card shell: summary header, the list of added services and the "Add AI service" menu. */
-    private fun bindShell(activity: ComponentActivity, dialog: Dialog, services: List<Service>, pending: MutableSet<String>) {
+    private fun bindShell(activity: ComponentActivity, dialog: Dialog, services: List<Service>, pending: MutableSet<String>): () -> Unit {
         val ai = (activity.application as AppAiApplication).ai
         val header = dialog.findViewById<View>(R.id.settings_ai_header)
         val summary = dialog.findViewById<TextView>(R.id.settings_tv_ai_summary)
@@ -521,26 +518,40 @@ object AiSettingsController {
                 else -> "Expand"
             }
         }
-        fun showAddMenu(anchor: View) {
-            PopupMenu(activity, anchor).apply {
-                services.filterNot { it.added() }.forEachIndexed { index, service -> menu.add(0, index, index, service.name) }
-                setOnMenuItemClickListener { item ->
-                    val service = services.filterNot { it.added() }.getOrNull(item.itemId) ?: return@setOnMenuItemClickListener true
+        fun showProviderPicker() {
+            val content = activity.layoutInflater.inflate(R.layout.dialog_list_content, null)
+            val list = content.findViewById<android.widget.LinearLayout>(R.id.dialog_list)
+            val picker = MaterialAlertDialogBuilder(activity)
+                .setTitle(R.string.ai_choose_service)
+                .setView(content)
+                .setNegativeButton(R.string.cancel, null)
+                .create()
+            for (service in services.filterNot { it.added() }) {
+                val (icon, description) = when (service.id) {
+                    "chatgpt" -> R.drawable.ic_chatgpt to R.string.ai_chatgpt_summary
+                    "openrouter" -> R.drawable.ic_openrouter to R.string.ai_openrouter_summary
+                    else -> R.drawable.ic_terminal to R.string.ai_custom_summary
+                }
+                val row = com.wynh.appapp.databinding.ItemAppBackupActionBinding.inflate(activity.layoutInflater, list, true)
+                row.backupActionIcon.setImageResource(icon)
+                row.backupActionTitle.text = service.name
+                row.backupActionSummary.setText(description)
+                row.backupActionSummary.visibility = View.VISIBLE
+                row.root.setOnClickListener {
+                    picker.dismiss()
                     pending += service.id
                     expanded = true
                     render()
                     service.start()
-                    true
                 }
-                show()
             }
+            picker.show()
         }
         header.setOnClickListener {
-            if (services.none { it.added() }) showAddMenu(chevron)
+            if (services.none { it.added() }) showProviderPicker()
             else { expanded = !expanded; render() }
         }
-        add.setOnClickListener { showAddMenu(add) }
-        render()
-        activity.lifecycleScope.launch { while (dialog.isShowing) { delay(500); render() } }
+        add.setOnClickListener { showProviderPicker() }
+        return ::render
     }
 }

@@ -8,6 +8,11 @@
         android:visible="false"
         app:showAsAction="always" />
     <item
+        android:id="@+id/action_import"
+        android:title="@string/library_import_button"
+        app:actionLayout="@layout/action_library_import"
+        app:showAsAction="always" />
+    <item
         android:id="@+id/action_settings"
         android:icon="@drawable/ic_settings"
         android:title="@string/action_settings"

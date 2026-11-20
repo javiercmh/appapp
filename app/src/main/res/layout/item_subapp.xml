@@ -8,9 +8,20 @@
             </LinearLayout>
             <FrameLayout android:layout_width="48dp" android:layout_height="48dp">
             <androidx.appcompat.widget.AppCompatImageButton android:id="@+id/app_menu" android:layout_width="48dp" android:layout_height="48dp" android:background="?attr/selectableItemBackgroundBorderless" android:padding="12dp" app:srcCompat="@drawable/ic_more_vertical" app:tint="@color/on_surface_muted" />
-                <View android:id="@+id/update_dot" android:layout_width="8dp" android:layout_height="8dp" android:layout_gravity="top|end" android:layout_marginTop="7dp" android:layout_marginEnd="7dp" android:background="@drawable/update_dot" android:importantForAccessibility="no" android:visibility="gone" />
             </FrameLayout>
         </LinearLayout>
         <TextView android:id="@+id/app_description" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:maxLines="4" android:ellipsize="end" android:textAppearance="@style/TextAppearance.Material3.BodyMedium" android:textColor="@color/on_surface_muted" />
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/app_update"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:minHeight="48dp"
+            android:text="@string/updates_available"
+            android:textAllCaps="false"
+            android:visibility="gone"
+            app:cornerRadius="999dp"
+            app:icon="@drawable/ic_refresh" />
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

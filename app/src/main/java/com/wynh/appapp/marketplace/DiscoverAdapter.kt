@@ -31,23 +31,19 @@ import com.google.android.material.shape.ShapeAppearanceModel
 import com.wynh.appapp.R
 import com.wynh.appapp.databinding.DiscoverHeaderBinding
 import com.wynh.appapp.databinding.ItemMarketplaceAppBinding
-import com.wynh.appapp.databinding.ItemMarketplaceByoBinding
-import com.wynh.appapp.databinding.PopupDetailActionsBinding
+import com.wynh.appapp.databinding.PopupLibraryActionsBinding
 import com.wynh.appapp.databinding.SheetMarketplaceDetailBinding
-import com.wynh.appapp.host.HostCompatibility
 import com.wynh.appapp.workspace.SubappRecord
 
 internal class DiscoverAdapter(
     private val inflater: LayoutInflater,
     private val onCardClick: (CatalogItemState) -> Unit,
     private val onPrimaryAction: (CatalogItemState) -> Unit,
-    private val onImportGitHub: () -> Unit,
-    private val onImportZip: () -> Unit,
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     private var items: List<CatalogItemState> = emptyList()
     private var cachedIcons: Map<String, Bitmap> = emptyMap()
-    private var syncedFromRemote: Boolean = false
+    private var syncedAtMillis: Long? = null
     private var refreshing: Boolean = false
     private var taskBusy: Boolean = false
     private var headerBinding: DiscoverHeaderBinding? = null
@@ -55,24 +51,37 @@ internal class DiscoverAdapter(
     fun submit(
         newItems: List<CatalogItemState>,
         icons: Map<String, Bitmap>,
-        synced: Boolean,
+        syncedAtMillis: Long?,
         isRefreshing: Boolean,
         busy: Boolean,
     ) {
+        val oldItems = items
+        val previousIcons = cachedIcons
+        val wasBusy = taskBusy
+        val diff = androidx.recyclerview.widget.DiffUtil.calculateDiff(object : androidx.recyclerview.widget.DiffUtil.Callback() {
+            override fun getOldListSize() = oldItems.size + 1
+            override fun getNewListSize() = newItems.size + 1
+            override fun areItemsTheSame(old: Int, new: Int): Boolean =
+                if (old == 0 || new == 0) old == new else oldItems[old - 1].app.id == newItems[new - 1].app.id
+            override fun areContentsTheSame(old: Int, new: Int): Boolean {
+                if (old == 0) return true
+                val item = newItems[new - 1]
+                return wasBusy == busy && oldItems[old - 1] == item && previousIcons[item.app.id] === icons[item.app.id]
+            }
+        })
         items = newItems
         cachedIcons = icons
-        syncedFromRemote = synced
+        this.syncedAtMillis = syncedAtMillis
         refreshing = isRefreshing
         taskBusy = busy
         bindHeaderStatus()
-        notifyDataSetChanged()
+        diff.dispatchUpdatesTo(this)
     }
 
-    override fun getItemCount(): Int = items.size + 2
+    override fun getItemCount(): Int = items.size + 1
 
     override fun getItemViewType(position: Int): Int = when (position) {
         0 -> TYPE_HEADER
-        items.size + 1 -> TYPE_BYO_FOOTER
         else -> TYPE_APP
     }
 
@@ -82,19 +91,17 @@ internal class DiscoverAdapter(
                 val header = DiscoverHeaderBinding.inflate(inflater, parent, false)
                 headerBinding = header
                 bindHeaderStatus()
-                object : RecyclerView.ViewHolder(header.root) {}
-            }
-            TYPE_BYO_FOOTER -> {
-                val footer = ItemMarketplaceByoBinding.inflate(inflater, parent, false)
-                footer.discoverImportGithub.setOnClickListener { onImportGitHub() }
-                footer.discoverImportZip.setOnClickListener { onImportZip() }
-                object : RecyclerView.ViewHolder(footer.root) {}
+                HeaderHolder(header)
             }
             else -> AppHolder(ItemMarketplaceAppBinding.inflate(inflater, parent, false))
         }
     }
 
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+        if (holder is HeaderHolder) {
+            bindHeaderStatus(holder.binding)
+            return
+        }
         if (holder !is AppHolder) return
         val state = items[position - 1]
         val app = state.app
@@ -117,7 +124,7 @@ internal class DiscoverAdapter(
         val incompatible = !state.hostCompatible && !installed
 
         row.catalogAction.apply {
-            isEnabled = !taskBusy && !incompatible
+            isEnabled = !taskBusy
             when {
                 updateReady -> {
                     setText(R.string.marketplace_action_update)
@@ -147,28 +154,32 @@ internal class DiscoverAdapter(
         row.catalogCard.setOnClickListener { onCardClick(state) }
     }
 
-    private fun bindHeaderStatus() {
-        val header = headerBinding ?: return
+    private fun bindHeaderStatus(header: DiscoverHeaderBinding? = headerBinding) {
+        if (header == null) return
         val status = header.discoverSyncStatus
-        when {
-            refreshing -> {
-                status.visibility = View.VISIBLE
-                status.setText(R.string.marketplace_refreshing)
-            }
-            syncedFromRemote -> {
-                status.visibility = View.VISIBLE
-                status.setText(R.string.marketplace_synced)
-            }
-            else -> status.visibility = View.GONE
+        val context = status.context
+        val timestamp = syncedAtMillis
+        status.text = when {
+            refreshing -> context.getString(R.string.marketplace_refreshing)
+            timestamp != null -> context.getString(R.string.marketplace_last_synced,
+                android.text.format.DateUtils.getRelativeTimeSpanString(timestamp, System.currentTimeMillis(),
+                    android.text.format.DateUtils.MINUTE_IN_MILLIS))
+            else -> context.getString(R.string.marketplace_bundled_catalog)
         }
+        status.setTextColor(ContextCompat.getColor(
+            context,
+            if (refreshing) R.color.accent_blue else R.color.on_surface_subtle,
+        ))
+        status.visibility = View.VISIBLE
     }
+
+    private class HeaderHolder(val binding: DiscoverHeaderBinding) : RecyclerView.ViewHolder(binding.root)
 
     private class AppHolder(val binding: ItemMarketplaceAppBinding) : RecyclerView.ViewHolder(binding.root)
 
     companion object {
         private const val TYPE_HEADER = 0
         private const val TYPE_APP = 1
-        private const val TYPE_BYO_FOOTER = 2
     }
 }
 
@@ -237,13 +248,6 @@ internal object MarketplaceUi {
             )
         }
         when {
-            state.app.source is CatalogSource.BundledStarter -> addChip(
-                inflater = inflater,
-                container = container,
-                label = context.getString(R.string.marketplace_cap_builtin),
-                bgRes = R.drawable.bg_chip_neutral,
-                textColorRes = R.color.on_secondary,
-            )
             state.app.offlineOnly -> addChip(
                 inflater = inflater,
                 container = container,
@@ -287,6 +291,7 @@ internal object MarketplaceUi {
         cachedIcon: Bitmap?,
         taskBusy: Boolean,
         onInstall: (MarketplaceApp) -> Unit,
+        onCheckHostUpdate: () -> Unit,
         onOpen: (SubappRecord) -> Unit,
         onCreateShortcut: (SubappRecord) -> Unit,
         onBackup: (SubappRecord) -> Unit,
@@ -346,11 +351,7 @@ internal object MarketplaceUi {
 
         if (incompatible) {
             viewBinding.detailHostWarning.visibility = View.VISIBLE
-            viewBinding.detailHostWarning.text = activity.getString(
-                R.string.marketplace_host_required,
-                app.minHostCompatibility,
-                HostCompatibility.LEVEL,
-            )
+            viewBinding.detailHostWarning.setText(R.string.marketplace_host_required)
         } else {
             viewBinding.detailHostWarning.visibility = View.GONE
         }
@@ -367,7 +368,8 @@ internal object MarketplaceUi {
         when {
             incompatible -> {
                 primary.setText(R.string.marketplace_action_update_host)
-                primary.isEnabled = false
+                primary.isEnabled = !taskBusy
+                primary.setOnClickListener { sheet.dismiss(); onCheckHostUpdate() }
                 primary.backgroundTintList = ColorStateList.valueOf(ContextCompat.getColor(activity, R.color.surface_variant))
                 primary.setTextColor(ContextCompat.getColor(activity, R.color.on_surface_muted))
                 moreButton.visibility = View.GONE
@@ -520,10 +522,10 @@ internal object MarketplaceUi {
         onPermissions: (SubappRecord) -> Unit,
         onDelete: (SubappRecord) -> Unit,
     ): PopupWindow {
-        val binding = PopupDetailActionsBinding.inflate(activity.layoutInflater)
+        val binding = PopupLibraryActionsBinding.inflate(activity.layoutInflater)
         val popup = PopupWindow(
             binding.root,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
+            activity.resources.getDimensionPixelSize(R.dimen.library_actions_popup_width),
             ViewGroup.LayoutParams.WRAP_CONTENT,
             true,
         ).apply {
@@ -532,51 +534,57 @@ internal object MarketplaceUi {
             setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
         }
 
-        binding.detailMenuOpen.visibility = if (hasUpdate) View.VISIBLE else View.GONE
-        binding.detailMenuOpen.setOnClickListener {
+        binding.updateApp.visibility = View.GONE
+        binding.openApp.visibility = if (hasUpdate) View.VISIBLE else View.GONE
+        binding.openApp.setOnClickListener {
             popup.dismiss()
             onDismissSheet()
             onOpen(installedRecord)
         }
 
-        binding.detailMenuShortcut.setOnClickListener {
+        binding.installApp.setOnClickListener {
             popup.dismiss()
             onDismissSheet()
             onCreateShortcut(installedRecord)
         }
 
-        binding.detailMenuBackup.setOnClickListener {
+        binding.backupApp.setOnClickListener {
             popup.dismiss()
             onDismissSheet()
             onBackup(installedRecord)
         }
 
-        binding.detailMenuConfigure.setOnClickListener {
+        binding.configureApp.setOnClickListener {
             popup.dismiss()
             onDismissSheet()
             onConfigure(installedRecord)
         }
 
-        binding.detailMenuPermissions.setOnClickListener {
+        binding.permissionsApp.setOnClickListener {
             popup.dismiss()
             onDismissSheet()
             onPermissions(installedRecord)
         }
 
-        binding.detailMenuDelete.setOnClickListener {
+        binding.deleteApp.setOnClickListener {
             popup.dismiss()
             onDismissSheet()
             onDelete(installedRecord)
         }
 
         binding.root.measure(
-            MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED),
+            MeasureSpec.makeMeasureSpec(popup.width, MeasureSpec.EXACTLY),
             MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED),
         )
-        val gapPx = (8f * activity.resources.displayMetrics.density).toInt()
-        val xOff = anchor.width - binding.root.measuredWidth
-        val yOff = -(anchor.height + binding.root.measuredHeight + gapPx)
-        popup.showAsDropDown(anchor, xOff, yOff)
+        val bounds = android.graphics.Rect().also(anchor::getWindowVisibleDisplayFrame)
+        val anchorTop = IntArray(2).also(anchor::getLocationOnScreen)[1]
+        val menuHeight = binding.root.measuredHeight
+        val spaceAbove = anchorTop - bounds.top
+        val spaceBelow = bounds.bottom - anchorTop - anchor.height
+        val above = spaceBelow < menuHeight && spaceAbove > spaceBelow
+        popup.height = menuHeight.coerceAtMost(maxOf(spaceAbove, spaceBelow, 1))
+        val offset = if (above) -anchor.height - popup.height else 0
+        popup.showAsDropDown(anchor, 0, offset, android.view.Gravity.END)
         return popup
     }
 }

@@ -14,7 +14,7 @@
         android:paddingBottom="24dp">
 
         <View
-            android:layout_width="36dp"
+            android:layout_width="48dp"
             android:layout_height="4dp"
             android:layout_gravity="center_horizontal"
             android:layout_marginBottom="18dp"
@@ -79,8 +79,8 @@
 
             <ImageButton
                 android:id="@+id/detail_source_button"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
                 android:layout_marginStart="12dp"
                 android:background="@drawable/bg_source_icon_btn"
                 android:contentDescription="@string/marketplace_open_github"

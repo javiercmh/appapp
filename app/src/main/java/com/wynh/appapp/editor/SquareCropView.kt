@@ -210,8 +210,9 @@ class SquareCropView @JvmOverloads constructor(
 
         // Ensure minimum scale so cropRect is never exposed
         val minScale = maxOf(cropRect.width() / bmp.width, cropRect.height() / bmp.height)
-        if (scaleX < minScale) {
-            val rescale = minScale / scaleX
+        val boundedScale = scaleX.coerceIn(minScale, minScale * 8f)
+        if (scaleX != boundedScale) {
+            val rescale = boundedScale / scaleX
             transformMatrix.postScale(rescale, rescale, cropRect.centerX(), cropRect.centerY())
             checkBoundsAndConstrain()
             return

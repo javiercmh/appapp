@@ -14,6 +14,18 @@ class GitHubFolderImporterTest {
     private val second = "b".repeat(40)
     private val api = "https://api.github.com/repos/owner/repo"
 
+    @Test fun normalizesSupportedGitHubLinksBeforeDownload() {
+        assertEquals("https://github.com/owner/repo", GitHubFolderImporter.normalizeLink(" owner/repo "))
+        assertEquals("https://github.com/owner/repo/tree/main/app",
+            GitHubFolderImporter.normalizeLink("github.com/owner/repo/tree/main/app"))
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            GitHubFolderImporter.normalizeLink("github.com/owner")
+        }
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            GitHubFolderImporter.normalizeLink("https://example.com/owner/repo")
+        }
+    }
+
     private class Response(url: URL, val body: ByteArray, val status: Int = 200, val location: String? = null) : HttpURLConnection(url) {
         override fun connect() {}
         override fun disconnect() {}

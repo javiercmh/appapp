@@ -5,7 +5,7 @@
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:paddingHorizontal="20dp"
-    android:paddingTop="20dp"
+    android:paddingTop="16dp"
     android:paddingBottom="0dp">
 
     <TextView
@@ -17,49 +17,60 @@
         android:textColor="@color/on_surface" />
 
     <TextView
+        android:id="@+id/reorder_hint"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="4dp"
         android:text="@string/library_subtitle"
-        android:textAppearance="@style/TextAppearance.Material3.BodyLarge"
+        android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
         android:textColor="@color/on_surface_muted" />
 
-    <HorizontalScrollView
+    <LinearLayout
+        android:id="@+id/app_count_row"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="20dp"
-        android:scrollbars="none">
+        android:layout_marginTop="12dp"
+        android:layout_marginBottom="4dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
 
-        <LinearLayout
+        <TextView
+            android:id="@+id/app_count"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:accessibilityHeading="true"
+            android:textAppearance="@style/TextAppearance.Material3.TitleSmall"
+            android:textColor="@color/on_surface_muted" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/check_app_updates"
+            style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:orientation="horizontal">
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/new_app"
-                style="@style/Widget.Material3.Button.TonalButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:minHeight="48dp"
-                android:text="@string/library_import_button"
-                android:textAllCaps="false"
-                android:textColor="@color/on_surface"
-                app:backgroundTint="@color/surface_elevated"
-                app:cornerRadius="999dp"
-                app:icon="@drawable/ic_add"
-                app:iconTint="@color/on_surface" />
-        </LinearLayout>
-    </HorizontalScrollView>
+            android:minWidth="0dp"
+            android:minHeight="48dp"
+            android:paddingHorizontal="10dp"
+            android:text="@string/updates_check_short"
+            android:textAllCaps="false"
+            android:textColor="@color/accent_blue"
+            app:icon="@drawable/ic_refresh"
+            app:iconPadding="6dp"
+            app:iconSize="18dp"
+            app:iconTint="@color/accent_blue" />
+    </LinearLayout>
 
     <TextView
-        android:id="@+id/app_count"
+        android:id="@+id/empty_title"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="28dp"
-        android:layout_marginBottom="12dp"
+        android:layout_marginTop="32dp"
         android:accessibilityHeading="true"
-        android:textAppearance="@style/TextAppearance.Material3.TitleSmall"
-        android:textColor="@color/on_surface_muted" />
+        android:gravity="center"
+        android:text="@string/library_first_app"
+        android:textAppearance="@style/TextAppearance.Material3.TitleLarge"
+        android:textColor="@color/on_surface"
+        android:visibility="gone" />
 
     <TextView
         android:id="@+id/empty_state"
@@ -67,7 +78,7 @@
         android:layout_height="wrap_content"
         android:gravity="center"
         android:paddingHorizontal="24dp"
-        android:paddingTop="24dp"
+        android:paddingTop="8dp"
         android:paddingBottom="16dp"
         android:text="@string/library_empty"
         android:textAppearance="@style/TextAppearance.Material3.BodyLarge"
@@ -79,7 +90,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center_horizontal"
-        android:layout_marginBottom="16dp"
+        android:layout_marginBottom="4dp"
         android:minHeight="48dp"
         android:text="@string/marketplace_browse_apps"
         android:textAllCaps="false"
@@ -89,4 +100,17 @@
         app:cornerRadius="999dp"
         app:icon="@drawable/ic_nav_discover"
         app:iconTint="@color/on_primary" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/empty_import_app"
+        style="@style/Widget.Material3.Button.TonalButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:minHeight="48dp"
+        android:text="@string/library_import_title"
+        android:textAllCaps="false"
+        android:visibility="gone"
+        app:cornerRadius="999dp"
+        app:icon="@drawable/ic_add" />
 </LinearLayout>

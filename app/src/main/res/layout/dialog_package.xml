@@ -58,18 +58,6 @@
                         android:textColor="@color/on_surface_muted"
                         android:textSize="14sp" />
                 </LinearLayout>
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/package_header_close"
-                    style="@style/Widget.Material3.Button.TextButton"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:contentDescription="@string/close"
-                    android:minWidth="0dp"
-                    android:padding="12dp"
-                    app:icon="@drawable/ic_close"
-                    app:iconPadding="0dp"
-                    app:iconTint="@color/on_surface_muted" />
             </LinearLayout>
 
             <TextView
@@ -199,7 +187,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginStart="8dp"
                     android:minHeight="48dp"
-                    android:backgroundTint="@color/primary_variant"
+                    app:backgroundTint="@color/primary_variant"
                     android:text="@string/action_share_zip"
                     android:textColor="@color/on_primary"
                     app:icon="@drawable/ic_share"

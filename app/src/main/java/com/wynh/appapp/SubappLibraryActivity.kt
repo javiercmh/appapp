@@ -11,6 +11,10 @@ import android.widget.LinearLayout
 import com.wynh.appapp.workspace.WorkspacePackageManager
 
 import android.Manifest
+import androidx.core.widget.doAfterTextChanged
+import com.google.android.material.bottomsheet.BottomSheetBehavior
+import com.wynh.appapp.workspace.WorkspaceManager
+import com.wynh.appapp.workspace.GitHubFolderImporter
 import android.app.Dialog
 import android.os.Build
 import android.view.ViewGroup
@@ -168,13 +172,25 @@ class SubappLibraryActivity : AppCompatActivity() {
             library.export(record.id, null, filename, selected)
         }
         content.packageBtnClose.setOnClickListener { dialog.dismiss() }
-        content.packageHeaderClose.setOnClickListener { dialog.dismiss() }
+        content.packageUserFiles.isEnabled = false
+        lifecycleScope.launch {
+            val hasUserFiles = withContext(Dispatchers.IO) {
+                runCatching {
+                    val manager = WorkspaceManager(applicationContext, workspaceDir = record.workspaceDir)
+                    synchronized(com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(record.workspaceDir)) {
+                        val appFiles = manager.appFilePaths(record.directory)
+                        manager.listFiles().any { it.name !in appFiles }
+                    }
+                }.getOrDefault(false)
+            }
+            content.packageUserFiles.isEnabled = hasUserFiles
+            if (!hasUserFiles && content.packageFileSelection.checkedButtonId == R.id.package_both_files) {
+                content.packageSelectionSummary.setText(R.string.package_no_user_files)
+            }
+        }
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
         dialog.show()
-        dialog.window?.setLayout(
-            minOf((resources.displayMetrics.widthPixels * 0.94).toInt(), (resources.displayMetrics.density * 460).toInt()),
-            ViewGroup.LayoutParams.WRAP_CONTENT
-        )
+        sizeLibraryDialog(dialog, 460)
         return dialog
     }
 
@@ -228,7 +244,6 @@ class SubappLibraryActivity : AppCompatActivity() {
                 }
                 WorkspaceActionController.Kind.RESTORED -> {
                     refreshRows()
-                    backupDialog?.dismiss()
                     Toast.makeText(this, R.string.history_restored, Toast.LENGTH_SHORT).show()
                     repository.resolve(completion.subject)?.let(::reopenBackup)
                 }
@@ -257,15 +272,18 @@ class SubappLibraryActivity : AppCompatActivity() {
                     if (rowsReady) refreshDiscover()
                 } }
                 launch { library.task.collect { task ->
-                    header.newApp.isEnabled = !task.busy
+                    binding.libraryToolbar.menu.findItem(R.id.action_import).actionView?.isEnabled = !task.busy
+                    header.emptyImportApp.isEnabled = !task.busy
+                    header.checkAppUpdates.isEnabled = !task.busy
                     if (rowsReady) refreshDiscover()
+                    if (task.busy && !task.showProgress) return@collect
                     if (task.busy) {
                         val detailText = task.detail.ifEmpty { getString(com.wynh.appapp.runtime.R.string.workspace_working) }
                         if (operationProgress == null) operationProgress = MaterialAlertDialogBuilder(this@SubappLibraryActivity)
-                            .setTitle(task.message).setMessage(detailText).setCancelable(false)
+                            .setTitle(task.message).setView(progressBody(detailText)).setCancelable(false)
                             .setNegativeButton(R.string.cancel) { _, _ -> library.cancel() }.show()
                         operationProgress?.setTitle(task.message)
-                        operationProgress?.setMessage(detailText)
+                        operationProgress?.findViewById<TextView>(com.wynh.appapp.runtime.R.id.workspace_progress_detail)?.text = detailText
                         operationProgress?.getButton(android.content.DialogInterface.BUTTON_NEGATIVE)?.apply {
                             visibility = if (task.cancellable) View.VISIBLE else View.GONE
                             setOnClickListener { library.cancel() }
@@ -279,6 +297,9 @@ class SubappLibraryActivity : AppCompatActivity() {
                         if (task.message.isNotEmpty()) {
                             if (task.installedFromCatalog != null) {
                                 showInstalledSnackbar(task.installedFromCatalog, task.installedName, task.message, task.installedOfflineNote)
+                            } else if (task.imported != null) {
+                                selectTab(R.id.nav_your_apps)
+                                showInstalledSnackbar(task.imported, null, task.message, false)
                             } else if (task.created != null) {
                                 showConfigure(task.created)
                             } else if (task.share != null) {
@@ -298,7 +319,7 @@ class SubappLibraryActivity : AppCompatActivity() {
                 backups.status.collect { status ->
                     if (status.busy) {
                         if (backupProgress == null) backupProgress = MaterialAlertDialogBuilder(this@SubappLibraryActivity)
-                            .setTitle(status.message).setMessage(R.string.backup_progress).setCancelable(false).show()
+                            .setTitle(status.message).setView(progressBody(getString(R.string.backup_progress))).setCancelable(false).show()
                     } else {
                         backupProgress?.dismiss(); backupProgress = null
                         if (status.message.isNotEmpty()) {
@@ -345,6 +366,25 @@ class SubappLibraryActivity : AppCompatActivity() {
         super.onDestroy()
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        if (intent.getBooleanExtra(EXTRA_SHOW_YOUR_APPS, false)) selectTab(R.id.nav_your_apps)
+    }
+
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        configDialog?.let { sizeLibraryDialog(it, 520) }
+        backupDialog?.let { sizeLibraryDialog(it, 460) }
+    }
+
+    private fun sizeLibraryDialog(dialog: Dialog, maximumWidthDp: Int) {
+        val metrics = resources.displayMetrics
+        dialog.window?.setLayout(
+            minOf((metrics.widthPixels * 0.94).toInt(), (metrics.density * maximumWidthDp).toInt()),
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+    }
+
     override fun onPause() {
         finishReorder(commit = false)
         (application as? com.wynh.appapp.ai.AppAiApplication)?.ai?.auth?.setForeground(false)
@@ -371,6 +411,8 @@ class SubappLibraryActivity : AppCompatActivity() {
             WindowInsetsCompat.CONSUMED
         }
         ViewCompat.requestApplyInsets(binding.root)
+        val toolbarImport = binding.libraryToolbar.menu.findItem(R.id.action_import).actionView
+        toolbarImport?.setOnClickListener { showNewAppMenu() }
         binding.libraryToolbar.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 R.id.action_settings -> {
@@ -395,8 +437,6 @@ class SubappLibraryActivity : AppCompatActivity() {
             inflater = layoutInflater,
             onCardClick = { state -> showCatalogDetail(state) },
             onPrimaryAction = { state -> handleCatalogPrimaryAction(state) },
-            onImportGitHub = { showNewAppMenu(focusGithub = true) },
-            onImportZip = { launchZipImport() },
         )
         binding.discoverList.adapter = discoverAdapter
 
@@ -416,6 +456,7 @@ class SubappLibraryActivity : AppCompatActivity() {
             override fun clearView(rv: RecyclerView, holder: RecyclerView.ViewHolder) {
                 super.clearView(rv, holder)
                 holder.itemView.translationZ = 0f
+                (holder as? AppHolder)?.row?.appCard?.strokeWidth = 0
             }
             override fun chooseDropTarget(selected: RecyclerView.ViewHolder, targets: MutableList<RecyclerView.ViewHolder>, curX: Int, curY: Int): RecyclerView.ViewHolder? {
                 val center = curY + selected.itemView.height / 2f
@@ -432,12 +473,17 @@ class SubappLibraryActivity : AppCompatActivity() {
                     reorderOriginal = displayedRecords.toList()
                     dragCancelled = false
                     holder?.itemView?.translationZ = resources.displayMetrics.density * 12
+                    (holder as? AppHolder)?.row?.appCard?.apply {
+                        strokeColor = ContextCompat.getColor(this@SubappLibraryActivity, R.color.primary)
+                        strokeWidth = (2 * resources.displayMetrics.density).toInt()
+                    }
                     holder?.itemView?.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
                 } else if (actionState == ItemTouchHelper.ACTION_STATE_IDLE) finishReorder(!dragCancelled)
             }
         })
         touchHelper.attachToRecyclerView(binding.appList)
-        header.newApp.setOnClickListener { showNewAppMenu() }
+        header.emptyImportApp.setOnClickListener { showNewAppMenu() }
+        header.checkAppUpdates.setOnClickListener { showUpdates(checkHost = false) }
         header.emptyBrowseApps.setOnClickListener { selectTab(R.id.nav_discover) }
 
         binding.libraryBottomNav.selectedItemId = selectedTabId
@@ -471,10 +517,23 @@ class SubappLibraryActivity : AppCompatActivity() {
         binding.appList.visibility = if (isDiscover) View.GONE else View.VISIBLE
         binding.discoverList.visibility = if (isDiscover) View.VISIBLE else View.GONE
         binding.libraryToolbar.menu.findItem(R.id.action_refresh_catalog)?.isVisible = isDiscover
+        updateCatalogRefreshIndicator()
+    }
+
+    private fun updateCatalogRefreshIndicator() {
+        val refresh = binding.libraryToolbar.menu.findItem(R.id.action_refresh_catalog) ?: return
+        val refreshing = currentMarketplace.refreshing
+        refresh.isEnabled = !refreshing
+        if (refreshing && refresh.actionView == null) {
+            refresh.actionView = layoutInflater.inflate(R.layout.action_catalog_refresh, binding.libraryToolbar, false)
+        } else if (!refreshing) {
+            refresh.actionView = null
+        }
     }
 
     private fun refreshDiscover() {
         if (!rowsReady) return
+        updateCatalogRefreshIndicator()
         val states = MarketplaceMatcher.match(
             apps = currentMarketplace.apps,
             records = displayedRecords,
@@ -484,7 +543,7 @@ class SubappLibraryActivity : AppCompatActivity() {
         discoverAdapter.submit(
             newItems = states,
             icons = currentMarketplace.cachedIcons,
-            synced = currentMarketplace.syncedFromRemote,
+            syncedAtMillis = currentMarketplace.syncedAtMillis,
             isRefreshing = currentMarketplace.refreshing,
             busy = library.task.value.busy,
         )
@@ -498,6 +557,7 @@ class SubappLibraryActivity : AppCompatActivity() {
             updateRecord != null -> reviewUpdates(listOf(updateRecord))
             copies.size == 1 -> open(copies.single())
             state.hostCompatible -> library.installCatalogApp(state.app)
+            else -> showUpdates(checkHost = true)
         }
     }
 
@@ -505,7 +565,20 @@ class SubappLibraryActivity : AppCompatActivity() {
     private fun showCopiesInLibrary(copies: List<SubappRecord>) {
         selectTab(R.id.nav_your_apps)
         val first = displayedRecords.indexOfFirst { record -> copies.any { it.id == record.id } }
-        if (first >= 0) binding.appList.scrollToPosition(first + 1)
+        if (first < 0) return
+        val copyIds = copies.map { it.id }.toSet()
+        binding.appList.scrollToPosition(first + 1)
+        binding.appList.post {
+            for (index in 0 until binding.appList.childCount) {
+                val holder = binding.appList.getChildViewHolder(binding.appList.getChildAt(index)) as? AppHolder ?: continue
+                val record = displayedRecords.getOrNull(holder.bindingAdapterPosition - 1) ?: continue
+                if (record.id !in copyIds) continue
+                val card = holder.row.appCard
+                card.strokeColor = ContextCompat.getColor(this, R.color.primary)
+                card.strokeWidth = (2 * resources.displayMetrics.density).toInt()
+                card.postDelayed({ if (reorderOriginal.isEmpty()) card.strokeWidth = 0 }, 1300)
+            }
+        }
     }
 
     private fun recordDisplayName(record: SubappRecord, fallback: String): String =
@@ -519,6 +592,7 @@ class SubappLibraryActivity : AppCompatActivity() {
             cachedIcon = currentMarketplace.cachedIcons[state.app.id],
             taskBusy = library.task.value.busy,
             onInstall = { app -> library.installCatalogApp(app) },
+            onCheckHostUpdate = { showUpdates(checkHost = true) },
             onOpen = { record -> open(record) },
             onCreateShortcut = { record ->
                 if (!AppIdentityManager(this, record).requestInstall()) {
@@ -545,18 +619,28 @@ class SubappLibraryActivity : AppCompatActivity() {
             .show()
     }
 
+    private fun showUpdates(checkHost: Boolean) {
+        val title = if (checkHost) R.string.updates_check_host else R.string.updates_check_subapps
+        val content = layoutInflater.inflate(R.layout.dialog_update_check, null)
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setTitle(title)
+            .setView(content)
+            .setNegativeButton(R.string.close, null)
+            .show()
+        val controller = com.wynh.appapp.updates.SettingsUpdateController(
+            this, dialog, records = { repository.list() }, changed = ::refreshUpdateIndicators,
+            review = { reviewUpdates(it) }, checkHost = checkHost
+        )
+        dialog.setOnDismissListener { controller.close() }
+        controller.start()
+    }
+
     /** Opens library-wide preferences without creating or selecting a subapp workspace. */
     private fun showLibrarySettings() {
-        val dialog = Dialog(this)
+        val dialog = Dialog(this, R.style.Theme_AppApp_FullScreenDialog)
         dialog.setContentView(R.layout.dialog_library_settings)
         librarySettingsDialog = dialog
-        val updates = com.wynh.appapp.updates.SettingsUpdateController(this, dialog,
-            records = { repository.list() }, changed = ::refreshUpdateIndicators, review = { reviewUpdates(it) })
-        dialog.window?.setLayout(
-            (resources.displayMetrics.widthPixels * 0.94).toInt(),
-            ViewGroup.LayoutParams.WRAP_CONTENT
-        )
-        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        dialog.findViewById<View>(R.id.settings_check_host).setOnClickListener { showUpdates(checkHost = true) }
 
         val tvNotifications = dialog.findViewById<TextView>(R.id.settings_tv_notification_status)
         val btnNotifications = dialog.findViewById<MaterialButton>(R.id.settings_btn_notification_permission)
@@ -580,14 +664,15 @@ class SubappLibraryActivity : AppCompatActivity() {
             tvExactAlarms?.text = getString(if (allowed) R.string.settings_exact_alarms_allowed else R.string.settings_exact_alarms_blocked)
             tvExactAlarms?.setTextColor(ContextCompat.getColor(this, if (allowed) R.color.accent_green else R.color.accent_red))
             btnExactAlarms?.text = getString(if (allowed) R.string.settings_exact_alarms_allowed_button else R.string.settings_exact_alarms_allow)
-            btnExactAlarms?.isEnabled = !allowed
+            btnExactAlarms?.visibility = if (allowed) View.GONE else View.VISIBLE
         }
         refreshExactAlarmRow()
         refreshSettingsPermissions = { refreshNotificationRow(); refreshExactAlarmRow() }
+        var aiSettingsJob: kotlinx.coroutines.Job? = null
         dialog.setOnDismissListener {
+            aiSettingsJob?.cancel()
             refreshSettingsPermissions = null
             librarySettingsDialog = null
-            updates.close()
         }
         btnExactAlarms?.setOnClickListener {
             if (Build.VERSION.SDK_INT < 31) return@setOnClickListener
@@ -599,7 +684,7 @@ class SubappLibraryActivity : AppCompatActivity() {
                 Toast.makeText(this, R.string.settings_exact_alarms_open_failed, Toast.LENGTH_SHORT).show()
             }
         }
-        val close = dialog.findViewById<MaterialButton>(R.id.settings_btn_close)
+        val close = dialog.findViewById<View>(R.id.settings_btn_close)
         close?.setOnClickListener { dialog.dismiss() }
         dialog.findViewById<View>(R.id.settings_card_about)?.let { card ->
             dialog.findViewById<TextView>(R.id.settings_tv_app_version)?.text = settingsManager.getAppVersion()
@@ -611,41 +696,53 @@ class SubappLibraryActivity : AppCompatActivity() {
                 Toast.makeText(this, R.string.settings_privacy_policy_open_failed, Toast.LENGTH_SHORT).show()
             }
         }
-        val historyButtons = mapOf(
-            2 to dialog.findViewById<MaterialButton>(R.id.settings_btn_history_2),
-            4 to dialog.findViewById<MaterialButton>(R.id.settings_btn_history_4),
-            6 to dialog.findViewById<MaterialButton>(R.id.settings_btn_history_6),
-            8 to dialog.findViewById<MaterialButton>(R.id.settings_btn_history_8),
-            10 to dialog.findViewById<MaterialButton>(R.id.settings_btn_history_10)
-        )
-        fun updateHistoryButtons(selected: Int) {
-            historyButtons.forEach { (count, button) ->
-                button.setBackgroundColor(ContextCompat.getColor(this,
-                    if (count == selected) R.color.primary else R.color.surface_elevated))
-                button.setTextColor(ContextCompat.getColor(this,
-                    if (count == selected) R.color.on_primary else R.color.on_surface_muted))
-            }
+        val historyLimits = listOf(2, 4, 6, 8, 10)
+        val historySummary = dialog.findViewById<TextView>(R.id.settings_history_summary)
+        fun showHistoryLimit(count: Int) {
+            historySummary.text = resources.getQuantityString(R.plurals.settings_history_summary, count, count)
         }
-        updateHistoryButtons(settingsManager.maxHistorySnapshots)
-        historyButtons.forEach { (count, button) ->
-            button.setOnClickListener {
-                settingsManager.maxHistorySnapshots = count
-                updateHistoryButtons(count)
-                Toast.makeText(this, R.string.settings_history_saved, Toast.LENGTH_SHORT).show()
-            }
+        showHistoryLimit(settingsManager.maxHistorySnapshots)
+        dialog.findViewById<View>(R.id.settings_history_row).setOnClickListener {
+            val options = historyLimits.map { resources.getQuantityString(R.plurals.settings_history_option, it, it) }
+            val explanation = layoutInflater.inflate(R.layout.dialog_history_limit_note, null)
+            MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.settings_history_picker_title)
+                .setSingleChoiceItems(options.toTypedArray(), historyLimits.indexOf(settingsManager.maxHistorySnapshots)) { picker, index ->
+                    val count = historyLimits[index]
+                    settingsManager.maxHistorySnapshots = count
+                    showHistoryLimit(count)
+                    picker.dismiss()
+                }
+                .setView(explanation)
+                .setNegativeButton(R.string.cancel, null)
+                .show()
         }
         dialog.findViewById<View>(R.id.settings_backup_export).setOnClickListener {
-            dialog.dismiss()
             backupExport.launch("app2-subapps-${java.text.SimpleDateFormat("yyyy-MM-dd-HHmmss", java.util.Locale.US).format(java.util.Date())}.zip")
         }
         dialog.findViewById<View>(R.id.settings_backup_restore).setOnClickListener {
-            dialog.dismiss()
             backupRestore.launch(arrayOf("application/zip", "application/x-zip-compressed"))
         }
         dialog.show()
-        com.wynh.appapp.ai.AiSettingsController.bind(this, dialog)
-        dialog.window?.setLayout((resources.displayMetrics.widthPixels * 0.94).toInt(), ViewGroup.LayoutParams.WRAP_CONTENT)
+        dialog.window?.apply {
+            androidx.core.view.WindowCompat.setDecorFitsSystemWindows(this, false)
+            setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        }
+        val settingsRoot = dialog.findViewById<View>(R.id.settings_root)
+        val margin = settingsRoot.paddingTop
+        ViewCompat.setOnApplyWindowInsetsListener(settingsRoot) { view, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            view.setPadding(margin + bars.left, margin + bars.top, margin + bars.right, margin + bars.bottom)
+            insets
+        }
+        ViewCompat.requestApplyInsets(settingsRoot)
+        aiSettingsJob = com.wynh.appapp.ai.AiSettingsController.bind(this, dialog)
     }
+
+    private fun progressBody(detail: String): View =
+        layoutInflater.inflate(com.wynh.appapp.runtime.R.layout.dialog_workspace_progress, null).apply {
+            findViewById<TextView>(com.wynh.appapp.runtime.R.id.workspace_progress_detail).text = detail
+        }
 
     private fun refreshRows() { if (reorderOriginal.isEmpty()) library.refresh() }
 
@@ -664,8 +761,14 @@ class SubappLibraryActivity : AppCompatActivity() {
         displayedRecords.clear(); displayedRecords.addAll(value.records); rowMetadata = value.metadata; currentProvenance = value.provenance
         header.appCount.text = resources.getQuantityString(R.plurals.library_count, displayedRecords.size, displayedRecords.size)
         val emptyVis = if (displayedRecords.isEmpty()) View.VISIBLE else View.GONE
+        header.emptyTitle.visibility = emptyVis
         header.emptyState.visibility = emptyVis
         header.emptyBrowseApps.visibility = emptyVis
+        header.emptyImportApp.visibility = emptyVis
+        header.appCountRow.visibility = if (displayedRecords.isEmpty()) View.GONE else View.VISIBLE
+        header.appCount.visibility = header.appCountRow.visibility
+        header.reorderHint.visibility = if (displayedRecords.size >= 2) View.VISIBLE else View.GONE
+        header.checkAppUpdates.visibility = header.appCountRow.visibility
         diff.dispatchUpdatesTo(object : androidx.recyclerview.widget.ListUpdateCallback {
             override fun onInserted(position: Int, count: Int) { libraryAdapter.notifyItemRangeInserted(position + 1, count) }
             override fun onRemoved(position: Int, count: Int) { libraryAdapter.notifyItemRangeRemoved(position + 1, count) }
@@ -703,6 +806,7 @@ class SubappLibraryActivity : AppCompatActivity() {
             if (holder !is AppHolder) return
             val record = displayedRecords[position - 1]
             val row = holder.row
+            row.appCard.strokeWidth = 0
             val metadata = rowMetadata[record.id]
             val name = metadata?.name?.ifBlank { getString(com.wynh.appapp.runtime.R.string.library_untitled) } ?: getString(com.wynh.appapp.runtime.R.string.library_untitled)
             val bitmap = metadata?.icon
@@ -716,7 +820,8 @@ class SubappLibraryActivity : AppCompatActivity() {
             row.appCard.contentDescription = getString(R.string.library_open_app, name)
             row.appCard.setOnClickListener { open(record) }
             val availableUpdate = updateIndicators.available(record)
-            row.updateDot.visibility = if (availableUpdate != null) View.VISIBLE else View.GONE
+            row.appUpdate.visibility = if (availableUpdate != null) View.VISIBLE else View.GONE
+            row.appUpdate.setOnClickListener { reviewUpdates(listOf(record)) }
             row.appMenu.contentDescription = getString(if (availableUpdate != null) R.string.updates_menu_available else R.string.library_menu, name)
             row.appMenu.setOnClickListener { anchor ->
                 val content = layoutInflater.inflate(R.layout.popup_library_actions, null)
@@ -761,26 +866,40 @@ class SubappLibraryActivity : AppCompatActivity() {
                 content.findViewById<View>(R.id.permissions_app).setOnClickListener { popup.dismiss(); showPermissions(record, name) }
                 content.findViewById<View>(R.id.backup_app).setOnClickListener { popup.dismiss(); showAppBackup(record, name) }
                 content.findViewById<View>(R.id.configure_app).setOnClickListener { popup.dismiss(); showConfigure(record) }
-                popup.showAsDropDown(anchor, anchor.width - popupWidth, 0)
+                popup.showAsDropDown(anchor, 0, 0, android.view.Gravity.END)
             }
         }
     }
 
     /** Lets the user grant or revoke each capability of one subapp. */
     private fun showPermissions(record: com.wynh.appapp.workspace.SubappRecord, name: String) {
-        val labels = mapOf(
-            com.wynh.appapp.grants.SubappCapability.AI to R.string.library_permission_ai,
-            com.wynh.appapp.grants.SubappCapability.NOTIFICATIONS to R.string.library_permission_notifications,
-            com.wynh.appapp.grants.SubappCapability.NETWORK to R.string.library_permission_network
-        ).entries.toList()
+        val aiReady = (application as? com.wynh.appapp.ai.AppAiApplication)
+            ?.ai?.registry?.providers?.any { it.connected() } == true
+        val permissions = listOf(
+            Triple(com.wynh.appapp.grants.SubappCapability.NETWORK, R.string.library_permission_internet_title,
+                R.string.library_permission_internet_summary),
+            Triple(com.wynh.appapp.grants.SubappCapability.AI, R.string.library_permission_ai_title,
+                if (aiReady) R.string.library_permission_ai_summary else R.string.library_permission_ai_setup),
+            Triple(com.wynh.appapp.grants.SubappCapability.NOTIFICATIONS, R.string.library_permission_notifications_title,
+                if (notificationsAllowed()) R.string.library_permission_notifications_summary else R.string.library_permission_notifications_setup),
+        )
         val granted = com.wynh.appapp.grants.SubappGrants.store(this).granted(record.id)
-        val checked = BooleanArray(labels.size) { labels[it].key in granted }
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+        val content = layoutInflater.inflate(R.layout.dialog_list_content, null)
+        val rows = content.findViewById<android.widget.LinearLayout>(R.id.dialog_list)
+        val switches = permissions.associate { (capability, title, summary) ->
+            val row = com.wynh.appapp.databinding.ItemPermissionBinding.inflate(layoutInflater, rows, true)
+            row.permissionSwitch.setText(title)
+            row.permissionSwitch.isChecked = capability in granted
+            row.permissionSummary.setText(summary)
+            capability to row.permissionSwitch
+        }
+        MaterialAlertDialogBuilder(this)
             .setTitle(getString(R.string.library_permissions_title, name))
-            .setMultiChoiceItems(labels.map { getString(it.value) }.toTypedArray(), checked) { _, index, value -> checked[index] = value }
+            .setView(content)
+            .setNegativeButton(R.string.cancel, null)
             .setPositiveButton(R.string.library_permissions_done) { _, _ ->
-                labels.forEachIndexed { i, e ->
-                    com.wynh.appapp.grants.SubappGrants.setGranted(this, record.id, e.key, checked[i])
+                switches.forEach { (capability, control) ->
+                    com.wynh.appapp.grants.SubappGrants.setGranted(this, record.id, capability, control.isChecked)
                 }
             }
             .show()
@@ -824,15 +943,19 @@ class SubappLibraryActivity : AppCompatActivity() {
         })
     }
 
+    private var backupContent: com.wynh.appapp.databinding.DialogAppBackupBinding? = null
+
     internal fun showAppBackup(record: SubappRecord, name: String) {
         val content = com.wynh.appapp.databinding.DialogAppBackupBinding.inflate(layoutInflater)
         backupDialog?.dismiss()
         val dialog = Dialog(this)
         backupDialog = dialog
+        backupContent = content
         backupRecordId = record.id
         dialog.setOnDismissListener {
             if (backupDialog === dialog) {
                 backupDialog = null
+                backupContent = null
                 backupRecordId = null
             }
         }
@@ -840,14 +963,15 @@ class SubappLibraryActivity : AppCompatActivity() {
         content.backupAppName.text = name
         content.backupClose.setOnClickListener { dialog.dismiss() }
 
-        fun addAction(icon: Int, title: Int, open: () -> Unit) {
+        fun addAction(icon: Int, title: Int, summary: Int? = null, open: () -> Unit) {
             val row = com.wynh.appapp.databinding.ItemAppBackupActionBinding.inflate(layoutInflater, content.backupActions, true)
             row.backupActionIcon.setImageResource(icon)
             row.backupActionTitle.setText(title)
+            summary?.let { row.backupActionSummary.setText(it); row.backupActionSummary.visibility = View.VISIBLE }
             row.root.setOnClickListener { open() }
         }
 
-        addAction(R.drawable.ic_download, R.string.app_backup_export) {
+        addAction(R.drawable.ic_download_device, R.string.app_backup_export, R.string.app_backup_export_summary) {
             pendingExportId = record.id
             val filename = WorkspacePackageManager.sanitizePackageName(name)
             saveZipLauncher.launch("$filename.zip")
@@ -866,10 +990,7 @@ class SubappLibraryActivity : AppCompatActivity() {
 
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
         dialog.show()
-        dialog.window?.setLayout(
-            minOf((resources.displayMetrics.widthPixels * 0.94).toInt(), (resources.displayMetrics.density * 460).toInt()),
-            ViewGroup.LayoutParams.WRAP_CONTENT
-        )
+        sizeLibraryDialog(dialog, 460)
         loadBackupVersions(record, dialog, content)
     }
 
@@ -891,7 +1012,6 @@ class SubappLibraryActivity : AppCompatActivity() {
         name.setText(if (restoringDraft) configNameDraft else existing.name)
         description.setText(if (restoringDraft) configDescriptionDraft else existing.description)
         hasConfigDraft = true
-        refreshConfigIconPreview(record)
         content.findViewById<MaterialButton>(R.id.config_btn_pick_icon).setOnClickListener { pickConfigIcon.launch("image/*") }
         content.findViewById<MaterialButton>(R.id.config_btn_reset_icon).setOnClickListener {
             pendingConfigIcon = null
@@ -928,11 +1048,9 @@ class SubappLibraryActivity : AppCompatActivity() {
             if (configuringRecord != null) clearConfigDraft()
         }
         configDialog = dialog
+        refreshConfigIconPreview(record)
         dialog.show()
-        dialog.window?.setLayout(
-            minOf((resources.displayMetrics.widthPixels * 0.94).toInt(), (resources.displayMetrics.density * 520).toInt()),
-            ViewGroup.LayoutParams.WRAP_CONTENT
-        )
+        sizeLibraryDialog(dialog, 520)
         dialog.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
     }
 
@@ -943,6 +1061,7 @@ class SubappLibraryActivity : AppCompatActivity() {
             pendingConfigIcon != null -> BitmapFactory.decodeByteArray(pendingConfigIcon, 0, pendingConfigIcon!!.size)
             else -> com.wynh.appapp.workspace.SubappMetadataLoader.load(record.workspaceDir).icon
         }
+        configDialog?.findViewById<MaterialButton>(R.id.config_btn_reset_icon)?.isEnabled = bitmap != null
         if (bitmap == null) preview.setImageResource(R.mipmap.ic_launcher_round) else preview.setImageBitmap(bitmap)
     }
 
@@ -964,8 +1083,13 @@ class SubappLibraryActivity : AppCompatActivity() {
     }
 
     private fun reopenBackup(record: SubappRecord) {
-        val name = AppIdentityManager(this, record).load().name
-        showAppBackup(record, name)
+        val dialog = backupDialog
+        val content = backupContent
+        if (dialog != null && content != null && backupRecordId == record.id) {
+            loadBackupVersions(record, dialog, content)
+        } else {
+            showAppBackup(record, AppIdentityManager(this, record).load().name)
+        }
     }
 
     private fun loadBackupVersions(
@@ -988,6 +1112,7 @@ class SubappLibraryActivity : AppCompatActivity() {
             content.historyEmptyState.setText(R.string.history_empty)
             content.historyEmptyState.visibility = if (snapshots.isEmpty()) View.VISIBLE else View.GONE
             content.backupVersionScroll.visibility = if (snapshots.isEmpty()) View.GONE else View.VISIBLE
+            content.historySnapshotsContainer.removeAllViews()
             for (snapshot in snapshots) {
                 val row = com.wynh.appapp.databinding.ItemHistorySnapshotBinding.inflate(
                     layoutInflater, content.historySnapshotsContainer, true
@@ -1003,7 +1128,9 @@ class SubappLibraryActivity : AppCompatActivity() {
 
     private fun confirmVersionRestore(record: SubappRecord, snapshot: WorkspaceSnapshot) {
         val content = com.wynh.appapp.databinding.DialogRestoreAppVersionBinding.inflate(layoutInflater)
-        content.restoreVersionDetails.text = getString(R.string.history_restore_details, snapshot.formattedTime, snapshot.label)
+        content.restoreVersionDetails.text = if (snapshot.id == WorkspaceHistoryManager.INITIAL_SNAPSHOT_ID)
+            getString(R.string.history_initial_version)
+        else getString(R.string.history_restore_details, snapshot.formattedTime, snapshot.label)
         val app = applicationContext
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.history_restore_title)
@@ -1023,10 +1150,12 @@ class SubappLibraryActivity : AppCompatActivity() {
     }
 
     private fun confirmDelete(record: SubappRecord, name: String) {
-        AlertDialog.Builder(this).setTitle("Delete $name?")
+        MaterialAlertDialogBuilder(this).setTitle("Delete $name?")
             .setMessage("Its files, data, and history will be removed. App² will disable its shortcut.")
             // Shortcut, open screens and reminders are only touched once the delete has succeeded.
-            .setNegativeButton("Cancel", null).setPositiveButton("Delete") { _, _ -> library.delete(record.id) }.show()
+            .setNegativeButton("Cancel", null).setPositiveButton(R.string.library_delete) { _, _ -> library.delete(record.id) }.show()
+            .getButton(android.content.DialogInterface.BUTTON_POSITIVE)
+            .setTextColor(ContextCompat.getColor(this, R.color.error))
     }
 
     private fun importApp(uri: Uri) { library.importZip(uri) }
@@ -1035,41 +1164,54 @@ class SubappLibraryActivity : AppCompatActivity() {
         importLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "*/*"))
     }
 
-    private fun showNewAppMenu(focusGithub: Boolean = false) {
+    private fun showNewAppMenu() {
+        if (library.task.value.busy) return
         val content = com.wynh.appapp.databinding.DialogLibraryImportBinding.inflate(layoutInflater)
-        val dialog = Dialog(this)
+        val dialog = BottomSheetDialog(this, R.style.ThemeOverlay_AppApp_BottomSheetDialog)
         dialog.setContentView(content.root)
-        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        dialog.behavior.state = BottomSheetBehavior.STATE_EXPANDED
+        dialog.behavior.skipCollapsed = true
+        dialog.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        fun submit() {
+            val input = content.githubUrl.text.toString()
+            val url = try {
+                GitHubFolderImporter.normalizeLink(input)
+            } catch (error: IllegalArgumentException) {
+                content.githubUrlLayout.error = if (input.isBlank()) getString(R.string.library_github_required)
+                    else error.message ?: getString(R.string.library_github_required)
+                return
+            }
+            if (library.task.value.busy) return
+            dialog.dismiss()
+            library.importGitHub(url)
+        }
         content.importClose.setOnClickListener { dialog.dismiss() }
-        content.importZip.setOnClickListener {
-            dialog.dismiss()
-            launchZipImport()
-        }
-        content.createStarter.setOnClickListener {
-            dialog.dismiss()
-            library.create()
-        }
-        content.importGithub.setOnClickListener {
-            val url = content.githubUrl.text.toString().trim()
-            if (url.isBlank()) {
-                content.githubUrlLayout.error = getString(R.string.library_github_required)
-            } else {
-                dialog.dismiss()
-                importFromGitHub(url)
+        content.importZip.apply {
+            backupActionIcon.setImageResource(R.drawable.ic_archive)
+            backupActionTitle.setText(R.string.library_import_zip)
+            backupActionSummary.setText(R.string.library_import_zip_desc)
+            backupActionSummary.visibility = View.VISIBLE
+            root.setOnClickListener {
+                if (!library.task.value.busy) {
+                    dialog.dismiss()
+                    launchZipImport()
+                }
             }
         }
+        content.githubUrl.doAfterTextChanged { content.githubUrlLayout.error = null }
+        content.githubUrl.setOnEditorActionListener { _, action, _ ->
+            if (action != android.view.inputmethod.EditorInfo.IME_ACTION_DONE) false
+            else {
+                submit()
+                true
+            }
+        }
+        content.importGithub.setOnClickListener { submit() }
         dialog.show()
-        dialog.window?.setLayout(
-            minOf((resources.displayMetrics.widthPixels * 0.94).toInt(), (resources.displayMetrics.density * 480).toInt()),
-            ViewGroup.LayoutParams.WRAP_CONTENT
-        )
-        dialog.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
-        if (focusGithub) content.githubUrl.requestFocus()
     }
 
-    private fun importFromGitHub(url: String) { library.importGitHub(url) }
-
     companion object {
+        internal const val EXTRA_SHOW_YOUR_APPS = "show_your_apps"
         private const val STATE_SELECTED_TAB = "library_selected_tab"
     }
 }

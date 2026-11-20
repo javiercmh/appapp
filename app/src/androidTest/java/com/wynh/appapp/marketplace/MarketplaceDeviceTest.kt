@@ -51,6 +51,21 @@ class MarketplaceDeviceTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context get() = instrumentation.targetContext
 
+    @Test fun toolbarImportUsesTheSameSheetFromBothTabs() {
+        ActivityScenario.launch<SubappLibraryActivity>(Intent(context, SubappLibraryActivity::class.java)).use { scenario ->
+            for (tab in listOf(R.id.nav_your_apps, R.id.nav_discover)) {
+                scenario.onActivity { activity ->
+                    activity.findViewById<BottomNavigationView>(R.id.library_bottom_nav).selectedItemId = tab
+                }
+                onView(withId(R.id.toolbar_import)).perform(click())
+                onView(withId(R.id.github_url)).check(matches(isDisplayed()))
+                onView(withId(R.id.import_github)).check(matches(isDisplayed()))
+                onView(withId(R.id.import_zip)).check(matches(isDisplayed()))
+                onView(withId(R.id.import_close)).perform(click())
+            }
+        }
+    }
+
     private class FakeResponse(
         url: URL,
         private val body: ByteArray,
@@ -92,7 +107,7 @@ class MarketplaceDeviceTest {
                 scenario.onActivity { activity ->
                     val list = activity.findViewById<RecyclerView>(R.id.discover_list)
                     ready = list.visibility == View.VISIBLE &&
-                        list.adapter?.itemCount == 5 &&
+                        list.adapter?.itemCount == 4 &&
                         list.findViewHolderForAdapterPosition(1) != null
                 }
                 ready
@@ -221,16 +236,16 @@ class MarketplaceDeviceTest {
             onView(withId(R.id.detail_primary_action)).check(matches(isEnabled()))
             onView(withId(R.id.detail_copies_note)).check(matches(withEffectiveVisibility(Visibility.GONE)))
             onView(withId(R.id.detail_more_action)).perform(click())
-            val popupRoot = withDecorView(hasDescendant(withId(R.id.detail_menu_configure)))
+            val popupRoot = withDecorView(hasDescendant(withId(R.id.configure_app)))
             waitUntil("Overflow menu did not open") {
                 runCatching {
-                    onView(withId(R.id.detail_menu_configure)).inRoot(popupRoot).check(matches(isDisplayed()))
+                    onView(withId(R.id.configure_app)).inRoot(popupRoot).check(matches(isDisplayed()))
                 }.isSuccess
             }
-            onView(withId(R.id.detail_menu_shortcut)).inRoot(popupRoot).check(matches(isDisplayed()))
-            onView(withId(R.id.detail_menu_backup)).inRoot(popupRoot).check(matches(isDisplayed()))
-            onView(withId(R.id.detail_menu_permissions)).inRoot(popupRoot).check(matches(isDisplayed()))
-            onView(withId(R.id.detail_menu_delete)).inRoot(popupRoot).check(matches(isDisplayed()))
+            onView(withId(R.id.install_app)).inRoot(popupRoot).check(matches(isDisplayed()))
+            onView(withId(R.id.backup_app)).inRoot(popupRoot).check(matches(isDisplayed()))
+            onView(withId(R.id.permissions_app)).inRoot(popupRoot).check(matches(isDisplayed()))
+            onView(withId(R.id.delete_app)).inRoot(popupRoot).check(matches(isDisplayed()))
             onView(isRoot()).inRoot(popupRoot).perform(ViewActions.pressBack())
             instrumentation.waitForIdleSync()
             pressBack()

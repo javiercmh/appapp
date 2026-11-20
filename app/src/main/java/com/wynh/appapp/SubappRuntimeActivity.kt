@@ -9,7 +9,6 @@ import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.widget.FrameLayout
-import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
@@ -66,11 +65,22 @@ class SubappRuntimeActivity : AppCompatActivity(), UpdatableSubappSession {
         if (record == null) {
             runtimeSession?.close(); runtimeSession = null
             webView?.destroy(); webView = null
-            setContentView(TextView(this).apply {
-                text = "App no longer available"
-                textSize = 20f
-                gravity = android.view.Gravity.CENTER
-            })
+            activeId?.let { SubappSessionRegistry.unregister(it, this) }
+            val content = layoutInflater.inflate(R.layout.activity_unavailable_subapp, null)
+            setContentView(content)
+            ViewCompat.setOnApplyWindowInsetsListener(content) { view, insets ->
+                val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+                view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+                insets
+            }
+            ViewCompat.requestApplyInsets(content)
+            content.findViewById<android.view.View>(R.id.open_your_apps).setOnClickListener {
+                startActivity(Intent(this, SubappLibraryActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                    putExtra(SubappLibraryActivity.EXTRA_SHOW_YOUR_APPS, true)
+                })
+                finish()
+            }
             activeId = null
             return
         }

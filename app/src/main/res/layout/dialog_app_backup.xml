@@ -101,7 +101,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="44dp"
+                android:layout_marginTop="4dp"
                 android:layout_marginBottom="8dp"
                 android:text="@string/history_scope"
                 android:textColor="@color/on_surface_muted"
@@ -111,7 +111,7 @@
                 android:id="@+id/history_empty_state"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="44dp"
+
                 android:paddingVertical="8dp"
                 android:text="@string/history_loading"
                 android:textColor="@color/on_surface_muted"
@@ -121,7 +121,7 @@
                 android:id="@+id/backup_version_scroll"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="44dp"
+
                 android:layout_marginBottom="8dp"
                 android:fadeScrollbars="false"
                 android:overScrollMode="ifContentScrolls"
