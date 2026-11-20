@@ -62,13 +62,14 @@ class SubappRepository(private val context: Context) {
         return if (workspace.isDirectory || WorkspaceOperations.isBusy(workspace)) SubappRecord(id, dir) else null
     }
 
-    fun createStarter(): SubappRecord = publishNewApp { directory ->
+    fun createStarter(provenance: String? = null): SubappRecord = publishNewApp { directory ->
         val workspace = WorkspaceManager(context, workspaceDir = File(directory, "workspace"))
         check(workspace.resetWorkspace()) { "Could not initialize starter app" }
         check(WorkspaceHistoryManager(context, appDirectory = directory).captureInitialVersion(workspace, "Starter Template")) { "Could not save initial version" }
+        if (provenance != null) WorkspaceFiles.atomicWrite(File(directory, "import-source.json"), provenance.toByteArray(Charsets.UTF_8))
     }
 
-    fun createImportedFrom(sourceWorkspace: File, provenance: String? = null): SubappRecord = publishNewApp { directory ->
+    fun createImportedFrom(sourceWorkspace: File, provenance: String? = null, initialUpdateState: String? = null): SubappRecord = publishNewApp { directory ->
         require(sourceWorkspace.isDirectory && File(sourceWorkspace, "index.html").isFile) { "Imported app must contain index.html" }
         val destination = File(directory, "workspace")
         WorkspaceFiles.copyTree(sourceWorkspace, destination)
@@ -76,6 +77,7 @@ class SubappRepository(private val context: Context) {
         val manager = WorkspaceManager(context, workspaceDir = destination)
         check(WorkspaceHistoryManager(context, appDirectory = directory).captureInitialVersion(manager, "Imported App")) { "Could not save initial version" }
         if (provenance != null) WorkspaceFiles.atomicWrite(File(directory, "import-source.json"), provenance.toByteArray(Charsets.UTF_8))
+        if (initialUpdateState != null) WorkspaceFiles.atomicWrite(File(directory, "update-state.json"), initialUpdateState.toByteArray(Charsets.UTF_8))
     }
 
     private fun publishNewApp(build: (File) -> Unit): SubappRecord = synchronized(operationLock) {

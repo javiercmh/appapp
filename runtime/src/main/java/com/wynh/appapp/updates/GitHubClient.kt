@@ -6,6 +6,12 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
+ * A non-success HTTP status from GitHub. It stays an [IllegalArgumentException] so existing callers
+ * keep treating it as a failed request; callers that must tell a missing file apart check [status].
+ */
+class GitHubHttpException(val status: Int, message: String) : IllegalArgumentException(message)
+
+/**
  * Bounded HTTPS client shared by the GitHub importer and updater. Every response is streamed under a
  * per-response cap and a cumulative cap, the whole session has a deadline, and redirects are never
  * followed automatically: up to [maxRedirects] hops are followed only when they stay on https and
@@ -45,7 +51,7 @@ class GitHubClient(
                         val body = connection.errorStream?.use { read(it, 64 * 1024, counted = false) } ?: byteArrayOf()
                         JsonParser.parseString(body.toString(Charsets.UTF_8)).asJsonObject.get("message").asString
                     }.getOrNull()?.takeIf { it.isNotBlank() }
-                    throw IllegalArgumentException("GitHub request failed ($status)" + (detail?.let { ": $it" } ?: "; check connectivity and repository access"))
+                    throw GitHubHttpException(status, "GitHub request failed ($status)" + (detail?.let { ": $it" } ?: "; check connectivity and repository access"))
                 }
                 return connection.inputStream.use { read(it, limit, counted = true) }
             } finally { connection.disconnect() }

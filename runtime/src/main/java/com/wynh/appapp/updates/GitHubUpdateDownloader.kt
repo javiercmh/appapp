@@ -102,9 +102,11 @@ class GitHubUpdateDownloader(private val cache: File, private val connect: (URL)
         reuse: (path: String, target: File) -> Boolean = { _, _ -> false },
         progress: (done: Int, total: Int) -> Unit = { _, _ -> },
     ): Download {
+        if (Thread.interrupted()) throw InterruptedException("Download cancelled")
         val client = GitHubClient(connect, USER_AGENT, MAX_BYTES, timeoutMillis = 5 * 60_000)
         val commit = knownCommit ?: JsonParser.parseString(client.get("https://api.github.com/repos/${repo(source)}/commits/${encode(source.branch)}", 1024 * 1024).toString(Charsets.UTF_8)).asJsonObject.get("sha").asString
         requireCommit(commit)
+        if (Thread.interrupted()) throw InterruptedException("Download cancelled")
         val root = "https://raw.githubusercontent.com/${repo(source)}/$commit/"
         val manifest = client.get(root + "manifest.json", MANIFEST_LIMIT)
         val pkg = UpdatePackage.parse(manifest.toString(Charsets.UTF_8))
@@ -140,10 +142,23 @@ class GitHubUpdateDownloader(private val cache: File, private val connect: (URL)
         val failed = AtomicBoolean(false)
         try {
             val futures = paths.map { path -> pool.submit(java.util.concurrent.Callable {
+                if (Thread.interrupted()) {
+                    failed.set(true)
+                    throw InterruptedException("Download cancelled")
+                }
                 if (!failed.get()) try { fetch(path) } catch (e: Throwable) { failed.set(true); throw e }
             }) }
             for (future in futures) {
-                try { future.get() } catch (e: ExecutionException) { throw (e.cause as? Exception) ?: e }
+                if (Thread.interrupted()) {
+                    failed.set(true)
+                    throw InterruptedException("Download cancelled")
+                }
+                try { future.get() }
+                catch (e: InterruptedException) {
+                    failed.set(true)
+                    throw e
+                }
+                catch (e: ExecutionException) { throw (e.cause as? Exception) ?: e }
             }
         } finally {
             pool.shutdown()
