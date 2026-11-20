@@ -5,11 +5,14 @@ import android.os.SystemClock
 import android.view.View
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.RecyclerView
+import androidx.viewpager2.widget.ViewPager2
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.Espresso.pressBack
 import androidx.test.espresso.action.ViewActions
 import androidx.test.espresso.action.ViewActions.click
+import androidx.test.espresso.action.ViewActions.swipeLeft
+import androidx.test.espresso.action.ViewActions.swipeRight
 import androidx.test.espresso.assertion.ViewAssertions.matches
 import androidx.test.espresso.matcher.RootMatchers.withDecorView
 import androidx.test.espresso.matcher.ViewMatchers.Visibility
@@ -93,10 +96,33 @@ class MarketplaceDeviceTest {
         ActivityScenario.launch<SubappLibraryActivity>(Intent(context, SubappLibraryActivity::class.java)).use { scenario ->
             instrumentation.waitForIdleSync()
             scenario.onActivity { activity ->
-                assertEquals(View.VISIBLE, activity.findViewById<View>(R.id.app_list).visibility)
-                assertEquals(View.GONE, activity.findViewById<View>(R.id.discover_list).visibility)
+                assertEquals(0, activity.findViewById<ViewPager2>(R.id.library_pager).currentItem)
                 val refreshItem = activity.findViewById<MaterialToolbar>(R.id.library_toolbar).menu.findItem(R.id.action_refresh_catalog)
-                assertFalse(refreshItem.isVisible)
+                assertTrue(refreshItem.isVisible)
+            }
+
+            onView(withId(R.id.library_pager)).perform(swipeLeft())
+            waitUntil("Swiping left did not move to Discover") {
+                var ready = false
+                scenario.onActivity { activity ->
+                    val pager = activity.findViewById<ViewPager2>(R.id.library_pager)
+                    val list = activity.findViewById<RecyclerView>(R.id.discover_list)
+                    ready = pager.currentItem == 1 &&
+                        activity.findViewById<BottomNavigationView>(R.id.library_bottom_nav).selectedItemId == R.id.nav_discover &&
+                        list.adapter?.itemCount == 4 &&
+                        list.findViewHolderForAdapterPosition(1) != null
+                }
+                ready
+            }
+
+            onView(withId(R.id.library_pager)).perform(swipeRight())
+            waitUntil("Swiping right did not return to Your apps") {
+                var ready = false
+                scenario.onActivity { activity ->
+                    ready = activity.findViewById<ViewPager2>(R.id.library_pager).currentItem == 0 &&
+                        activity.findViewById<BottomNavigationView>(R.id.library_bottom_nav).selectedItemId == R.id.nav_your_apps
+                }
+                ready
             }
 
             onView(withId(R.id.nav_discover)).perform(click())
@@ -105,8 +131,9 @@ class MarketplaceDeviceTest {
             waitUntil("Discover cards did not bind") {
                 var ready = false
                 scenario.onActivity { activity ->
+                    val pager = activity.findViewById<ViewPager2>(R.id.library_pager)
                     val list = activity.findViewById<RecyclerView>(R.id.discover_list)
-                    ready = list.visibility == View.VISIBLE &&
+                    ready = pager.currentItem == 1 &&
                         list.adapter?.itemCount == 4 &&
                         list.findViewHolderForAdapterPosition(1) != null
                 }
@@ -114,8 +141,7 @@ class MarketplaceDeviceTest {
             }
 
             scenario.onActivity { activity ->
-                assertEquals(View.GONE, activity.findViewById<View>(R.id.app_list).visibility)
-                assertEquals(View.VISIBLE, activity.findViewById<View>(R.id.discover_list).visibility)
+                assertEquals(1, activity.findViewById<ViewPager2>(R.id.library_pager).currentItem)
                 val refreshItem = activity.findViewById<MaterialToolbar>(R.id.library_toolbar).menu.findItem(R.id.action_refresh_catalog)
                 assertTrue(refreshItem.isVisible)
                 activity.findViewById<RecyclerView>(R.id.discover_list)
@@ -139,8 +165,7 @@ class MarketplaceDeviceTest {
 
             scenario.onActivity { activity ->
                 assertEquals(R.id.nav_discover, activity.findViewById<BottomNavigationView>(R.id.library_bottom_nav).selectedItemId)
-                assertEquals(View.VISIBLE, activity.findViewById<View>(R.id.discover_list).visibility)
-                assertEquals(View.GONE, activity.findViewById<View>(R.id.app_list).visibility)
+                assertEquals(1, activity.findViewById<ViewPager2>(R.id.library_pager).currentItem)
             }
         }
     }

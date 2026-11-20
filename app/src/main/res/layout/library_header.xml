@@ -21,7 +21,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:layout_marginBottom="4dp"
+        android:layout_marginBottom="10dp"
         android:gravity="center_vertical"
         android:orientation="horizontal">
 
@@ -33,22 +33,6 @@
             android:accessibilityHeading="true"
             android:textAppearance="@style/TextAppearance.Material3.TitleSmall"
             android:textColor="@color/on_surface_muted" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/check_app_updates"
-            style="@style/Widget.Material3.Button.TextButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minWidth="0dp"
-            android:minHeight="48dp"
-            android:paddingHorizontal="10dp"
-            android:text="@string/updates_check_short"
-            android:textAllCaps="false"
-            android:textColor="@color/accent_blue"
-            app:icon="@drawable/ic_refresh"
-            app:iconPadding="6dp"
-            app:iconSize="18dp"
-            app:iconTint="@color/accent_blue" />
     </LinearLayout>
 
     <TextView

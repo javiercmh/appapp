@@ -20,26 +20,78 @@
         app:titleTextAppearance="@style/TextAppearance.Material3.TitleLarge"
         app:titleTextColor="@color/on_surface" />
 
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/host_update_banner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginTop="4dp"
+        android:layout_marginBottom="4dp"
+        android:visibility="gone"
+        app:cardBackgroundColor="@color/surface_trust"
+        app:cardCornerRadius="14dp"
+        app:cardElevation="0dp"
+        app:strokeColor="@color/chip_sync_border"
+        app:strokeWidth="1dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="14dp"
+            android:paddingTop="4dp"
+            android:paddingEnd="4dp"
+            android:paddingBottom="4dp">
+
+            <View
+                android:layout_width="8dp"
+                android:layout_height="8dp"
+                android:background="@drawable/update_dot" />
+
+            <TextView
+                android:id="@+id/host_update_banner_text"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
+                android:layout_weight="1"
+                android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
+                android:textColor="@color/on_surface" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/host_update_banner_action"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="0dp"
+                android:minHeight="40dp"
+                android:paddingHorizontal="12dp"
+                android:text="@string/updates_banner_view"
+                android:textAllCaps="false"
+                android:textColor="@color/accent_blue" />
+
+            <ImageButton
+                android:id="@+id/host_update_banner_dismiss"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/updates_banner_dismiss"
+                android:padding="10dp"
+                android:src="@drawable/ic_close"
+                app:tint="@color/on_surface_muted" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
     <FrameLayout
         android:id="@+id/library_content"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1">
 
-        <com.wynh.appapp.LibraryRecyclerView
-            android:id="@+id/app_list"
+        <androidx.viewpager2.widget.ViewPager2
+            android:id="@+id/library_pager"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:clipToPadding="false"
-            android:paddingBottom="24dp" />
-
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/discover_list"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:clipToPadding="false"
-            android:paddingBottom="24dp"
-            android:visibility="gone" />
+            android:layout_height="match_parent" />
     </FrameLayout>
 
     <View

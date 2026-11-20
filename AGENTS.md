@@ -101,6 +101,13 @@ Each app's `WebView` loads `https://<id>.app.local/index.html`. Requests for tha
 3. **Editor Responsiveness & Flow**:
    - Dialog toolbars must remain horizontally scrollable (`HorizontalScrollView`) to accommodate narrow screens.
    - When closing the single-file editor with unsaved changes, prompt the user for confirmation.
+4. **Library, Discover & Settings UI Guidelines**:
+   - **Consistent Top Bar & Swipeable Tabs**: Keep the library toolbar identical across **Your apps** and **Discover** (`App²` brand, unified `↻` refresh/update icon, `+ Import` tonal pill, `⚙` Settings). Host both tabs in a `ViewPager2` synced with `BottomNavigationView` so users can tap or swipe left/right between them; disable `ViewPager2` user input (`isUserInputEnabled = false`) while long-press drag-to-reorder is active so horizontal wobble never triggers a page swipe.
+   - **Unified Refresh & Non-Intrusive Update Feedback**: The top-bar `↻` spins in place while refreshing the Discover catalog and checking both App² and installed subapps in parallel. Do not pop up a modal dialog on every check: show a compact dismissible top banner when a newer App² release is found, light up card update chips/buttons plus a snackbar with **Review** when subapp updates are found, and show a brief snackbar when everything is up to date. Keep the explicit `Check updates` modal dialog in **Settings → About**.
+   - **Single-Step Import**: Use the top-bar `+ Import` pill to open one Import bottom sheet covering ZIP import, public GitHub repo/folder import, and starting from the Starter Demo template.
+   - **Discover Card Density**: Main Discover list cards show icon, name, category only, short summary, primary action, and capability chips; keep author attribution (`by <author>`), repository link, and specs in the Discover detail bottom sheet. Render catalog sync status as a quiet unboxed caption under the Discover subtitle.
+   - **Quiet Reorder Hint**: On **Your apps**, show the drag-to-reorder hint (`Long press an app to reorder`) as a subtle list footer only when 2 or more apps are installed — never as header subtext.
+   - **Grouped Settings**: Organize App² Settings into grouped sections (`AI`, `APPS & DATA`, `PERMISSIONS`, `ABOUT`). Collapse Notifications to a single status row when both notifications and exact alarms are granted, expanding the controls only when action is needed. Present Back up and Restore side-by-side with the last-backup timestamp.
 
 ---
 

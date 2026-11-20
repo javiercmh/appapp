@@ -73,6 +73,16 @@ import org.json.JSONObject
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.ItemTouchHelper
+import androidx.viewpager2.widget.ViewPager2
+import android.content.ActivityNotFoundException
+import androidx.core.net.toUri
+import com.wynh.appapp.updates.GitHubSource
+import com.wynh.appapp.updates.SubappUpdateIndicators
+import com.wynh.appapp.updates.VersionUpdateChecker
+import com.wynh.appapp.updates.WorkspaceUpdater
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
 import com.wynh.appapp.databinding.LibraryHeaderBinding
 
 class SubappLibraryActivity : AppCompatActivity() {
@@ -196,6 +206,8 @@ class SubappLibraryActivity : AppCompatActivity() {
 
     private var rowsReady = false
     private val displayedRecords = mutableListOf<SubappRecord>()
+    private lateinit var appList: LibraryRecyclerView
+    private lateinit var discoverList: RecyclerView
     private lateinit var header: LibraryHeaderBinding
     private lateinit var libraryAdapter: LibraryAdapter
     private lateinit var discoverAdapter: DiscoverAdapter
@@ -206,6 +218,9 @@ class SubappLibraryActivity : AppCompatActivity() {
     private var selectedTabId: Int = R.id.nav_your_apps
     private var currentProvenance = emptyMap<String, InstalledProvenance>()
     private var currentMarketplace = LibraryController.MarketplaceState()
+    private var updateCheckJob: Job? = null
+    private var updateCheckBusy = false
+    private var hostUpdateRelease: VersionUpdateChecker.Release? = null
     private var detailSheet: BottomSheetDialog? = null
     private val importLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) importApp(uri)
@@ -274,7 +289,6 @@ class SubappLibraryActivity : AppCompatActivity() {
                 launch { library.task.collect { task ->
                     binding.libraryToolbar.menu.findItem(R.id.action_import).actionView?.isEnabled = !task.busy
                     header.emptyImportApp.isEnabled = !task.busy
-                    header.checkAppUpdates.isEnabled = !task.busy
                     if (rowsReady) refreshDiscover()
                     if (task.busy && !task.showProgress) return@collect
                     if (task.busy) {
@@ -421,25 +435,53 @@ class SubappLibraryActivity : AppCompatActivity() {
                     true
                 }
                 R.id.action_refresh_catalog -> {
-                    library.refreshMarketplace()
+                    refreshAll()
                     true
                 }
                 else -> false
             }
         }
-        binding.appList.layoutManager = LinearLayoutManager(this)
-        header = LibraryHeaderBinding.inflate(layoutInflater, binding.appList, false)
-        libraryAdapter = LibraryAdapter()
-        binding.appList.adapter = libraryAdapter
-        binding.appList.onDragCancelled = { dragCancelled = true }
+        binding.hostUpdateBannerAction.setOnClickListener {
+            val url = hostUpdateRelease?.url ?: return@setOnClickListener
+            try {
+                startActivity(Intent(Intent.ACTION_VIEW, url.toUri()))
+            } catch (_: ActivityNotFoundException) {
+                Toast.makeText(this, R.string.updates_browser_missing, Toast.LENGTH_SHORT).show()
+            }
+        }
+        binding.hostUpdateBannerDismiss.setOnClickListener {
+            hostUpdateRelease = null
+            binding.hostUpdateBanner.visibility = View.GONE
+        }
 
-        binding.discoverList.layoutManager = LinearLayoutManager(this)
+        appList = layoutInflater.inflate(R.layout.page_library_apps, binding.libraryPager, false) as LibraryRecyclerView
+        discoverList = layoutInflater.inflate(R.layout.page_library_discover, binding.libraryPager, false) as RecyclerView
+        appList.layoutManager = LinearLayoutManager(this)
+        header = LibraryHeaderBinding.inflate(layoutInflater, appList, false)
+        libraryAdapter = LibraryAdapter()
+        appList.adapter = libraryAdapter
+        appList.onDragCancelled = { dragCancelled = true }
+
+        discoverList.layoutManager = LinearLayoutManager(this)
         discoverAdapter = DiscoverAdapter(
             inflater = layoutInflater,
             onCardClick = { state -> showCatalogDetail(state) },
             onPrimaryAction = { state -> handleCatalogPrimaryAction(state) },
         )
-        binding.discoverList.adapter = discoverAdapter
+        discoverList.adapter = discoverAdapter
+
+        binding.libraryPager.offscreenPageLimit = 1
+        binding.libraryPager.adapter = LibraryPagerAdapter(listOf(appList, discoverList))
+        binding.libraryPager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
+            override fun onPageSelected(position: Int) {
+                val tabId = if (position == 1) R.id.nav_discover else R.id.nav_your_apps
+                if (tabId != R.id.nav_your_apps) finishReorder(commit = false)
+                selectedTabId = tabId
+                if (binding.libraryBottomNav.selectedItemId != tabId) {
+                    binding.libraryBottomNav.selectedItemId = tabId
+                }
+            }
+        })
 
         touchHelper = ItemTouchHelper(object : ItemTouchHelper.Callback() {
             override fun getMovementFlags(rv: RecyclerView, holder: RecyclerView.ViewHolder): Int =
@@ -471,6 +513,7 @@ class SubappLibraryActivity : AppCompatActivity() {
             override fun onSelectedChanged(holder: RecyclerView.ViewHolder?, actionState: Int) {
                 super.onSelectedChanged(holder, actionState)
                 if (actionState == ItemTouchHelper.ACTION_STATE_DRAG) {
+                    binding.libraryPager.isUserInputEnabled = false
                     reorderOriginal = displayedRecords.toList()
                     dragCancelled = false
                     holder?.itemView?.translationZ = resources.displayMetrics.density * 12
@@ -479,12 +522,14 @@ class SubappLibraryActivity : AppCompatActivity() {
                         strokeWidth = (2 * resources.displayMetrics.density).toInt()
                     }
                     holder?.itemView?.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
-                } else if (actionState == ItemTouchHelper.ACTION_STATE_IDLE) finishReorder(!dragCancelled)
+                } else if (actionState == ItemTouchHelper.ACTION_STATE_IDLE) {
+                    binding.libraryPager.isUserInputEnabled = true
+                    finishReorder(!dragCancelled)
+                }
             }
         })
-        touchHelper.attachToRecyclerView(binding.appList)
+        touchHelper.attachToRecyclerView(appList)
         header.emptyImportApp.setOnClickListener { showNewAppMenu() }
-        header.checkAppUpdates.setOnClickListener { showUpdates() }
         header.emptyBrowseApps.setOnClickListener { selectTab(R.id.nav_discover) }
 
         binding.libraryBottomNav.selectedItemId = selectedTabId
@@ -493,12 +538,12 @@ class SubappLibraryActivity : AppCompatActivity() {
             true
         }
         binding.libraryBottomNav.setOnItemReselectedListener { item ->
-            if (item.itemId == R.id.nav_discover) binding.discoverList.smoothScrollToPosition(0)
-            else binding.appList.smoothScrollToPosition(0)
+            if (item.itemId == R.id.nav_discover) discoverList.smoothScrollToPosition(0)
+            else appList.smoothScrollToPosition(0)
         }
 
         rowsReady = true
-        applySelectedTab()
+        applySelectedTab(smooth = false)
         refreshDiscover()
         refreshRows()
     }
@@ -510,26 +555,130 @@ class SubappLibraryActivity : AppCompatActivity() {
         if (binding.libraryBottomNav.selectedItemId != tabId) {
             binding.libraryBottomNav.selectedItemId = tabId
         }
-        applySelectedTab()
+        applySelectedTab(smooth = true)
     }
 
-    private fun applySelectedTab() {
-        val isDiscover = selectedTabId == R.id.nav_discover
-        binding.appList.visibility = if (isDiscover) View.GONE else View.VISIBLE
-        binding.discoverList.visibility = if (isDiscover) View.VISIBLE else View.GONE
-        binding.libraryToolbar.menu.findItem(R.id.action_refresh_catalog)?.isVisible = isDiscover
+    private fun applySelectedTab(smooth: Boolean = false) {
+        val target = if (selectedTabId == R.id.nav_discover) 1 else 0
+        if (binding.libraryPager.currentItem != target) {
+            binding.libraryPager.setCurrentItem(target, smooth)
+        }
         updateCatalogRefreshIndicator()
     }
 
     private fun updateCatalogRefreshIndicator() {
         val refresh = binding.libraryToolbar.menu.findItem(R.id.action_refresh_catalog) ?: return
-        val refreshing = currentMarketplace.refreshing
+        val refreshing = currentMarketplace.refreshing || updateCheckBusy
         refresh.isEnabled = !refreshing
         if (refreshing && refresh.actionView == null) {
             refresh.actionView = layoutInflater.inflate(R.layout.action_catalog_refresh, binding.libraryToolbar, false)
         } else if (!refreshing) {
             refresh.actionView = null
         }
+    }
+
+    /** Refreshes Discover and silently checks App² + installed subapps for updates. */
+    private fun refreshAll() {
+        library.refreshMarketplace()
+        if (updateCheckJob?.isActive == true) return
+        updateCheckBusy = true
+        updateCatalogRefreshIndicator()
+        val checker = VersionUpdateChecker()
+        val indicators = SubappUpdateIndicators.of(this)
+        updateCheckJob = lifecycleScope.launch {
+            var hostNewer = false
+            var hostFailed = false
+            val found = mutableListOf<SubappRecord>()
+            var failures = 0
+            var apps = emptyList<SubappRecord>()
+            try {
+                try {
+                    val latest = withContext(Dispatchers.IO) { checker.hostRelease(BuildConfig.BUILD_TYPE == "dev") }
+                    hostNewer = latest?.isNewer(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE.toLong(), BuildConfig.BUILD_TYPE == "dev") == true
+                    if (hostNewer && latest != null) {
+                        hostUpdateRelease = latest
+                        binding.hostUpdateBannerText.text = getString(R.string.updates_banner_host, latest.version)
+                        binding.hostUpdateBanner.visibility = View.VISIBLE
+                    } else {
+                        hostUpdateRelease = null
+                        binding.hostUpdateBanner.visibility = View.GONE
+                    }
+                } catch (e: CancellationException) { throw e }
+                catch (_: Exception) { hostFailed = true }
+
+                apps = withContext(Dispatchers.IO) { repository.list() }
+                val lookups = mutableMapOf<GitHubSource, Result<VersionUpdateChecker.PublishedVersion>>()
+                for (record in apps) {
+                    ensureActive()
+                    try {
+                        val available = withContext(Dispatchers.IO) {
+                            val updater = WorkspaceUpdater(record.directory)
+                            val source = updater.installed()?.source
+                            if (source == null) null else {
+                                val published = lookups.getOrPut(source) { runCatching { checker.subapp(source) } }.getOrThrow()
+                                if (VersionUpdateChecker.newer(published.version, updater.currentVersion())) published else null
+                            }
+                        }
+                        ensureActive()
+                        if (available == null) {
+                            indicators.clear(record.id)
+                        } else {
+                            val stillNewer = withContext(Dispatchers.IO) {
+                                val updater = WorkspaceUpdater(record.directory)
+                                updater.installed()?.source == available.source &&
+                                    VersionUpdateChecker.newer(available.version, updater.currentVersion())
+                            }
+                            ensureActive()
+                            if (stillNewer) {
+                                indicators.record(record.id, available)
+                                found.add(record)
+                            } else {
+                                indicators.clear(record.id)
+                            }
+                        }
+                    } catch (e: CancellationException) { throw e }
+                    catch (_: Exception) { failures++ }
+                    refreshUpdateIndicators()
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } finally {
+                updateCheckBusy = false
+                updateCatalogRefreshIndicator()
+            }
+
+            when {
+                found.isNotEmpty() -> {
+                    val text = resources.getQuantityString(R.plurals.updates_subapps_found, found.size, found.size)
+                    Snackbar.make(binding.libraryContent, text, Snackbar.LENGTH_LONG)
+                        .setAction(R.string.updates_snackbar_review) { reviewUpdates(found) }
+                        .show()
+                }
+                hostNewer -> Unit
+                hostFailed && failures == apps.size -> {
+                    Snackbar.make(binding.libraryContent, R.string.updates_snackbar_failed, Snackbar.LENGTH_SHORT).show()
+                }
+                hostFailed || failures > 0 -> {
+                    Snackbar.make(binding.libraryContent, R.string.updates_snackbar_partial_failed, Snackbar.LENGTH_SHORT).show()
+                }
+                else -> {
+                    Snackbar.make(binding.libraryContent, R.string.updates_snackbar_up_to_date, Snackbar.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private class LibraryPagerAdapter(private val pages: List<View>) : RecyclerView.Adapter<LibraryPagerAdapter.PageHolder>() {
+        class PageHolder(view: View) : RecyclerView.ViewHolder(view)
+        override fun getItemCount() = pages.size
+        override fun getItemViewType(position: Int) = position
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): PageHolder {
+            val page = pages[viewType]
+            (page.parent as? ViewGroup)?.removeView(page)
+            page.layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+            return PageHolder(page)
+        }
+        override fun onBindViewHolder(holder: PageHolder, position: Int) = Unit
     }
 
     private fun refreshDiscover() {
@@ -568,10 +717,10 @@ class SubappLibraryActivity : AppCompatActivity() {
         val first = displayedRecords.indexOfFirst { record -> copies.any { it.id == record.id } }
         if (first < 0) return
         val copyIds = copies.map { it.id }.toSet()
-        binding.appList.scrollToPosition(first + 1)
-        binding.appList.post {
-            for (index in 0 until binding.appList.childCount) {
-                val holder = binding.appList.getChildViewHolder(binding.appList.getChildAt(index)) as? AppHolder ?: continue
+        appList.scrollToPosition(first + 1)
+        appList.post {
+            for (index in 0 until appList.childCount) {
+                val holder = appList.getChildViewHolder(appList.getChildAt(index)) as? AppHolder ?: continue
                 val record = displayedRecords.getOrNull(holder.bindingAdapterPosition - 1) ?: continue
                 if (record.id !in copyIds) continue
                 val card = holder.row.appCard
@@ -800,7 +949,6 @@ class SubappLibraryActivity : AppCompatActivity() {
         header.emptyImportApp.visibility = emptyVis
         header.appCountRow.visibility = if (displayedRecords.isEmpty()) View.GONE else View.VISIBLE
         header.appCount.visibility = header.appCountRow.visibility
-        header.checkAppUpdates.visibility = header.appCountRow.visibility
         diff.dispatchUpdatesTo(object : androidx.recyclerview.widget.ListUpdateCallback {
             override fun onInserted(position: Int, count: Int) { libraryAdapter.notifyItemRangeInserted(position + 1, count) }
             override fun onRemoved(position: Int, count: Int) { libraryAdapter.notifyItemRangeRemoved(position + 1, count) }
@@ -955,7 +1103,7 @@ class SubappLibraryActivity : AppCompatActivity() {
         if (!commit) {
             displayedRecords.clear()
             displayedRecords.addAll(original)
-            binding.appList.post { libraryAdapter.notifyDataSetChanged() }
+            appList.post { libraryAdapter.notifyDataSetChanged() }
             return
         }
         if (displayedRecords.map { it.id } == original.map { it.id }) return

@@ -258,6 +258,14 @@
     <string name="marketplace_cap_builtin">Built-in</string>
     <string name="updates_check_subapps">Check for app updates</string>
     <string name="updates_check_short">Check updates</string>
+    <string name="updates_refresh_all">Refresh and check updates</string>
+    <string name="updates_banner_host">App² %1$s available</string>
+    <string name="updates_banner_view">View</string>
+    <string name="updates_banner_dismiss">Dismiss</string>
+    <string name="updates_snackbar_up_to_date">Everything is up to date</string>
+    <string name="updates_snackbar_review">Review</string>
+    <string name="updates_snackbar_failed">Couldn’t check for updates</string>
+    <string name="updates_snackbar_partial_failed">Couldn’t check some apps</string>
     <string name="library_github_example">Example: owner/repo</string>
     <string name="library_github_short_hint">e.g. owner/repo or a public folder link with index.html</string>
     <string name="library_import_or">or</string>
