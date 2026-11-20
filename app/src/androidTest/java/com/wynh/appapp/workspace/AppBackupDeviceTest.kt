@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.SystemClock
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.onView
+import androidx.test.espresso.Espresso.pressBack
 import androidx.test.espresso.action.ViewActions.click
 import androidx.test.espresso.action.ViewActions.closeSoftKeyboard
 import androidx.test.espresso.action.ViewActions.replaceText
@@ -106,7 +107,8 @@ class AppBackupDeviceTest {
                 val sharedZip = checkNotNull(send.getParcelableExtra<Uri>(Intent.EXTRA_STREAM))
                 assertEquals("application/zip", send.type)
                 assertArrayEquals(asset.readBytes(), zipEntries(sharedZip)["fixture.bin"])
-                onView(withId(R.id.package_btn_close)).inRoot(isDialog()).perform(click())
+                onView(withId(R.id.backup_close)).inRoot(isDialog())
+                    .check(matches(androidx.test.espresso.matcher.ViewMatchers.isDisplayed()))
             } finally {
                 instrumentation.removeMonitor(monitor)
             }
@@ -161,6 +163,24 @@ class AppBackupDeviceTest {
         }
     }
 
+    @Test fun backupDialogSurvivesCanceledExportAndBackingOutOfShare() = withApp { record, scenario ->
+        chooseBackup(record, scenario, R.string.library_share)
+        onView(withId(R.id.package_btn_share_zip)).inRoot(isDialog())
+            .check(matches(androidx.test.espresso.matcher.ViewMatchers.isDisplayed()))
+        pressBack()
+        val backupClose = onView(withId(R.id.backup_close)).inRoot(isDialog())
+        backupClose.check(matches(androidx.test.espresso.matcher.ViewMatchers.isDisplayed()))
+
+        withResult(Intent.ACTION_CREATE_DOCUMENT, null) {
+            onView(withText(R.string.app_backup_export)).inRoot(isDialog()).perform(click())
+            backupClose.check(matches(androidx.test.espresso.matcher.ViewMatchers.isDisplayed()))
+        }
+        scenario.recreate()
+        backupClose.perform(click())
+        onView(withText(R.string.app_backup_title))
+            .check(androidx.test.espresso.assertion.ViewAssertions.doesNotExist())
+    }
+
     @Test fun longVersionHistoryScrollsWithBackupActionsVisible() = withApp { record, scenario ->
         val history = WorkspaceHistoryManager(context, appDirectory = record.directory)
         val manager = WorkspaceManager(context, workspaceDir = record.workspaceDir)
@@ -199,11 +219,14 @@ class AppBackupDeviceTest {
         onView(withText(action)).inRoot(isDialog()).perform(click())
     }
 
-    private fun withResult(action: String, file: File, block: () -> Unit) {
+    private fun withResult(action: String, file: File?, block: () -> Unit) {
         val monitor = object : Instrumentation.ActivityMonitor() {
             override fun onStartActivity(intent: Intent): Instrumentation.ActivityResult? =
-                if (intent.action == action) Instrumentation.ActivityResult(Activity.RESULT_OK, Intent().setData(Uri.fromFile(file)))
-                else null
+                when {
+                    intent.action != action -> null
+                    file == null -> Instrumentation.ActivityResult(Activity.RESULT_CANCELED, null)
+                    else -> Instrumentation.ActivityResult(Activity.RESULT_OK, Intent().setData(Uri.fromFile(file)))
+                }
         }
         instrumentation.addMonitor(monitor)
         try {

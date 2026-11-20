@@ -121,6 +121,7 @@ class SubappLibraryActivity : AppCompatActivity() {
     private val workspaceActions by lazy { ViewModelProvider(this)[WorkspaceActionController::class.java] }
     private var configDialog: Dialog? = null
     private var backupDialog: Dialog? = null
+    private var backupRecordId: String? = null
     private var configuringRecord: SubappRecord? = null
     private var pendingConfigIcon: ByteArray? = null
     private var resetConfigIcon = false
@@ -273,6 +274,8 @@ class SubappLibraryActivity : AppCompatActivity() {
             val rawName = nameInput.text?.toString() ?: ""
             val customPackageName = WorkspacePackageManager.sanitizePackageName(rawName, "my_app")
 
+            if (library.task.value.busy) return@setOnClickListener
+            dialog.dismiss()
             library.export(record.id, selectedFiles.toSet(), null, customPackageName)
         }
 
@@ -315,6 +318,7 @@ class SubappLibraryActivity : AppCompatActivity() {
 
         showLibrary()
         restoringConfig?.let(::showConfigure)
+        savedInstanceState?.getString("backup_app_id")?.let(repository::resolve)?.let(::reopenBackup)
         com.wynh.appapp.runtime.WorkspaceOperationUi.bindWithFailures(this, onFailure = { guidedUpdates?.failed(it) == true }) { completion ->
             when (completion.kind) {
                 WorkspaceActionController.Kind.UPDATED -> {
@@ -425,6 +429,7 @@ class SubappLibraryActivity : AppCompatActivity() {
         outState.putBoolean("config_reset_icon", resetConfigIcon)
         outState.putString("config_name", configNameInput?.text?.toString() ?: configNameDraft)
         outState.putString("config_description", configDescriptionInput?.text?.toString() ?: configDescriptionDraft)
+        outState.putString("backup_app_id", backupRecordId)
         outState.putString("export_app_id", pendingExportId)
         outState.putInt(STATE_SELECTED_TAB, selectedTabId)
         super.onSaveInstanceState(outState)
@@ -933,7 +938,13 @@ class SubappLibraryActivity : AppCompatActivity() {
         backupDialog?.dismiss()
         val dialog = Dialog(this)
         backupDialog = dialog
-        dialog.setOnDismissListener { if (backupDialog === dialog) backupDialog = null }
+        backupRecordId = record.id
+        dialog.setOnDismissListener {
+            if (backupDialog === dialog) {
+                backupDialog = null
+                backupRecordId = null
+            }
+        }
         dialog.setContentView(content.root)
         content.backupAppName.text = name
         content.backupClose.setOnClickListener { dialog.dismiss() }
@@ -942,10 +953,7 @@ class SubappLibraryActivity : AppCompatActivity() {
             val row = com.wynh.appapp.databinding.ItemAppBackupActionBinding.inflate(layoutInflater, content.backupActions, true)
             row.backupActionIcon.setImageResource(icon)
             row.backupActionTitle.setText(title)
-            row.root.setOnClickListener {
-                dialog.dismiss()
-                open()
-            }
+            row.root.setOnClickListener { open() }
         }
 
         addAction(R.drawable.ic_download, R.string.app_backup_export) {
