@@ -247,7 +247,6 @@
         <item quantity="other">Installed %1$d times. Open, edit or remove each copy in Your apps.</item>
     </plurals>
     <string name="marketplace_already_installed">%1$s is already installed. To add another copy, use + in Your apps.</string>
-    <string name="marketplace_card_meta_with_author">%1$s · by %2$s</string>
     <string name="marketplace_cap_ai">AI</string>
     <string name="marketplace_cap_speech">Speech</string>
     <string name="marketplace_cap_reminders">Reminders</string>

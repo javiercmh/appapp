@@ -110,12 +110,7 @@ internal class DiscoverAdapter(
 
         MarketplaceUi.bindIcon(app, cachedIcons[app.id], row.catalogIconBg, row.catalogIconVector, row.catalogIconImage)
         row.catalogName.text = app.name
-        val author = state.resolvedAuthor
-        row.catalogMeta.text = if (author != null) {
-            context.getString(R.string.marketplace_card_meta_with_author, app.category, author)
-        } else {
-            app.category
-        }
+        row.catalogMeta.text = app.category
         row.catalogSummary.text = app.summary
 
         val installed = state.installedRecords.isNotEmpty()
