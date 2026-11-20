@@ -2,6 +2,8 @@ package com.wynh.appapp.workspace
 
 import android.content.Context
 import com.wynh.appapp.settings.AppSettingsManager
+import com.wynh.appapp.updates.UpdatePackage
+import com.wynh.appapp.updates.WorkspaceUpdater
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -247,9 +249,9 @@ class WorkspaceHistoryManager(
     }
 
     /**
-     * Reverts all workspace files to the contents in the specified snapshot.
+     * Restores captured text files, optionally limiting changes to known app files.
      */
-    fun restoreSnapshot(snapshotId: String, workspaceManager: WorkspaceManager): Boolean = synchronized(com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(workspaceManager.workspaceDir)) {
+    fun restoreSnapshot(snapshotId: String, workspaceManager: WorkspaceManager, includePersonalFiles: Boolean = true): Boolean = synchronized(com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(workspaceManager.workspaceDir)) {
         return@synchronized try {
             val snapshots = getSnapshots()
             val target = snapshots.find { it.id == snapshotId } ?: run {
@@ -261,7 +263,8 @@ class WorkspaceHistoryManager(
                 "Could not save current version before restore"
             }
 
-            val result = WorkspaceOperations.restoreText(workspaceManager.workspaceDir, target.files)
+            val paths = if (includePersonalFiles) null else appPaths(workspaceManager, target)
+            val result = WorkspaceOperations.restoreText(workspaceManager.workspaceDir, target.files, paths)
             if (result.keptUnreadable.isNotEmpty()) log("[History] Left untouched (not valid UTF-8 text): ${result.keptUnreadable.joinToString()}")
             if (result.ignoredEntries.isNotEmpty()) log("[History] Skipped snapshot entries of unsupported types: ${result.ignoredEntries.joinToString()}")
 
@@ -270,6 +273,35 @@ class WorkspaceHistoryManager(
         } catch (e: Exception) {
             log("[History Error] Failed to restore snapshot: ${e.message}")
             false
+        }
+    }
+
+    private fun appPaths(manager: WorkspaceManager, target: WorkspaceSnapshot): Set<String> {
+        val installed = runCatching { WorkspaceUpdater(appDirectory).installed() }.getOrNull()
+        val managed = linkedSetOf("index.html", "manifest.json")
+        val seeds = installed?.seeds.orEmpty().toMutableSet()
+        managed += installed?.hashes?.keys.orEmpty()
+
+        val currentManifest = runCatching { manager.readFile("manifest.json") }.getOrNull()
+        for (manifest in listOfNotNull(currentManifest, target.files["manifest.json"])) {
+            val update = runCatching { UpdatePackage.parse(manifest) }.getOrNull()
+            if (update != null) {
+                managed += update.managed
+                seeds += update.seeds
+            } else {
+                val files = runCatching {
+                    val json = JSONObject(manifest)
+                    if (json.has("app2Update")) null else json.optJSONArray("files")
+                }.getOrNull()
+                if (files != null) {
+                    for (i in 0 until files.length()) managed += files.optString(i)
+                }
+            }
+        }
+        // Data and seed files are editable by the user, even when the publisher ships defaults.
+        return managed.filterTo(linkedSetOf()) {
+            it !in seeds && it != "app.log" && it != "data" && !it.startsWith("data/") &&
+                WorkspaceFiles.normalize(it) == it
         }
     }
 

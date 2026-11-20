@@ -6,7 +6,6 @@ import android.os.SystemClock
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import com.wynh.appapp.MainActivity
 import com.wynh.appapp.R
 import com.wynh.appapp.SubappRuntimeActivity
 import com.wynh.appapp.workspace.SubappRepository
@@ -33,7 +32,7 @@ class SpeechDeviceTest {
         }
         fail("Timed out: $expression"); return ""
     }
-    @Test fun speechApiInEditorAndStandalone() {
+    @Test fun speechApiInRuntime() {
         val context = instrumentation.targetContext
         val repository = SubappRepository(context); repository.ensureMigrated()
         val record = repository.createStarter()
@@ -45,15 +44,13 @@ class SpeechDeviceTest {
                 println("Fixture SHA256 $path: " + java.security.MessageDigest.getInstance("SHA-256").digest(actual).joinToString("") { "%02x".format(it) })
             }
             val intents = listOf(
-                Intent(context, MainActivity::class.java).putExtra(MainActivity.EXTRA_SUBAPP_ID, record.id),
                 Intent(context, SubappRuntimeActivity::class.java).setData(Uri.parse("appapp://subapp/${record.id}"))
             )
             for (intent in intents) {
                 ActivityScenario.launch<androidx.appcompat.app.AppCompatActivity>(intent).use { scenario ->
                     lateinit var web: android.webkit.WebView
                     scenario.onActivity { activity ->
-                        web = if (activity is MainActivity) activity.findViewById(R.id.web_view)
-                        else findWeb(activity.findViewById(android.R.id.content))!!
+                        web = findWeb(activity.findViewById(android.R.id.content))!!
                     }
                     await(web, "location.hostname.endsWith('.app.local') && document.readyState === 'complete' && !!document.getElementById('speech-status') && !!window.AppSpeech")
                     js(web, "import(location.origin+'/js/bridge.js').then(m=>window.testSpeech=m.speech).catch(e=>window.testSpeechError=e.message)")

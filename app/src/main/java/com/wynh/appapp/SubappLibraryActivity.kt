@@ -50,6 +50,9 @@ import com.wynh.appapp.marketplace.MarketplaceUi
 import com.wynh.appapp.workspace.LibraryController
 import com.wynh.appapp.workspace.SubappRecord
 import com.wynh.appapp.workspace.SubappRepository
+import com.wynh.appapp.workspace.WorkspaceActionController
+import com.wynh.appapp.workspace.WorkspaceHistoryManager
+import com.wynh.appapp.workspace.WorkspaceSnapshot
 import com.wynh.appapp.workspace.WorkspaceManager
 import com.wynh.appapp.workspace.AppIdentityManager
 import com.wynh.appapp.editor.ImageCropManager
@@ -60,7 +63,9 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.wynh.appapp.workspace.SubappBackupController
 import org.json.JSONObject
@@ -113,13 +118,31 @@ class SubappLibraryActivity : AppCompatActivity() {
             .setMessage(R.string.backup_restore_confirm).setNegativeButton(R.string.cancel, null)
             .setPositiveButton(R.string.backup_restore) { _, _ -> backups.restore(uri) }.show()
     }
-    private var pendingExportFiles: Set<String>? = null
+    private val workspaceActions by lazy { ViewModelProvider(this)[WorkspaceActionController::class.java] }
+    private var configDialog: Dialog? = null
+    private var backupDialog: Dialog? = null
+    private var configuringRecord: SubappRecord? = null
+    private var pendingConfigIcon: ByteArray? = null
+    private var resetConfigIcon = false
+    private var configNameDraft = ""
+    private var configDescriptionDraft = ""
+    private var hasConfigDraft = false
+    private var configNameInput: EditText? = null
+    private var configDescriptionInput: EditText? = null
+    private var configIconPreview: ImageView? = null
+    private val pickConfigIcon = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        val record = configuringRecord
+        if (uri != null && record != null) ImageCropManager.openCropper(this, uri) { bitmap ->
+            pendingConfigIcon = bitmapToPng(bitmap)
+            resetConfigIcon = false
+            refreshConfigIconPreview(record)
+        }
+    }
+
     private var pendingExportId: String? = null
     private val saveZipLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri: Uri? ->
-        val filesToExport = pendingExportFiles
         val id = pendingExportId
-        if (uri != null && filesToExport != null && id != null) library.export(id, filesToExport, uri, "app")
-        pendingExportFiles = null
+        if (uri != null && id != null) library.export(id, null, uri, "app")
         pendingExportId = null
     }
 
@@ -137,7 +160,6 @@ class SubappLibraryActivity : AppCompatActivity() {
         val masterCheckbox = dialog.findViewById<MaterialCheckBox>(R.id.package_master_checkbox)
         val masterCheckboxRow = dialog.findViewById<LinearLayout>(R.id.package_master_checkbox_row)
         val btnShareZip = dialog.findViewById<MaterialButton>(R.id.package_btn_share_zip)
-        val btnSaveZip = dialog.findViewById<MaterialButton>(R.id.package_btn_save_zip)
         val btnClose = dialog.findViewById<MaterialButton>(R.id.package_btn_close)
         val filesToggleRow = dialog.findViewById<LinearLayout>(R.id.package_files_toggle_row)
         val filesToggleLabel = dialog.findViewById<TextView>(R.id.package_files_toggle_label)
@@ -232,16 +254,8 @@ class SubappLibraryActivity : AppCompatActivity() {
         val toggleMaster = {
             val shouldSelectAll = selectedFiles.size < workspaceFiles.size
             selectedFiles.clear()
-            if (shouldSelectAll) {
-                for (file in workspaceFiles) {
-                    selectedFiles.add(file.name)
-                    checkboxMap[file.name]?.isChecked = true
-                }
-            } else {
-                for (cb in checkboxMap.values) {
-                    cb.isChecked = false
-                }
-            }
+            if (shouldSelectAll) selectedFiles.addAll(checkboxMap.keys)
+            checkboxMap.values.forEach { it.isChecked = shouldSelectAll }
             updateMasterCheckboxState()
         }
 
@@ -260,20 +274,6 @@ class SubappLibraryActivity : AppCompatActivity() {
             val customPackageName = WorkspacePackageManager.sanitizePackageName(rawName, "my_app")
 
             library.export(record.id, selectedFiles.toSet(), null, customPackageName)
-        }
-
-        btnSaveZip.setOnClickListener {
-            if (selectedFiles.isEmpty()) {
-                Toast.makeText(this, R.string.export_no_files_selected, Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-
-            val rawName = nameInput.text?.toString() ?: ""
-            val customPackageName = WorkspacePackageManager.sanitizePackageName(rawName, "my_app")
-
-            pendingExportFiles = selectedFiles.toSet()
-            pendingExportId = record.id
-            saveZipLauncher.launch("$customPackageName.zip")
         }
 
         btnClose.setOnClickListener {
@@ -305,14 +305,38 @@ class SubappLibraryActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         repository = SubappRepository(this)
         pendingExportId = savedInstanceState?.getString("export_app_id")
-        pendingExportFiles = savedInstanceState?.getStringArrayList("export_files")?.toSet()
         selectedTabId = savedInstanceState?.getInt(STATE_SELECTED_TAB, R.id.nav_your_apps) ?: R.id.nav_your_apps
+        val restoringConfig = savedInstanceState?.getString("config_record_id")?.let(repository::resolve)
+        pendingConfigIcon = savedInstanceState?.getByteArray("config_icon")
+        resetConfigIcon = savedInstanceState?.getBoolean("config_reset_icon") ?: false
+        configNameDraft = savedInstanceState?.getString("config_name").orEmpty()
+        configDescriptionDraft = savedInstanceState?.getString("config_description").orEmpty()
+        hasConfigDraft = restoringConfig != null
+
         showLibrary()
+        restoringConfig?.let(::showConfigure)
         com.wynh.appapp.runtime.WorkspaceOperationUi.bindWithFailures(this, onFailure = { guidedUpdates?.failed(it) == true }) { completion ->
-            if (completion.kind == com.wynh.appapp.workspace.WorkspaceActionController.Kind.UPDATED) {
-                refreshRows()
-                refreshUpdateIndicators()
-                guidedUpdates?.installed(completion.subject)
+            when (completion.kind) {
+                WorkspaceActionController.Kind.UPDATED -> {
+                    refreshRows()
+                    refreshUpdateIndicators()
+                    guidedUpdates?.installed(completion.subject)
+                }
+                WorkspaceActionController.Kind.SETTINGS_SAVED -> {
+                    configDialog?.dismiss()
+                    refreshRows()
+                    Toast.makeText(this, R.string.config_saved_toast, Toast.LENGTH_SHORT).show()
+                }
+                WorkspaceActionController.Kind.SNAPSHOT_SAVED -> {
+                    Toast.makeText(this, R.string.history_version_saved, Toast.LENGTH_SHORT).show()
+                    repository.resolve(completion.subject)?.let(::reopenBackup)
+                }
+                WorkspaceActionController.Kind.RESTORED -> {
+                    refreshRows()
+                    backupDialog?.dismiss()
+                    Toast.makeText(this, R.string.history_restored, Toast.LENGTH_SHORT).show()
+                    repository.resolve(completion.subject)?.let(::reopenBackup)
+                }
             }
         }
         lifecycleScope.launch {
@@ -361,7 +385,7 @@ class SubappLibraryActivity : AppCompatActivity() {
                             if (task.installedFromCatalog != null) {
                                 showInstalledSnackbar(task.installedFromCatalog, task.installedName, task.message, task.installedOfflineNote)
                             } else if (task.created != null) {
-                                edit(task.created)
+                                showConfigure(task.created)
                             } else if (task.share != null) {
                                 val uri = FileProvider.getUriForFile(this@SubappLibraryActivity, "$packageName.fileprovider", task.share)
                                 startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
@@ -396,8 +420,12 @@ class SubappLibraryActivity : AppCompatActivity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        configuringRecord?.let { outState.putString("config_record_id", it.id) }
+        outState.putByteArray("config_icon", pendingConfigIcon)
+        outState.putBoolean("config_reset_icon", resetConfigIcon)
+        outState.putString("config_name", configNameInput?.text?.toString() ?: configNameDraft)
+        outState.putString("config_description", configDescriptionInput?.text?.toString() ?: configDescriptionDraft)
         outState.putString("export_app_id", pendingExportId)
-        pendingExportFiles?.let { outState.putStringArrayList("export_files", ArrayList(it)) }
         outState.putInt(STATE_SELECTED_TAB, selectedTabId)
         super.onSaveInstanceState(outState)
     }
@@ -410,6 +438,8 @@ class SubappLibraryActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        configDialog?.dismiss()
+        backupDialog?.dismiss()
         detailSheet?.dismiss(); detailSheet = null
         librarySettingsDialog?.dismiss(); librarySettingsDialog = null
         guidedUpdates?.stop()
@@ -599,8 +629,8 @@ class SubappLibraryActivity : AppCompatActivity() {
                     Toast.makeText(this, R.string.shortcut_request_failed, Toast.LENGTH_LONG).show()
                 }
             },
-            onShare = { record -> showPackageDialog(record) },
-            onEdit = { record -> edit(record) },
+            onBackup = { record -> showAppBackup(record, recordDisplayName(record, state.app.name)) },
+            onConfigure = ::showConfigure,
             onPermissions = { record -> showPermissions(record, recordDisplayName(record, state.app.name)) },
             onDelete = { record -> confirmDelete(record, recordDisplayName(record, state.app.name)) },
             onUpdate = { record -> reviewUpdates(listOf(record)) },
@@ -631,30 +661,6 @@ class SubappLibraryActivity : AppCompatActivity() {
             ViewGroup.LayoutParams.WRAP_CONTENT
         )
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
-
-        val btnFontSmall = dialog.findViewById<MaterialButton>(R.id.settings_btn_font_small)
-        val btnFontNormal = dialog.findViewById<MaterialButton>(R.id.settings_btn_font_normal)
-        val btnFontLarge = dialog.findViewById<MaterialButton>(R.id.settings_btn_font_large)
-        val fontButtons = mapOf(
-            AppSettingsManager.FONT_SIZE_SMALL to btnFontSmall,
-            AppSettingsManager.FONT_SIZE_NORMAL to btnFontNormal,
-            AppSettingsManager.FONT_SIZE_LARGE to btnFontLarge
-        )
-        fun updateFontButtonsUI(selectedSize: Float) {
-            fontButtons.forEach { (size, button) ->
-                button ?: return@forEach
-                val selected = Math.abs(size - selectedSize) < 0.5f
-                button.setBackgroundColor(ContextCompat.getColor(this, if (selected) R.color.primary else R.color.surface_elevated))
-                button.setTextColor(ContextCompat.getColor(this, if (selected) R.color.on_primary else R.color.on_surface_muted))
-            }
-        }
-        updateFontButtonsUI(settingsManager.editorFontSizeSp)
-        fontButtons.forEach { (size, button) -> button?.setOnClickListener {
-            settingsManager.editorFontSizeSp = size
-            updateFontButtonsUI(size)
-            Toast.makeText(this, "Editor font size updated", Toast.LENGTH_SHORT).show()
-        } }
-
 
         val tvNotifications = dialog.findViewById<TextView>(R.id.settings_tv_notification_status)
         val btnNotifications = dialog.findViewById<MaterialButton>(R.id.settings_btn_notification_permission)
@@ -857,8 +863,8 @@ class SubappLibraryActivity : AppCompatActivity() {
                         Toast.makeText(this@SubappLibraryActivity, R.string.shortcut_request_failed, Toast.LENGTH_LONG).show()
                 }
                 content.findViewById<View>(R.id.permissions_app).setOnClickListener { popup.dismiss(); showPermissions(record, name) }
-                content.findViewById<View>(R.id.share_app).setOnClickListener { popup.dismiss(); showPackageDialog(record) }
-                content.findViewById<View>(R.id.edit_app).setOnClickListener { popup.dismiss(); edit(record) }
+                content.findViewById<View>(R.id.backup_app).setOnClickListener { popup.dismiss(); showAppBackup(record, name) }
+                content.findViewById<View>(R.id.configure_app).setOnClickListener { popup.dismiss(); showConfigure(record) }
                 popup.showAsDropDown(anchor, anchor.width - popupWidth, 0)
             }
         }
@@ -922,8 +928,199 @@ class SubappLibraryActivity : AppCompatActivity() {
         })
     }
 
-    private fun edit(record: SubappRecord) {
-        startActivity(Intent(this, MainActivity::class.java).putExtra(MainActivity.EXTRA_SUBAPP_ID, record.id))
+    internal fun showAppBackup(record: SubappRecord, name: String) {
+        val content = com.wynh.appapp.databinding.DialogAppBackupBinding.inflate(layoutInflater)
+        backupDialog?.dismiss()
+        val dialog = Dialog(this)
+        backupDialog = dialog
+        dialog.setOnDismissListener { if (backupDialog === dialog) backupDialog = null }
+        dialog.setContentView(content.root)
+        content.backupAppName.text = name
+        content.backupClose.setOnClickListener { dialog.dismiss() }
+
+        fun addAction(icon: Int, title: Int, open: () -> Unit) {
+            val row = com.wynh.appapp.databinding.ItemAppBackupActionBinding.inflate(layoutInflater, content.backupActions, true)
+            row.backupActionIcon.setImageResource(icon)
+            row.backupActionTitle.setText(title)
+            row.root.setOnClickListener {
+                dialog.dismiss()
+                open()
+            }
+        }
+
+        addAction(R.drawable.ic_download, R.string.app_backup_export) {
+            pendingExportId = record.id
+            val filename = WorkspacePackageManager.sanitizePackageName(name)
+            saveZipLauncher.launch("$filename.zip")
+        }
+        addAction(R.drawable.ic_share, R.string.library_share) { showPackageDialog(record) }
+
+        val app = applicationContext
+        content.historySaveVersion.setOnClickListener {
+            workspaceActions.execute(record, getString(R.string.history_saving_version), replacement = false,
+                completion = WorkspaceActionController.Completion(WorkspaceActionController.Kind.SNAPSHOT_SAVED, record.id)) { manager, history ->
+                check(history.saveSnapshot(manager, app.getString(R.string.history_manual_snapshot)) != null) {
+                    app.getString(R.string.history_save_failed)
+                }
+            }
+        }
+
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        dialog.show()
+        dialog.window?.setLayout(
+            minOf((resources.displayMetrics.widthPixels * 0.94).toInt(), (resources.displayMetrics.density * 460).toInt()),
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+        loadBackupVersions(record, dialog, content)
+    }
+
+    internal fun showConfigure(record: SubappRecord) {
+        val restoringDraft = hasConfigDraft
+        configuringRecord = record
+        val content = layoutInflater.inflate(R.layout.dialog_app_config, null)
+        val dialog = Dialog(this)
+        dialog.setContentView(content)
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        val identity = AppIdentityManager(this, record)
+        val existing = identity.load()
+        val name = content.findViewById<EditText>(R.id.config_input_app_name)
+        val description = content.findViewById<EditText>(R.id.config_input_app_desc)
+        val iconPreview = content.findViewById<ImageView>(R.id.config_app_icon_preview)
+        configNameInput = name
+        configDescriptionInput = description
+        configIconPreview = iconPreview
+        name.setText(if (restoringDraft) configNameDraft else existing.name)
+        description.setText(if (restoringDraft) configDescriptionDraft else existing.description)
+        hasConfigDraft = true
+        refreshConfigIconPreview(record)
+        content.findViewById<MaterialButton>(R.id.config_btn_pick_icon).setOnClickListener { pickConfigIcon.launch("image/*") }
+        content.findViewById<MaterialButton>(R.id.config_btn_reset_icon).setOnClickListener {
+            pendingConfigIcon = null
+            resetConfigIcon = true
+            refreshConfigIconPreview(record)
+        }
+        content.findViewById<MaterialButton>(R.id.config_btn_cancel).setOnClickListener {
+            clearConfigDraft()
+            dialog.dismiss()
+        }
+        content.findViewById<MaterialButton>(R.id.config_btn_save).setOnClickListener {
+            val newName = name.text.toString().trim()
+            if (newName.isBlank()) {
+                name.error = getString(R.string.library_name_required)
+                return@setOnClickListener
+            }
+            name.error = null
+            val iconChange = when {
+                resetConfigIcon -> AppIdentityManager.IconChange.Reset
+                pendingConfigIcon != null -> AppIdentityManager.IconChange.Replace(pendingConfigIcon!!)
+                else -> AppIdentityManager.IconChange.Keep
+            }
+            val newDescription = description.text.toString().trim()
+            val app = applicationContext
+            workspaceActions.execute(record, "Saving app settings…", replacement = false, completion = WorkspaceActionController.Completion(WorkspaceActionController.Kind.SETTINGS_SAVED)) { _, _ ->
+                val identityManager = AppIdentityManager(app, record)
+                check(identityManager.save(newName, newDescription, iconChange)) { "Could not save app settings" }
+                identityManager.refreshPinnedShortcut()
+            }
+        }
+        dialog.setOnCancelListener { clearConfigDraft() }
+        dialog.setOnDismissListener {
+            if (configDialog === dialog) configDialog = null
+            if (configuringRecord != null) clearConfigDraft()
+        }
+        configDialog = dialog
+        dialog.show()
+        dialog.window?.setLayout(
+            minOf((resources.displayMetrics.widthPixels * 0.94).toInt(), (resources.displayMetrics.density * 520).toInt()),
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+        dialog.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+    }
+
+    private fun refreshConfigIconPreview(record: SubappRecord) {
+        val preview = configIconPreview ?: return
+        val bitmap = when {
+            resetConfigIcon -> null
+            pendingConfigIcon != null -> BitmapFactory.decodeByteArray(pendingConfigIcon, 0, pendingConfigIcon!!.size)
+            else -> com.wynh.appapp.workspace.SubappMetadataLoader.load(record.workspaceDir).icon
+        }
+        if (bitmap == null) preview.setImageResource(R.mipmap.ic_launcher_round) else preview.setImageBitmap(bitmap)
+    }
+
+    private fun clearConfigDraft() {
+        configuringRecord = null
+        pendingConfigIcon = null
+        resetConfigIcon = false
+        configNameDraft = ""
+        configDescriptionDraft = ""
+        hasConfigDraft = false
+        configNameInput = null
+        configDescriptionInput = null
+        configIconPreview = null
+    }
+
+    private fun bitmapToPng(bitmap: Bitmap): ByteArray = java.io.ByteArrayOutputStream().use { out ->
+        bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+        out.toByteArray()
+    }
+
+    private fun reopenBackup(record: SubappRecord) {
+        val name = AppIdentityManager(this, record).load().name
+        showAppBackup(record, name)
+    }
+
+    private fun loadBackupVersions(
+        record: SubappRecord,
+        dialog: Dialog,
+        content: com.wynh.appapp.databinding.DialogAppBackupBinding,
+    ) {
+        lifecycleScope.launch {
+            val snapshots = try {
+                withContext(Dispatchers.IO) {
+                    WorkspaceHistoryManager(applicationContext, appDirectory = record.directory).getSnapshots()
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                content.historyEmptyState.setText(R.string.history_load_failed)
+                return@launch
+            }
+            if (backupDialog !== dialog) return@launch
+            content.historyEmptyState.setText(R.string.history_empty)
+            content.historyEmptyState.visibility = if (snapshots.isEmpty()) View.VISIBLE else View.GONE
+            content.backupVersionScroll.visibility = if (snapshots.isEmpty()) View.GONE else View.VISIBLE
+            for (snapshot in snapshots) {
+                val row = com.wynh.appapp.databinding.ItemHistorySnapshotBinding.inflate(
+                    layoutInflater, content.historySnapshotsContainer, true
+                )
+                val isInitial = snapshot.id == WorkspaceHistoryManager.INITIAL_SNAPSHOT_ID
+                row.historyItemTime.text = if (isInitial) getString(R.string.history_initial_version) else snapshot.formattedTime
+                row.historyItemDetails.text = snapshot.label
+                row.historyItemDetails.visibility = if (isInitial) View.GONE else View.VISIBLE
+                row.historyBtnRestore.setOnClickListener { confirmVersionRestore(record, snapshot) }
+            }
+        }
+    }
+
+    private fun confirmVersionRestore(record: SubappRecord, snapshot: WorkspaceSnapshot) {
+        val content = com.wynh.appapp.databinding.DialogRestoreAppVersionBinding.inflate(layoutInflater)
+        content.restoreVersionDetails.text = getString(R.string.history_restore_details, snapshot.formattedTime, snapshot.label)
+        val app = applicationContext
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.history_restore_title)
+            .setView(content.root)
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.history_restore) { _, _ ->
+                val includePersonalFiles = content.restorePersonalFiles.isChecked
+                workspaceActions.execute(record, getString(R.string.history_restoring),
+                    completion = WorkspaceActionController.Completion(WorkspaceActionController.Kind.RESTORED, subject = record.id)) { manager, history ->
+                    check(history.restoreSnapshot(snapshot.id, manager, includePersonalFiles)) {
+                        app.getString(R.string.history_restore_failed)
+                    }
+                    AppIdentityManager(app, record).refreshPinnedShortcut()
+                }
+            }
+            .show()
     }
 
     private fun confirmDelete(record: SubappRecord, name: String) {

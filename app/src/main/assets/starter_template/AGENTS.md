@@ -110,10 +110,9 @@ runtime section before implementing a capability and feature-detect APIs on olde
 1. **`loadState` needs both arguments.** `loadState('key')` throws. Always pass a default:
    `loadState('key', '')`.
 2. **`requestNotificationPermission()` does not wait for a new grant.** It returns `false` while
-   approval is pending, even if the user is about to grant it; it can return `true` when already allowed. Listen for the
-   editor's `app2:notifperm` event on `window` (`event.detail.granted`) when available. Always re-check
-   `hasNotificationPermission()` on `focus`/visible `visibilitychange`; the standalone activity does
-   not dispatch that event. Never treat the request's return value as the answer.
+   approval is pending. It can return `true` when Android already allows notifications.
+   Re-check `hasNotificationPermission()` on window `focus` or when `visibilitychange`
+   becomes visible after returning.
 3. **`readFile` returning `""` does not prove a file is missing.** It can mean empty, failed or
    temporarily unavailable storage. `listFiles()` can check existence across wrapper backends, but
    an empty listing can also be an unavailable workspace. See the storage recovery guidance in

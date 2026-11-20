@@ -2,7 +2,7 @@
 
 Share & Package App exports selected files or opens Android sharing. It cannot
 import a ZIP into an existing workspace. Library → Import → ZIP installs another
-app. Library app menu → Update app, the editor download button, and a subapp's
+app. Library app menu → Update app and a subapp's
 `updates.open()` all open the same native GitHub review.
 
 ## Publisher contract
@@ -95,15 +95,16 @@ The backup is `files/subapps/<id>/update-backup/`, outside the web workspace and
 ordinary workspace ZIP exports. It retains only the most recent recovery point;
 ordinary History remains independent and is not a complete binary backup.
 
-GitHub updates save the workspace before and after installation in **Edit → Version history**.
-Manual editor saves and app settings changes also save versions immediately, without
-requiring Run. Restore earlier versions exclusively from that dialog; Update app
-only checks, reviews and installs publisher updates. If publisher content matches the
+GitHub updates save the workspace before and after installation in **Backup & Restore → Versions**.
+Use **Save current version** to capture a text snapshot at any time. Restore earlier
+versions from the same dialog. If publisher content matches the
 last installed update, it reports **App is up to date** with no Update action, even
 when local edits differ or unrelated repository commits exist. Restoring also saves the current
-workspace first. History restores text files (including JSON data/settings); binary
-assets and runtime logs remain untouched. Export current data before restoring if
-it needs to be retained. Installed publisher metadata remains the last GitHub update,
+workspace first. By default, restore rolls back captured app files identified by
+the manifest or installed publisher metadata. Personal files, including files in
+`data/`, publisher seed files, and undeclared files, stay as they are. Select
+**Also restore personal files** to roll back personal files that the selected
+version can capture. Binary files and runtime logs stay untouched in either mode. Installed publisher metadata remains the last GitHub update,
 so restored code is reported as local changes during the next update review.
 
 ## Branches and releases

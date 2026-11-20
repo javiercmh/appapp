@@ -16,7 +16,6 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.google.gson.Gson
-import com.wynh.appapp.MainActivity
 import com.wynh.appapp.SubappRuntimeActivity
 import com.wynh.appapp.workspace.SubappRepository
 import com.wynh.appapp.workspace.WorkspaceOperations
@@ -60,7 +59,6 @@ class ShareDeviceTest {
         return await(web, "window.shareResult")
     }
     private fun launcher(activity: AppCompatActivity) = when (activity) {
-        is MainActivity -> activity.shareLauncher
         is SubappRuntimeActivity -> activity.shareLauncher
         else -> throw AssertionError("Unexpected host ${activity.javaClass}")
     }
@@ -106,7 +104,7 @@ class ShareDeviceTest {
         }
         instrumentation.addMonitor(monitor)
         try {
-            val intents = listOf(Intent(context, MainActivity::class.java).putExtra(MainActivity.EXTRA_SUBAPP_ID, record.id),
+            val intents = listOf(
                 Intent(context, SubappRuntimeActivity::class.java).setData(Uri.parse("appapp://subapp/${record.id}")))
             for ((mode, intent) in intents.withIndex()) {
                 ActivityScenario.launch<AppCompatActivity>(intent).use { scenario ->

@@ -122,7 +122,7 @@
                     android:textStyle="bold" />
             </LinearLayout>
 
-            <!-- Export Actions Buttons -->
+            <!-- Share action -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -145,22 +145,6 @@
                     app:iconPadding="6dp"
                     app:iconSize="18dp" />
 
-                <!-- Save to Device Button -->
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/package_btn_save_zip"
-                    style="@style/Widget.Material3.Button.TonalButton"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:minHeight="48dp"
-                    android:backgroundTint="@color/surface_variant"
-                    android:text="@string/action_save_zip"
-                    android:textColor="@color/on_surface"
-                    android:textSize="12sp"
-                    app:icon="@drawable/ic_download"
-                    app:iconPadding="6dp"
-                    app:iconSize="18dp"
-                    app:iconTint="@color/accent_blue" />
             </LinearLayout>
 
             <!-- Expandable individual files, collapsed by default -->

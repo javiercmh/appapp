@@ -24,7 +24,7 @@ import org.junit.runner.RunWith
 class SharePackageDialogDeviceTest {
     private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
 
-    @Test fun exportButtonsComeFirstAndFileSelectionSurvivesCollapsing() {
+    @Test fun shareButtonComesFirstAndFileSelectionSurvivesCollapsing() {
         val repository = SubappRepository(context); repository.ensureMigrated()
         val record = repository.createStarter()
         try {
@@ -34,18 +34,16 @@ class SharePackageDialogDeviceTest {
                 lateinit var dialog: android.app.Dialog
                 scenario.onActivity { dialog = it.showPackageDialog(record) }
 
-                // Collapsed by default, with both actions visible above the files toggle.
+                // Collapsed by default, with the share action visible above the files toggle.
                 onView(withId(R.id.package_files_section)).inRoot(isDialog()).check(matches(not(isDisplayed())))
                 onView(withId(R.id.package_btn_share_zip)).inRoot(isDialog()).check(matches(isDisplayed()))
-                onView(withId(R.id.package_btn_save_zip)).inRoot(isDialog()).check(matches(isDisplayed()))
                 scenario.onActivity {
                     val share = dialog.findViewById<View>(R.id.package_btn_share_zip)
-                    val save = dialog.findViewById<View>(R.id.package_btn_save_zip)
                     val toggle = dialog.findViewById<View>(R.id.package_files_toggle_row)
                     val density = it.resources.displayMetrics.density
                     fun top(view: View) = IntArray(2).also(view::getLocationOnScreen)[1]
-                    assertTrue(top(share) < top(save) && top(save) < top(toggle))
-                    assertTrue(share.height >= 48 * density && save.height >= 48 * density)
+                    assertTrue(top(share) < top(toggle))
+                    assertTrue(share.height >= 48 * density)
                 }
 
                 // Deselect one file while expanded, collapse, expand again: the selection is intact.

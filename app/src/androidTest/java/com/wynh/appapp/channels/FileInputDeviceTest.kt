@@ -16,7 +16,7 @@ import java.io.File
 
 /**
  * A subapp's own `<input type="file">` through the existing RuntimeFileChooser and the real system
- * document picker, in the editor and in the standalone runtime. A repository-owned disposable JSON
+ * document picker, in the standalone runtime. A repository-owned disposable JSON
  * file and a 256-byte binary file are created in shared Downloads by the test; the test taps the
  * page's real button, picks the file by its fixture name, and checks the exact bytes the page read.
  * Choosing a file must not write to the workspace. Run one emulator test at a time.
@@ -78,14 +78,8 @@ class FileInputDeviceTest : ChannelsDeviceBase() {
             val binaryName = "appapp-open-fixture-$mode.bin"
             download(jsonName, "application/json", jsonBytes)
             download(binaryName, "application/octet-stream", binary)
-            withPage(intent) { scenario, web ->
-                var editor = false
-                scenario.onActivity { editor = it is com.wynh.appapp.MainActivity }
-                if (editor) {
-                    js(web, "window.previousTestDocument = true")
-                    scenario.onActivity { it.findViewById<android.view.View>(com.wynh.appapp.R.id.hub_btn_run).performClick() }
-                }
-                await(web, "!window.previousTestDocument && document.readyState === 'complete' && !!document.getElementById('open-json')")
+            withPage(intent) { _, web ->
+                await(web, "document.readyState === 'complete' && !!document.getElementById('open-json')")
                 // A real touch on the page's button opens the picker (a user gesture is required).
                 tapElement(web, "open-json")
                 awaitSystemWindow("documentsui", web)

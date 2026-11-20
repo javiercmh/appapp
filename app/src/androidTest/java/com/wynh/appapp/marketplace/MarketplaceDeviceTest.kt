@@ -221,14 +221,14 @@ class MarketplaceDeviceTest {
             onView(withId(R.id.detail_primary_action)).check(matches(isEnabled()))
             onView(withId(R.id.detail_copies_note)).check(matches(withEffectiveVisibility(Visibility.GONE)))
             onView(withId(R.id.detail_more_action)).perform(click())
-            val popupRoot = withDecorView(hasDescendant(withId(R.id.detail_menu_edit)))
+            val popupRoot = withDecorView(hasDescendant(withId(R.id.detail_menu_configure)))
             waitUntil("Overflow menu did not open") {
                 runCatching {
-                    onView(withId(R.id.detail_menu_edit)).inRoot(popupRoot).check(matches(isDisplayed()))
+                    onView(withId(R.id.detail_menu_configure)).inRoot(popupRoot).check(matches(isDisplayed()))
                 }.isSuccess
             }
             onView(withId(R.id.detail_menu_shortcut)).inRoot(popupRoot).check(matches(isDisplayed()))
-            onView(withId(R.id.detail_menu_share)).inRoot(popupRoot).check(matches(isDisplayed()))
+            onView(withId(R.id.detail_menu_backup)).inRoot(popupRoot).check(matches(isDisplayed()))
             onView(withId(R.id.detail_menu_permissions)).inRoot(popupRoot).check(matches(isDisplayed()))
             onView(withId(R.id.detail_menu_delete)).inRoot(popupRoot).check(matches(isDisplayed()))
             onView(isRoot()).inRoot(popupRoot).perform(ViewActions.pressBack())

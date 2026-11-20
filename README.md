@@ -1,14 +1,13 @@
 # App²
 
-**Run web apps on your Android phone.** Import an app from GitHub or a ZIP file, launch it from your home screen, and edit its files right on your phone. Apps can use Android features like notifications and text-to-speech, and even AI through your own account.
+**Run web apps on your Android phone.** Import an app from GitHub or a ZIP file, launch it from your home screen, and back it up on your phone. Apps can use Android features like notifications and text-to-speech, and even AI through your own account.
 
 <p align="center">
   <img src="docs/images/appapp-runtime-phone.png" width="23%" alt="Your app: the Starter Demo running full screen, with notes, photos, pronunciation and AI">
   <img src="docs/images/appapp-library-phone.png" width="23%" alt="Library: your apps, with LingoMage and Starter Demo">
-  <img src="docs/images/appapp-editor-phone.png" width="23%" alt="Editor: the Starter Demo’s source and data files">
   <img src="docs/images/appapp-settings-phone.png" width="23%" alt="Settings: backup and AI provider connections">
 </p>
-<p align="center"><sub><b>Your app</b> · <b>Library</b> · <b>Editor</b> · <b>Settings</b></sub></p>
+<p align="center"><sub><b>Your app</b> · <b>Library</b> · <b>Settings</b></sub></p>
 
 ## Download
 
@@ -17,7 +16,7 @@ Get the latest APK from [Releases](https://github.com/javiercmh/appapp/releases/
 ## Get started
 
 1. Open App² and tap **New app**. Import a ZIP file, paste a public GitHub repository or folder URL, or start from the included **Starter Demo**.
-2. Tap an app to run it, or choose **Edit** to change its files.
+2. Tap an app to run it. Open its menu to configure it or manage backups.
 3. Choose **Install** to put the app on your home screen.
 
 ## What you can do
@@ -26,12 +25,12 @@ Get the latest APK from [Releases](https://github.com/javiercmh/appapp/releases/
 | :--- | :--- |
 | 📥 **Import** | Add apps (called *subapps*) from ZIP files or public GitHub repositories. |
 | 🔄 **Update** | Pull new versions from GitHub. Your data is kept. |
-| ✏️ **Edit** | Browse files, with code highlighting and search. Change each app’s name and icon. |
+| **Configure App** | Change an app’s name, description, and icon. |
+| **Backup & Restore** | Save or restore a version, or export or share a ZIP. |
 | 🏠 **Launch** | Each app gets its own home-screen shortcut and screen. |
 | 💾 **Save files** | Each app has its own private folder for notes, settings, photos and other data. |
 | 🔔 **Use Android** | Notifications, scheduled reminders, photo selection and text-to-speech. |
 | ✨ **Use AI** | Connect ChatGPT, OpenRouter or any OpenAI-compatible endpoint once in **Settings → AI**. Every app can use it; your credentials never enter an app’s files. |
-| 📦 **Back up & share** | Snapshots, ZIP export and Android sharing for single apps, plus one ZIP for all of them. |
 
 ## Example apps
 

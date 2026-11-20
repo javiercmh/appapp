@@ -82,7 +82,12 @@ object WorkspaceOperations {
      * (or whose name the snapshot format cannot carry) was never captured, so restore neither
      * deletes nor overwrites it; the same holds for binary and unknown formats.
      */
-    fun restoreText(root: File, snapshot: Map<String, String>, rename: (File, File) -> Boolean = File::renameTo): TextRestore {
+    fun restoreText(
+        root: File,
+        snapshot: Map<String, String>,
+        paths: Set<String>? = null,
+        rename: (File, File) -> Boolean = File::renameTo,
+    ): TextRestore {
         val kept = mutableListOf<String>()
         val ignored = mutableListOf<String>()
         replace(root, rename) { staged ->
@@ -90,7 +95,7 @@ object WorkspaceOperations {
             val files = WorkspaceFiles(staged)
             WorkspaceFiles.regularFiles(staged).toList().forEach { file ->
                 val name = file.relativeTo(staged).invariantSeparatorsPath
-                if (!WorkspaceFiles.isHistoryText(name)) return@forEach
+                if (paths != null && name !in paths || !WorkspaceFiles.isHistoryText(name)) return@forEach
                 if (WorkspaceFiles.normalize(name) != name || WorkspaceFiles.decodeUtf8(file.readBytes()) == null) {
                     kept += name; return@forEach
                 }
@@ -100,7 +105,7 @@ object WorkspaceOperations {
                 require(WorkspaceFiles.normalize(name) == name) { "Invalid snapshot path" }
                 when {
                     !WorkspaceFiles.isHistoryText(name) -> ignored.add(name)
-                    name in kept -> Unit
+                    name in kept || paths != null && name !in paths -> Unit
                     else -> files.writeText(name, text)
                 }
             }

@@ -15,10 +15,7 @@ import kotlinx.coroutines.withContext
 
 /** One app operation owns its workspace until publication/recovery finishes, including rotation. */
 class WorkspaceActionController(private val app: Application) : AndroidViewModel(app) {
-    data class EditorDraft(val fileName: String, val initial: String, val text: String)
-    var editorDraft: EditorDraft? = null
-
-    enum class Kind { FILE_SAVED, FILE_CREATED, FILE_DELETED, PREVIEW_READY, SETTINGS_SAVED, RESTORED, UPDATED, RESET }
+    enum class Kind { SETTINGS_SAVED, SNAPSHOT_SAVED, RESTORED, UPDATED }
 
     /**
      * What a successful operation asks the screen to do. It lives in controller state, not in a

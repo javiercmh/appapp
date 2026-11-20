@@ -17,7 +17,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
-/** Shared native review flow for library, editor and web callers. */
+/** Shared native review flow for library and web callers. */
 /** [downloader] reaches GitHub; tests replace it. */
 class UpdateController(
     private val activity: AppCompatActivity, private val record: SubappRecord,
@@ -165,7 +165,7 @@ class UpdateController(
     private val availability get() = UpdateAvailability.of(activity)
 
     private fun showUpToDate(version: String, source: GitHubSource, onDismissed: () -> Unit) = showUpdateDialog("App is up to date",
-        "Version $version\n${source.display}\n\nThere are no publisher changes to install. Your local edits and saved data are kept.\n\nTo restore an earlier version, open Edit → Version history.",
+        "Version $version\n${source.display}\n\nThere are no publisher changes to install. Your local edits and saved data are kept.\n\nTo restore an earlier version, open Backup & Restore → Versions.",
         primary = Action("Done") { it.dismiss() },
         secondary = Action("Change source") { it.dismiss(); changeSource(source) },
         dismissLabel = null, onDismissed = onDismissed)
@@ -241,7 +241,7 @@ class UpdateController(
             if (preview.edited.isNotEmpty()) append("\n⚠ ${if (preview.edited.size == 1) "1 code file you edited or removed will be replaced by the publisher's version." else "${preview.edited.size} code files you edited or removed will be replaced by the publisher's versions."}\n")
         }.trimEnd()
         // The fine print follows the changed files, so expanding the list opens right below What's new.
-        val footer = "A recovery backup will be saved in Edit → Version history." +
+        val footer = "A recovery backup will be saved in Backup & Restore → Versions." +
             if (mismatch == null) "\n\n" + UpdateReviewCopy.permissionSummary(granted) else ""
         var accepted = false
         var skipped = false

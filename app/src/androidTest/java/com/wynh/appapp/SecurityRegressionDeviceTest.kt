@@ -67,8 +67,7 @@ class SecurityRegressionDeviceTest {
             java.io.File(record.workspaceDir, "index.html").writeText(page)
             SubappGrants.setGranted(context, record.id, SubappCapability.NETWORK, false)
             val intents = listOf(
-                Intent(context, SubappRuntimeActivity::class.java).setData(Uri.parse("appapp://subapp/${record.id}")),
-                Intent(context, MainActivity::class.java).putExtra(MainActivity.EXTRA_SUBAPP_ID, record.id)
+                Intent(context, SubappRuntimeActivity::class.java).setData(Uri.parse("appapp://subapp/${record.id}"))
             )
             for (intent in intents) {
                 ActivityScenario.launch<androidx.appcompat.app.AppCompatActivity>(intent).use { scenario ->

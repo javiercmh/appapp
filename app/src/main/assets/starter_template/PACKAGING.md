@@ -146,7 +146,7 @@ Use the supplied development server for real workspace file tests; see [browser 
 
 ## Subapp AI guide
 
-Manage provider connections exclusively through **library → Settings → AI**. ChatGPT uses OAuth; OpenRouter uses one native encrypted API key. A **custom endpoint** (any OpenAI-compatible service: HTTPS base URL such as `https://host/v1` plus API key, using `/models` and `/chat/completions`) is stored natively and encrypted, is verified by listing models, exposes provider ID `custom`, has no reasoning levels, and is billed by that service. Plain `http://` is refused. Editors and subapps have no credential controls. **Available to subapps** exposes exactly one provider: `chatgpt`, `openrouter`, `custom`, or `combined` (App² AI). Combined is connected when at least one source is connected and lists ChatGPT models first, then OpenRouter models, with source labels. Model IDs are opaque, stable and unique within the exposed provider; do not parse them or hardcode model IDs. Explicit calls to hidden providers fail with `provider`.
+Manage provider connections exclusively through **library → Settings → AI**. ChatGPT uses OAuth; OpenRouter uses one native encrypted API key. A **custom endpoint** (any OpenAI-compatible service: HTTPS base URL such as `https://host/v1` plus API key, using `/models` and `/chat/completions`) is stored natively and encrypted, is verified by listing models, exposes provider ID `custom`, has no reasoning levels, and is billed by that service. Plain `http://` is refused. Subapps have no credential controls. **Available to subapps** exposes exactly one provider: `chatgpt`, `openrouter`, `custom`, or `combined` (App² AI). Combined is connected when at least one source is connected and lists ChatGPT models first, then OpenRouter models, with source labels. Model IDs are opaque, stable and unique within the exposed provider; do not parse them or hardcode model IDs. Explicit calls to hidden providers fail with `provider`.
 
 The native exposure choices depend on the configured providers. Discover the actual exposure with `ai.providers()` rather than assuming every connected source is exposed. An unavailable saved exposure is retained without silently switching providers; a previously selected Combined exposure can still use its remaining connected source.
 
@@ -266,15 +266,13 @@ Native `AndroidStorage.scheduleNotification` requires the timestamp **as a strin
 
 Notification permission has two layers: the subapp grant and Android's permission/settings for
 App². Re-check `hasNotificationPermission()` on window `focus` and when `visibilitychange` becomes
-visible after requesting permission or opening Settings. `app2:notifperm` and `app2:alarmperm` are
-editor notifications only; standalone pages must not depend on receiving them.
+visible after requesting permission or opening Settings.
 
 The host uses exact `AlarmManager` alarms. On Android 12 and later, check
 `canScheduleExactly()` (native `canScheduleExactNotifications()`) and offer `requestExactNotificationPermission()` from a user action
 when access is missing. That method opens Android's Alarms & reminders settings when needed.
 `true` means access was already available or the settings screen opened; it is not confirmation
 of a new grant. Re-check `canScheduleExactly()` on `focus`/visible `visibilitychange` after returning.
-The editor may also dispatch `app2:alarmperm` with `event.detail.granted`.
 Scheduling returns `false` when exact access is missing; do not create an approximate duplicate.
 Android 8 through 11 can schedule exact alarms without special access.
 
@@ -470,8 +468,8 @@ Import `selectionMenu` from `js/bridge.js`. `selectionMenu.available` reports a 
 
 ### Page lifetime and Android Back
 
-Editor preview and standalone pages reload on activity recreation (including rotation), renderer
-recovery, explicit Run/reload and workspace replacement. In-memory state and pending JavaScript
+Subapp pages reload on activity recreation, renderer recovery, and workspace replacement.
+Rotation resizes the existing page. In-memory state and pending JavaScript
 promises are not durable. Persist drafts and operation IDs in `data/`, restore the UI on startup,
 and distinguish recovering an existing native operation from starting a new one. A selected file
 from `<input type="file">` is not retained across a page reload: let the user choose it again.
@@ -484,11 +482,11 @@ native Back action. Avoid unnecessary history entries for actions that are not n
 
 ### Workspace transactions
 
-Native text and binary file replacements are atomic: a failed write keeps the previous file. Paths use the same validator in the editor, asset server, and bridge. Temporary names starting with `.app2-write-` are reserved. Existing size limits and public return values are unchanged.
+Native text and binary file replacements are atomic: a failed write keeps the previous file. Paths use the same validator in the asset server and bridge. Temporary names starting with `.app2-write-` are reserved. Existing size limits and public return values are unchanged.
 
 During native save, restore, backup capture, or update operations, the affected document's file calls can return their existing failure values. Keep unsaved content and offer deliberate retry. Operations replacing the workspace (restore, reset, publisher update or deletion) invalidate the old document; remaining sessions reload when resumed. Single-file saves, snapshots and backups reserve the workspace without forcing a page reload. An earlier document cannot write into a replacement workspace. Do not automatically repeat inference.
 
-Text version history covers known UTF-8 text formats only. Binary and unknown files, and files with a text extension that are not valid UTF-8, remain untouched on text-history restore; use full-library backup for all workspace bytes. Preview and standalone execution share single/multiple file selection and renderer recovery.
+Text version history covers known UTF-8 text formats only. Binary and unknown files, and files with a text extension that are not valid UTF-8, remain untouched on text-history restore; use ZIP export or full-library backup for all workspace files.
 
 Internet-granted apps have broad web networking. Known local/private host names and literal IP addresses are filtered, but this is not complete isolation against DNS, redirect, or other networking paths. Do not treat the host's filter as a complete network sandbox.
 

@@ -39,20 +39,20 @@ class WorkspaceActionDeviceTest {
             // A single-file save must not make a running page reload or lose write access.
             instrumentation.runOnMainSync {
                 controller.change(record, "Edited note.txt",
-                    WorkspaceActionController.Completion(WorkspaceActionController.Kind.FILE_SAVED, "note.txt", "text")) { it.writeFile("note.txt", "text") }
+                    WorkspaceActionController.Completion(WorkspaceActionController.Kind.SETTINGS_SAVED, "note.txt", "text")) { it.writeFile("note.txt", "text") }
             }
             idle(controller)
             assertEquals("text", File(workspace, "note.txt").readText())
             assertTrue("running page lost write access after a plain save", bridge.writeFile("data/a.json", "2"))
             val saved = controller.state.value.completions.single()
-            assertEquals(WorkspaceActionController.Kind.FILE_SAVED, saved.kind)
+            assertEquals(WorkspaceActionController.Kind.SETTINGS_SAVED, saved.kind)
             instrumentation.runOnMainSync { controller.acknowledge(saved.id) }
             assertTrue(controller.state.value.completions.isEmpty())
 
             // A factory reset is a replacement: reserved, fenced, off the UI thread, history reset in the same action.
             var onMainThread = true
             instrumentation.runOnMainSync {
-                controller.execute(record, "Resetting app…", completion = WorkspaceActionController.Completion(WorkspaceActionController.Kind.RESET)) { manager, history ->
+                controller.execute(record, "Resetting app…", completion = WorkspaceActionController.Completion(WorkspaceActionController.Kind.RESTORED)) { manager, history ->
                     onMainThread = android.os.Looper.myLooper() == android.os.Looper.getMainLooper()
                     check(WorkspaceOperations.isBusy(workspace))
                     check(manager.factoryResetWorkspace()); check(history.clearAllHistory())
@@ -62,7 +62,7 @@ class WorkspaceActionDeviceTest {
             assertFalse("reset ran on the UI thread", onMainThread)
             assertFalse(WorkspaceOperations.isBusy(workspace))
             assertFalse("a page from before the reset can still write", bridge.writeFile("data/a.json", "stale"))
-            assertEquals(WorkspaceActionController.Kind.RESET, controller.state.value.completions.single().kind)
+            assertEquals(WorkspaceActionController.Kind.RESTORED, controller.state.value.completions.single().kind)
             bridge.pageStarted()
             assertTrue("the reloaded page is writable again", bridge.writeFile("data/a.json", "fresh"))
         } finally { directory.deleteRecursively(); context.deleteSharedPreferences("runtime_app_state_$id") }

@@ -5,8 +5,6 @@ import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.webkit.WebViewCompat
-import com.wynh.appapp.workspace.WorkspaceManager
-import java.util.Locale
 
 /**
  * Manages persistent user preferences and settings for AppApp (App²).
@@ -19,14 +17,8 @@ class AppSettingsManager(private val context: Context) {
     companion object {
         private const val PREFS_NAME = "appapp_settings"
         const val KEY_MAX_HISTORY_SNAPSHOTS = "max_history_snapshots"
-        const val KEY_EDITOR_FONT_SIZE = "editor_font_size_sp"
 
         const val DEFAULT_MAX_HISTORY_SNAPSHOTS = 4
-        const val DEFAULT_EDITOR_FONT_SIZE_SP = 13.0f
-
-        const val FONT_SIZE_SMALL = 11.0f
-        const val FONT_SIZE_NORMAL = 13.0f
-        const val FONT_SIZE_LARGE = 16.0f
     }
 
     var maxHistorySnapshots: Int
@@ -34,19 +26,6 @@ class AppSettingsManager(private val context: Context) {
         set(value) {
             prefs.edit().putInt(KEY_MAX_HISTORY_SNAPSHOTS, value).apply()
         }
-
-    var editorFontSizeSp: Float
-        get() = prefs.getFloat(KEY_EDITOR_FONT_SIZE, DEFAULT_EDITOR_FONT_SIZE_SP)
-        set(value) {
-            prefs.edit().putFloat(KEY_EDITOR_FONT_SIZE, value).apply()
-        }
-
-    /**
-     * Resets all user preferences back to factory defaults.
-     */
-    fun resetSettingsToDefaults() {
-        prefs.edit().clear().apply()
-    }
 
     /**
      * Returns clean App² application version string (e.g. "1.0 (Build 1)").
@@ -84,30 +63,5 @@ class AppSettingsManager(private val context: Context) {
         } catch (_: Exception) {
             "System Default"
         }
-    }
-
-    /**
-     * Calculates total file size and file count in the workspace directory.
-     */
-    fun getWorkspaceStorageSummary(workspaceManager: WorkspaceManager): String {
-        return try {
-            val files = workspaceManager.listFiles()
-            var totalBytes = 0L
-            for (f in files) {
-                totalBytes += f.size
-            }
-            val formattedSize = formatBytes(totalBytes)
-            "$formattedSize (${files.size} files)"
-        } catch (_: Exception) {
-            "0 KB (0 files)"
-        }
-    }
-
-    private fun formatBytes(bytes: Long): String {
-        if (bytes < 1024) return "$bytes B"
-        val kb = bytes / 1024.0
-        if (kb < 1024) return String.format(Locale.US, "%.1f KB", kb)
-        val mb = kb / 1024.0
-        return String.format(Locale.US, "%.2f MB", mb)
     }
 }

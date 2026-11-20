@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/selectableItemBackground"
+    android:clickable="true"
+    android:focusable="true"
+    android:screenReaderFocusable="true"
+    android:gravity="center_vertical"
+    android:minHeight="54dp"
+    android:paddingHorizontal="4dp"
+    android:paddingVertical="8dp">
+
+    <ImageView
+        android:id="@+id/backup_action_icon"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:background="@drawable/bg_source_icon_btn"
+        android:contentDescription="@null"
+        android:padding="7dp"
+        app:tint="@color/accent_blue" />
+
+    <TextView
+        android:id="@+id/backup_action_title"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="8dp"
+        android:layout_weight="1"
+        android:textColor="@color/on_surface"
+        android:textSize="15sp"
+        android:textStyle="bold" />
+
+    <ImageView
+        android:layout_width="18dp"
+        android:layout_height="18dp"
+        android:contentDescription="@null"
+        android:rotation="270"
+        android:src="@drawable/ic_arrow_down"
+        app:tint="@color/on_surface_muted" />
+</LinearLayout>

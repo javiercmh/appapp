@@ -62,7 +62,7 @@
     </LinearLayout>
 
     <LinearLayout
-        android:id="@+id/detail_menu_share"
+        android:id="@+id/detail_menu_backup"
         android:layout_width="match_parent"
         android:layout_height="48dp"
         android:background="?attr/selectableItemBackground"
@@ -75,20 +75,20 @@
             android:layout_width="20dp"
             android:layout_height="20dp"
             android:contentDescription="@null"
-            android:src="@drawable/ic_share"
+            android:src="@drawable/ic_history"
             app:tint="@color/on_surface" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="14dp"
-            android:text="@string/library_share"
+            android:text="@string/app_backup_title"
             android:textColor="@color/on_surface"
             android:textSize="15sp" />
     </LinearLayout>
 
     <LinearLayout
-        android:id="@+id/detail_menu_edit"
+        android:id="@+id/detail_menu_configure"
         android:layout_width="match_parent"
         android:layout_height="48dp"
         android:background="?attr/selectableItemBackground"
@@ -101,14 +101,14 @@
             android:layout_width="20dp"
             android:layout_height="20dp"
             android:contentDescription="@null"
-            android:src="@drawable/ic_code"
+            android:src="@drawable/ic_tune"
             app:tint="@color/on_surface" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="14dp"
-            android:text="@string/marketplace_edit_code"
+            android:text="@string/library_configure"
             android:textColor="@color/on_surface"
             android:textSize="15sp" />
     </LinearLayout>

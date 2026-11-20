@@ -289,8 +289,8 @@ internal object MarketplaceUi {
         onInstall: (MarketplaceApp) -> Unit,
         onOpen: (SubappRecord) -> Unit,
         onCreateShortcut: (SubappRecord) -> Unit,
-        onShare: (SubappRecord) -> Unit,
-        onEdit: (SubappRecord) -> Unit,
+        onBackup: (SubappRecord) -> Unit,
+        onConfigure: (SubappRecord) -> Unit,
         onPermissions: (SubappRecord) -> Unit,
         onDelete: (SubappRecord) -> Unit,
         onUpdate: (SubappRecord) -> Unit,
@@ -425,8 +425,8 @@ internal object MarketplaceUi {
                         onDismissSheet = { sheet.dismiss() },
                         onOpen = onOpen,
                         onCreateShortcut = onCreateShortcut,
-                        onShare = onShare,
-                        onEdit = onEdit,
+                        onBackup = onBackup,
+                        onConfigure = onConfigure,
                         onPermissions = onPermissions,
                         onDelete = onDelete,
                     )
@@ -515,8 +515,8 @@ internal object MarketplaceUi {
         onDismissSheet: () -> Unit,
         onOpen: (SubappRecord) -> Unit,
         onCreateShortcut: (SubappRecord) -> Unit,
-        onShare: (SubappRecord) -> Unit,
-        onEdit: (SubappRecord) -> Unit,
+        onBackup: (SubappRecord) -> Unit,
+        onConfigure: (SubappRecord) -> Unit,
         onPermissions: (SubappRecord) -> Unit,
         onDelete: (SubappRecord) -> Unit,
     ): PopupWindow {
@@ -545,16 +545,16 @@ internal object MarketplaceUi {
             onCreateShortcut(installedRecord)
         }
 
-        binding.detailMenuShare.setOnClickListener {
+        binding.detailMenuBackup.setOnClickListener {
             popup.dismiss()
             onDismissSheet()
-            onShare(installedRecord)
+            onBackup(installedRecord)
         }
 
-        binding.detailMenuEdit.setOnClickListener {
+        binding.detailMenuConfigure.setOnClickListener {
             popup.dismiss()
             onDismissSheet()
-            onEdit(installedRecord)
+            onConfigure(installedRecord)
         }
 
         binding.detailMenuPermissions.setOnClickListener {

@@ -12,7 +12,6 @@ import android.webkit.WebView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
-import com.wynh.appapp.MainActivity
 import com.wynh.appapp.SubappRuntimeActivity
 import com.wynh.appapp.workspace.SubappRecord
 import com.wynh.appapp.workspace.SubappRepository
@@ -23,7 +22,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 /**
- * Shared helpers of the channel device tests: disposable starter subapps, both runtime modes, page
+ * Shared helpers of the channel device tests: disposable starter subapps, page
  * scripting and the real system pickers. Failures of system-UI steps
  * report the current page result and the native screen tree instead of retrying silently.
  */
@@ -85,7 +84,6 @@ abstract class ChannelsDeviceBase {
     protected fun unquote(value: String) = value.trim('"').replace("\\\"", "\"")
 
     protected fun modes(record: SubappRecord) = listOf(
-        Intent(context, MainActivity::class.java).putExtra(MainActivity.EXTRA_SUBAPP_ID, record.id),
         Intent(context, SubappRuntimeActivity::class.java).setData(Uri.parse("appapp://subapp/${record.id}"))
     )
     protected fun <T> withPage(intent: Intent, block: (ActivityScenario<AppCompatActivity>, WebView) -> T): T =

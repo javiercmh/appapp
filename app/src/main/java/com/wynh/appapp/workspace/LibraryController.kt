@@ -314,13 +314,17 @@ class LibraryController(private val app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun export(id: String, selected: Set<String>, destination: Uri?, name: String) = run(app.getString(R.string.library_task_export)) {
+    fun export(id: String, selected: Set<String>?, destination: Uri?, name: String) = run(app.getString(R.string.library_task_export)) {
         val record = repository.resolve(id) ?: error("App no longer available")
         // The workspace lock is held only while the ZIP is built in the cache. A destination such as a
         // cloud provider can be slow, and must never stall the running app's bridge or the log worker.
         val manager = WorkspaceManager(app, workspaceDir = record.workspaceDir)
+        // Saving to a document needs a private staging file so it cannot overwrite or delete a shared ZIP.
+        val cacheName = if (destination == null) name else java.util.UUID.randomUUID().toString()
         val zip = synchronized(com.wynh.appapp.updates.WorkspaceLocks.forWorkspace(record.workspaceDir)) {
-            WorkspacePackageManager.exportToZipFile(app, manager, selected, name)
+            check(record.workspaceDir.isDirectory) { "App no longer available" }
+            val files = selected ?: manager.listFiles().map { it.name }.toSet()
+            WorkspacePackageManager.exportToZipFile(app, manager, files, cacheName)
         }
         if (destination == null) Task(message = app.getString(R.string.library_packaged_notice), share = zip)
         else try {
