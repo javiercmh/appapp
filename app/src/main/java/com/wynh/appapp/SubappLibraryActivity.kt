@@ -607,29 +607,26 @@ class SubappLibraryActivity : AppCompatActivity() {
                 catch (_: Exception) { hostFailed = true }
 
                 apps = withContext(Dispatchers.IO) { repository.list() }
-                val lookups = mutableMapOf<GitHubSource, Result<VersionUpdateChecker.PublishedVersion>>()
+                val session = checker.SubappCheckSession(com.wynh.appapp.updates.UpdateAvailability.of(this@SubappLibraryActivity))
                 for (record in apps) {
                     ensureActive()
                     try {
-                        val available = withContext(Dispatchers.IO) {
-                            val updater = WorkspaceUpdater(record.directory)
-                            val source = updater.installed()?.source
-                            if (source == null) null else {
-                                val published = lookups.getOrPut(source) { runCatching { checker.subapp(source) } }.getOrThrow()
-                                if (VersionUpdateChecker.newer(published.version, updater.currentVersion())) published else null
-                            }
+                        val result = withContext(Dispatchers.IO) {
+                            session.check(record.id, WorkspaceUpdater(record.directory))
                         }
                         ensureActive()
-                        if (available == null) {
+                        if (result !is VersionUpdateChecker.SubappCheckResult.Available) {
                             indicators.clear(record.id)
                         } else {
-                            val stillNewer = withContext(Dispatchers.IO) {
+                            val available = result.version
+                            val stillApplicable = withContext(Dispatchers.IO) {
                                 val updater = WorkspaceUpdater(record.directory)
-                                updater.installed()?.source == available.source &&
-                                    VersionUpdateChecker.newer(available.version, updater.currentVersion())
+                                val installed = updater.installed()
+                                installed?.source == available.source &&
+                                    VersionUpdateChecker.isApplicable(available, updater.currentVersion(), installed.commit)
                             }
                             ensureActive()
-                            if (stillNewer) {
+                            if (stillApplicable) {
                                 indicators.record(record.id, available)
                                 found.add(record)
                             } else {

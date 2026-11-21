@@ -13,10 +13,10 @@ class SubappUpdateIndicators internal constructor(private val prefs: SharedPrefe
         prefs.edit { putString(id, gson.toJson(version)) }
     }
     fun clear(id: String) { prefs.edit { remove(id) } }
-    internal fun matching(id: String, source: GitHubSource?, installedVersion: String?): VersionUpdateChecker.PublishedVersion? {
+    internal fun matching(id: String, source: GitHubSource?, installedVersion: String?, installedCommit: String? = null): VersionUpdateChecker.PublishedVersion? {
         val value = runCatching { gson.fromJson(prefs.getString(id, null), VersionUpdateChecker.PublishedVersion::class.java) }.getOrNull()
             ?: return null
-        if (source != value.source || !runCatching { VersionUpdateChecker.newer(value.version, installedVersion) }.getOrDefault(false)) {
+        if (source != value.source || !runCatching { VersionUpdateChecker.isApplicable(value, installedVersion, installedCommit) }.getOrDefault(false)) {
             clear(id); return null
         }
         return value.takeIf { it.commit.matches(Regex("[a-f0-9]{40}")) }
@@ -25,7 +25,8 @@ class SubappUpdateIndicators internal constructor(private val prefs: SharedPrefe
         if (!record.workspaceDir.isDirectory) { clear(record.id); return null }
         return runCatching {
             val updater = WorkspaceUpdater(record.directory)
-            matching(record.id, updater.installed()?.source, updater.currentVersion())
+            val installed = updater.installed()
+            matching(record.id, installed?.source, updater.currentVersion(), installed?.commit)
         }.getOrNull()
     }
     companion object {

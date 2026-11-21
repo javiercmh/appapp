@@ -28,4 +28,12 @@ class SubappUpdateIndicatorsTest {
         assertNull(store.matching("app", source, "1"))
         assertNull(store.matching("different-app", source, "1"))
     }
+    @Test fun sameVersionUpdateRemainsUntilInstalledCommitCatchesUp() {
+        val store = SubappUpdateIndicators(UpdateAvailabilityTest.MemoryPrefs())
+        val sameVersion = VersionUpdateChecker.PublishedVersion(source, "b".repeat(40), "1.1.0")
+        store.record("app", sameVersion)
+        assertEquals(sameVersion, store.matching("app", source, "1.1.0", "a".repeat(40)))
+        assertNull(store.matching("app", source, "1.1.0", "b".repeat(40)))
+        assertNull(store.matching("app", source, "1.1.0", "a".repeat(40)))
+    }
 }

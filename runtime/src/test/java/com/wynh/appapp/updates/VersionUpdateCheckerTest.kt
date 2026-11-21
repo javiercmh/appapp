@@ -2,8 +2,10 @@ package com.wynh.appapp.updates
 
 import org.junit.Assert.*
 import org.junit.Test
+import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import java.nio.file.Files
 
 class VersionUpdateCheckerTest {
     private val source = GitHubSource("owner", "app", "feature/test")
@@ -66,6 +68,65 @@ class VersionUpdateCheckerTest {
         }
         for (status in listOf(403, 404, 429, 500)) {
             assertTrue(runCatching { VersionUpdateChecker { url -> Response(url, "{}", status) }.hostRelease(false) }.isFailure)
+        }
+    }
+
+    @Test fun sessionDetectsSameVersionManagedFileUpdatesAndSkipsUnmanagedCommits() {
+        val root = Files.createTempDirectory("version-check-session").toFile()
+        try {
+            val installedCommit = "1".repeat(40)
+            val newCommit = "2".repeat(40)
+            val manifest = """{"name":"Working Hours","version":"1.1.0","app2Update":{"appId":"com.wynh.workinghours","minimumHostVersionCode":1,"github":{"owner":"owner","repository":"app","branch":"feature/test"},"managedFiles":["index.html","manifest.json"],"seedFiles":[]}}"""
+            val staged = File(root, "staged").apply { mkdirs() }
+            File(staged, "manifest.json").writeText(manifest)
+            File(staged, "index.html").writeText("v1")
+            val appDir = File(root, "app").apply { File(this, "workspace").mkdirs() }
+            val updater = WorkspaceUpdater(appDir)
+            updater.install(UpdatePackage.parse(manifest), staged, installedCommit, 100, source = source)
+
+            // 1) Same version with a managed file changed -> Available
+            val managedCompare = """{"status":"ahead","ahead_by":1,"behind_by":0,"total_commits":1,"commits":[{"commit":{"message":"Add feature"}}],"files":[{"filename":"index.html","status":"modified"}]}"""
+            val checkerWithChanges = VersionUpdateChecker { url ->
+                Response(url, when {
+                    "/compare/" in url.path -> managedCompare
+                    url.host == "api.github.com" -> """{"sha":"$newCommit"}"""
+                    else -> manifest
+                })
+            }
+            val available = checkerWithChanges.SubappCheckSession().check("wh", updater)
+            assertEquals(VersionUpdateChecker.SubappCheckResult.Available(VersionUpdateChecker.PublishedVersion(source, newCommit, "1.1.0")), available)
+
+            // 2) Same version with only an unmanaged file changed -> UpToDate, and cached in UpdateAvailability
+            val compareCalls = mutableListOf<String>()
+            val unmanagedCompare = """{"status":"ahead","ahead_by":1,"behind_by":0,"total_commits":1,"commits":[{"commit":{"message":"Update CI"}}],"files":[{"filename":".github/ci.yml","status":"modified"}]}"""
+            val checkerUnmanaged = VersionUpdateChecker { url ->
+                if ("/compare/" in url.path) compareCalls.add(url.path)
+                Response(url, when {
+                    "/compare/" in url.path -> unmanagedCompare
+                    url.host == "api.github.com" -> """{"sha":"$newCommit"}"""
+                    else -> manifest
+                })
+            }
+            val availability = UpdateAvailability(UpdateAvailabilityTest.MemoryPrefs())
+            assertEquals(VersionUpdateChecker.SubappCheckResult.UpToDate, checkerUnmanaged.SubappCheckSession(availability).check("wh", updater))
+            assertEquals(1, compareCalls.size)
+            assertEquals(newCommit, availability.knownUnchanged("wh", source))
+            // Second check skips /compare/ because the commit is already known unchanged
+            assertEquals(VersionUpdateChecker.SubappCheckResult.UpToDate, checkerUnmanaged.SubappCheckSession(availability).check("wh", updater))
+            assertEquals(1, compareCalls.size)
+
+            // 3) Same version with behind commit -> UpToDate
+            val behindCompare = """{"status":"behind","ahead_by":0,"behind_by":1,"total_commits":0,"commits":[],"files":[{"filename":"index.html","status":"modified"}]}"""
+            val checkerBehind = VersionUpdateChecker { url ->
+                Response(url, when {
+                    "/compare/" in url.path -> behindCompare
+                    url.host == "api.github.com" -> """{"sha":"$newCommit"}"""
+                    else -> manifest
+                })
+            }
+            assertEquals(VersionUpdateChecker.SubappCheckResult.UpToDate, checkerBehind.SubappCheckSession().check("wh", updater))
+        } finally {
+            root.deleteRecursively()
         }
     }
 }

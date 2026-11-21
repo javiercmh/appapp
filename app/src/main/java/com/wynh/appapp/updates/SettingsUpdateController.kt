@@ -72,7 +72,7 @@ class SettingsUpdateController(
                 catch (_: Exception) { failed = true; host.setText(R.string.updates_host_failed) }
 
                 val apps = withContext(Dispatchers.IO) { records() }
-                val lookups = mutableMapOf<GitHubSource, Result<VersionUpdateChecker.PublishedVersion>>()
+                val session = checker.SubappCheckSession(UpdateAvailability.of(activity))
                 val found = mutableListOf<SubappRecord>()
                 var failures = 0
                 var skipped = 0
@@ -80,26 +80,26 @@ class SettingsUpdateController(
                     ensureActive()
                     subapps.text = activity.getString(R.string.updates_subapp_progress, index + 1, apps.size)
                     try {
-                        val available = withContext(Dispatchers.IO) {
-                            val updater = WorkspaceUpdater(record.directory)
-                            val source = updater.installed()?.source
-                            if (source == null) null else {
-                                val published = lookups.getOrPut(source) { runCatching { checker.subapp(source) } }.getOrThrow()
-                                VersionUpdateChecker.newer(published.version, updater.currentVersion())
-                                published
-                            }
+                        val result = withContext(Dispatchers.IO) {
+                            session.check(record.id, WorkspaceUpdater(record.directory))
                         }
                         ensureActive()
-                        if (available == null) { skipped++; indicators.clear(record.id) }
-                        else {
-                            // Revalidate locally after the request: the workspace may have changed during it.
-                            val current = withContext(Dispatchers.IO) {
-                                val updater = WorkspaceUpdater(record.directory)
-                                updater.installed()?.source == available.source && VersionUpdateChecker.newer(available.version, updater.currentVersion())
+                        when (result) {
+                            VersionUpdateChecker.SubappCheckResult.Unlinked -> { skipped++; indicators.clear(record.id) }
+                            VersionUpdateChecker.SubappCheckResult.UpToDate -> indicators.clear(record.id)
+                            is VersionUpdateChecker.SubappCheckResult.Available -> {
+                                val available = result.version
+                                // Revalidate locally after the request: the workspace may have changed during it.
+                                val current = withContext(Dispatchers.IO) {
+                                    val updater = WorkspaceUpdater(record.directory)
+                                    val installed = updater.installed()
+                                    installed?.source == available.source &&
+                                        VersionUpdateChecker.isApplicable(available, updater.currentVersion(), installed.commit)
+                                }
+                                ensureActive()
+                                if (current) { indicators.record(record.id, available); found.add(record) }
+                                else indicators.clear(record.id)
                             }
-                            ensureActive()
-                            if (current) { indicators.record(record.id, available); found.add(record) }
-                            else indicators.clear(record.id)
                         }
                     } catch (e: CancellationException) { throw e }
                     catch (_: Exception) { failures++ }

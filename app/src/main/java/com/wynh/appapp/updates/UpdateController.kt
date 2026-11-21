@@ -129,6 +129,7 @@ class UpdateController(
                 val installed = updater.installed()
                 if (installed != null && installed.source == source && updater.currentVersion() == installed.version &&
                     (latest == installed.commit || latest == availability.knownUnchanged(record.id, source))) {
+                    SubappUpdateIndicators.of(activity).clear(record.id)
                     close()
                     showUpToDate(installed.version, source) {}
                     return@launch
@@ -151,7 +152,7 @@ class UpdateController(
     internal suspend fun reviewCommit(source: GitHubSource, commit: String, guided: GuidedReview? = null, beforeShowing: suspend () -> Unit = {}) {
         val installed = updater.installed()
         val pkg = withContext(Dispatchers.IO) { downloader.manifest(source, commit, hostCompatibilityLevel) }
-        if (guided != null && (installed?.source != source || !VersionUpdateChecker.newer(pkg.version, updater.currentVersion()))) {
+        if (guided != null && (installed?.source != source || !VersionUpdateChecker.isApplicable(pkg.version, commit, updater.currentVersion(), installed.commit))) {
             beforeShowing(); guided.onSkip(); return
         }
         val sameRepository = installed != null && installed.source.owner == source.owner && installed.source.repository == source.repository
@@ -170,7 +171,8 @@ class UpdateController(
             beforeShowing()
             if (plan.unchanged) {
                 availability.recordUnchanged(record.id, source, commit)
-                showUpToDate(pkg.version, source) {}
+                SubappUpdateIndicators.of(activity).clear(record.id)
+                if (guided != null) guided.onSkip() else showUpToDate(pkg.version, source) {}
                 return
             }
             showReview(Pending(pkg, commit, source, plan.preview, reviewed, staged = null, reusable = plan.reusable, comparison = comparison, note = note, guided = guided))
@@ -227,14 +229,17 @@ class UpdateController(
             }
         }
         beforeShowing()
-        if (guided != null && (updater.installed()?.source != source || !VersionUpdateChecker.newer(value.pkg.version, updater.currentVersion()))) {
+        val installed = updater.installed()
+        if (guided != null && (installed?.source != source || !VersionUpdateChecker.isApplicable(value.pkg.version, value.commit, updater.currentVersion(), installed.commit))) {
             value.directory.deleteRecursively()
             guided.onSkip()
             return
         }
         if (unchanged) {
             availability.recordUnchanged(record.id, source, value.commit)
-            showUpToDate(value.pkg.version, source) { value.directory.deleteRecursively() }
+            SubappUpdateIndicators.of(activity).clear(record.id)
+            if (guided != null) { value.directory.deleteRecursively(); guided.onSkip() }
+            else showUpToDate(value.pkg.version, source) { value.directory.deleteRecursively() }
             return
         }
         showReview(Pending(value.pkg, value.commit, source, preview, reviewed, staged = value.directory, comparison = comparison, note = note, guided = guided))
@@ -411,6 +416,7 @@ class UpdateController(
         // The operation may outlive this screen, so capture plain values rather than the controller.
         val downloader = downloader
         val updater = updater
+        val indicators = SubappUpdateIndicators.of(activity.applicationContext)
         val level = hostCompatibilityLevel
         val guided = update.guided != null
         val downloaded = java.util.concurrent.atomic.AtomicReference<File?>(update.staged)
@@ -431,11 +437,13 @@ class UpdateController(
             cleanup = { downloaded.get()?.deleteRecursively() }, prepare = prepare) { workspace, history ->
             val files = checkNotNull(downloaded.get()) { "Update files were not downloaded" }
             if (guided) {
-                check(updater.installed()?.source == update.source && VersionUpdateChecker.newer(update.pkg.version, updater.currentVersion())) { "This update no longer matches the installed app" }
+                val installed = updater.installed()
+                check(installed?.source == update.source && VersionUpdateChecker.isApplicable(update.pkg.version, update.commit, updater.currentVersion(), installed.commit)) { "This update no longer matches the installed app" }
             }
             history.ensureInitialVersion(workspace)
             check(history.saveSnapshot(workspace, labels.before) != null) { "Could not save version history; update cancelled" }
             updater.install(update.pkg, files, update.commit, level, update.reviewed, acceptMismatch = acceptMismatch, source = update.source)
+            indicators.clear(record.id)
             check(history.saveSnapshot(workspace, labels.after) != null) { "App updated, but version history could not be saved" }
         }
     }
