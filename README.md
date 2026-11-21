@@ -3,11 +3,11 @@
 **Run web apps on your Android phone.** Pick an app from the curated Discover list or import one from GitHub or a ZIP file, launch it from your home screen, and back it up on your phone. Apps can use Android features like notifications and text-to-speech, and even AI through your own account.
 
 <p align="center">
-  <img src="docs/images/appapp-runtime-phone.png" width="23%" alt="Your app: the Starter Demo running full screen, with notes, photos, pronunciation and AI">
-  <img src="docs/images/appapp-library-phone.png" width="23%" alt="Library: your apps, with LingoMage and Starter Demo">
-  <img src="docs/images/appapp-settings-phone.png" width="23%" alt="Settings: backup and AI provider connections">
+  <img src="docs/images/appapp-library-phone.png" width="26%" alt="Your apps: installed subapps with unified top-bar refresh, import, settings and drag-to-reorder">
+  <img src="docs/images/appapp-discover-phone.png" width="26%" alt="Discover: curated subapps with category, feature tags and one-tap install">
+  <img src="docs/images/appapp-settings-phone.png" width="26%" alt="Settings: grouped AI services, subapp backup, version history, notifications and updates">
 </p>
-<p align="center"><sub><b>Your app</b> · <b>Library</b> · <b>Settings</b></sub></p>
+<p align="center"><sub><b>Your apps</b> · <b>Discover</b> · <b>Settings</b></sub></p>
 
 ## Download
 
@@ -17,13 +17,13 @@ Get the latest APK from [Releases](https://github.com/javiercmh/appapp/releases/
 
 1. Open App². Swipe to **Discover** (or tap it in the bottom bar) to browse curated apps, and tap **Install** to add one.
 2. To add something else, tap **+ Import** in the top bar. Import a ZIP file, paste a public GitHub repository or folder link, or start from the **Starter Demo** template.
-3. Tap an app to run it. Its menu has **Add to home screen**, **Configure app**, **Backup & Restore**, **Permissions**, **Update app** and **Delete**. Long press an app in **Your apps** to reorder.
+3. Tap an app to run it. Its menu has **Add to home screen**, **Configure app**, **Backup & Restore**, **Permissions**, **Update app** and **Delete**. Hold and drag any app in **Your apps** to reorder.
 
 ## What you can do
 
 | | |
 | :--- | :--- |
-| 🧭 **Discover** | Browse and install curated apps, with their category, author, licence and the features they use. |
+| 🧭 **Discover** | Browse and install curated apps; tap any card to see its author, licence, version and the features it uses. |
 | 📥 **Import** | Add any app (called a *subapp*) from a ZIP file or a public GitHub repository. |
 | 🔄 **Update** | Pull new versions from GitHub after reviewing them. Your data is kept. |
 | ⚙️ **Configure** | Change an app’s name, description and icon. |
@@ -48,7 +48,7 @@ Discover ships inside App² and does not go online by itself. Tap the refresh ic
 - **Review subapp updates:** tap **Review** (or **Review updates** in Settings) to review each newer version before installing, with **Skip** and **Stop reviewing** options. Checks run only when requested; same-version file changes do not count as a new version.
 - **Update an app:** open its menu in **Your apps** and choose **Update app**, or tap **Update** on its Discover page. The code is replaced and your data is kept.
 - **Restore an earlier version:** app menu → **Backup & Restore → Versions**. App² saves a version before and after every update, and you can save one yourself at any time.
-- **Back up everything:** **Settings → Apps & data → Backup & restore** saves all your apps, with their data, in one ZIP. Restoring adds them as new copies. App² settings, reminders and AI credentials are not included.
+- **Back up everything:** **Settings → Apps & data → Subapp backup** saves all your apps, with their data, in one ZIP (**Back up** / **Restore**). Restoring adds them as new copies. App² settings, reminders and AI credentials are not included.
 
 ## Try App² Dev
 

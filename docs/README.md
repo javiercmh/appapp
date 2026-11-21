@@ -7,6 +7,11 @@
 contract: bridge, permissions, AI, speech, translation, sharing, save as, choosing a phone file, updates). Both ship inside every new subapp.
 To list an app in Discover, follow [CONTRIBUTING.md](../CONTRIBUTING.md).
 
+<p align="center">
+  <img src="images/appapp-runtime-phone.png" width="28%" alt="Starter Demo running full screen inside App², showing storage, photos, pronunciation and AI">
+</p>
+<p align="center"><sub><b>Starter Demo</b> — the bundled template for building subapps</sub></p>
+
 For subapp file import/export, read [choosing a file from the phone](../app/src/main/assets/starter_template/PACKAGING.md#choosing-a-file-from-the-phone)
 and [Save as](../app/src/main/assets/starter_template/PACKAGING.md#save-as).
 The development reference on GitHub is on the [`dev` branch](https://github.com/javiercmh/appapp/blob/dev/app/src/main/assets/starter_template/PACKAGING.md).
