@@ -66,7 +66,9 @@ class AiWebMessageBridge(
                 val body = optionalText(data, "body")
                 val session = optionalText(data, "sessionId")
                 if (title == null || body == null || session == null || (session.value?.length ?: 0) > 64) { fail(reply, id, "invalid_request", "Invalid request."); return }
-                if (model.isBlank() || model.length > 8192 || providerId.length > 32 || input.length > 100_000 || instructions.length > 100_000) { fail(reply, id, "invalid_request", "Invalid request."); return }
+                if (model.isBlank()) { fail(reply, id, "invalid_request", "No AI model was selected."); return }
+                if (model.length > 8192 || providerId.length > 32) { fail(reply, id, "invalid_request", "Invalid AI provider or model."); return }
+                if (input.length > 100_000 || instructions.length > 100_000) { fail(reply, id, "invalid_request", "Request input or instructions are too large."); return }
                 val begin = { start(reply, id, providerId, model, instructions, input, effort, title.value, body.value, session.value) }
                 if (SubappGrants.isGranted(activity, appId, SubappCapability.AI)) begin()
                 else askForAi(providerId, model) { allowed ->
@@ -84,7 +86,8 @@ class AiWebMessageBridge(
                 val title = optionalText(data, "title")
                 val body = optionalText(data, "body")
                 if (title == null || body == null) { fail(reply, id, "invalid_request", "Invalid request."); return }
-                if (model.isBlank() || model.length > 8192 || providerId.length > 32) { fail(reply, id, "invalid_request", "Invalid request."); return }
+                if (model.isBlank()) { fail(reply, id, "invalid_request", "No AI model was selected."); return }
+                if (model.length > 8192 || providerId.length > 32) { fail(reply, id, "invalid_request", "Invalid AI provider or model."); return }
                 // Checked on this activity at this moment, before any disclosure; no provider is contacted.
                 if (!resumed()) { fail(reply, id, "background_service", "Background work can only be started while the app is on screen."); return }
                 val begin = { beginSession(reply, id, providerId, model, title.value, body.value) }
