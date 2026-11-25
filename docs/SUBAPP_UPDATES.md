@@ -137,7 +137,9 @@ the app keeps running. Managed files the publisher did not touch are copied from
 workspace when they still match the hashes recorded at the last install, so only the
 changed files are fetched. That download runs as part of the update operation, so it
 survives rotation. Reviewing several apps' updates in a row from the library uses the same
-commit-first review for each app.
+commit-first review for each app. The library refresh (`↻`) and **Settings → Check
+updates** also compare commits when the version is unchanged, flagging managed-file
+updates and remembering commits already found unchanged.
 
 When GitHub's comparison cannot describe the update exactly, App² downloads the whole
 package and compares it file by file before the review, as before: an app being linked

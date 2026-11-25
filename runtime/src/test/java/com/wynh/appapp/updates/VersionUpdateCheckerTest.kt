@@ -125,6 +125,44 @@ class VersionUpdateCheckerTest {
                 })
             }
             assertEquals(VersionUpdateChecker.SubappCheckResult.UpToDate, checkerBehind.SubappCheckSession().check("wh", updater))
+
+            // 4) Failed /compare/ (e.g. force-pushed commit 404) falls back to Available
+            val expectedAvailable = VersionUpdateChecker.SubappCheckResult.Available(
+                VersionUpdateChecker.PublishedVersion(source, newCommit, "1.1.0")
+            )
+            val checkerFailedCompare = VersionUpdateChecker { url ->
+                when {
+                    "/compare/" in url.path -> Response(url, "{}", 404)
+                    url.host == "api.github.com" -> Response(url, """{"sha":"$newCommit"}""")
+                    else -> Response(url, manifest)
+                }
+            }
+            assertEquals(expectedAvailable, checkerFailedCompare.SubappCheckSession().check("wh", updater))
+
+            // 5) Diverged commit falls back to Available
+            val divergedCompare = """{"status":"diverged","ahead_by":1,"behind_by":1,"total_commits":1,"commits":[],"files":[{"filename":".github/ci.yml","status":"modified"}]}"""
+            val checkerDiverged = VersionUpdateChecker { url ->
+                Response(url, when {
+                    "/compare/" in url.path -> divergedCompare
+                    url.host == "api.github.com" -> """{"sha":"$newCommit"}"""
+                    else -> manifest
+                })
+            }
+            assertEquals(expectedAvailable, checkerDiverged.SubappCheckSession().check("wh", updater))
+
+            // 6) Truncated ahead file list (300 files) falls back to Available
+            val truncatedFiles = (1..Comparison.MAX_FILES).joinToString(",") {
+                """{"filename":"docs/f$it.txt","status":"modified"}"""
+            }
+            val truncatedCompare = """{"status":"ahead","ahead_by":1,"behind_by":0,"total_commits":1,"commits":[{"commit":{"message":"Many docs"}}],"files":[$truncatedFiles]}"""
+            val checkerTruncated = VersionUpdateChecker { url ->
+                Response(url, when {
+                    "/compare/" in url.path -> truncatedCompare
+                    url.host == "api.github.com" -> """{"sha":"$newCommit"}"""
+                    else -> manifest
+                })
+            }
+            assertEquals(expectedAvailable, checkerTruncated.SubappCheckSession().check("wh", updater))
         } finally {
             root.deleteRecursively()
         }

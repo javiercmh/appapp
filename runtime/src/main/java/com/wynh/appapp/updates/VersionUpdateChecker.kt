@@ -82,7 +82,7 @@ class VersionUpdateChecker(private val connect: (URL) -> HttpURLConnection = { i
             val pkg = checked.pkg ?: return SubappCheckResult.UpToDate
             val comparison = comparisons.getOrPut(Triple(source, installed.commit, published.commit)) {
                 runCatching { compare(source, installed.commit, published.commit) }
-            }.getOrThrow()
+            }.getOrNull() ?: return SubappCheckResult.Available(published)
             val plan = updater.plan(pkg, comparison, source)
             if (plan != null) {
                 if (plan.unchanged) {

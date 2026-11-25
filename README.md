@@ -46,7 +46,7 @@ Discover ships inside App² and does not go online by itself. Tap the refresh ic
 ## Updates and backups
 
 - **Check for updates:** tap the refresh icon (`↻`) in the top bar from either tab to refresh Discover and check App² and linked subapps together. If an App² update is available, a compact banner appears at the top with a GitHub link; if subapp updates are found, affected cards show an update badge and a **Review** prompt appears. You can also open the full status dialog anytime from **Settings → About → Check updates**. App² Dev checks Dev releases.
-- **Review subapp updates:** tap **Review** (or **Review updates** in Settings) to review each newer version before installing, with **Skip** and **Stop reviewing** options. Checks run only when requested; same-version file changes do not count as a new version.
+- **Review subapp updates:** tap **Review** (or **Review updates** in Settings) to review each available update before installing, with **Skip** and **Stop reviewing** options. Checks run only when requested; changes to an app's managed files count as an update even with the same version number, while unrelated repository commits do not.
 - **Update an app:** open its menu in **Your apps** and choose **Update app**, or tap **Update** on its Discover page. The code is replaced and your data is kept.
 - **Restore an earlier version:** app menu → **Backup & Restore → Versions**. App² saves a version before and after every update, and you can save one yourself at any time.
 - **Back up everything:** **Settings → Apps & data → Subapp backup** saves all your apps, with their data, in one ZIP (**Back up** / **Restore**). Restoring adds them as new copies. App² settings, reminders and AI credentials are not included.
