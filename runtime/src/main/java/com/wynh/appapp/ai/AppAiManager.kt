@@ -66,11 +66,14 @@ class AppAiManager(context: Context) {
         private set
     val customConnected: Boolean get() = customEndpoint != null
     val customUrl: String? get() = customEndpoint?.baseUrl
+    val customAlias: String? get() = customEndpoint?.alias
+    /** The alias when set, otherwise "Custom endpoint". */
+    val customName: String get() = customEndpoint?.displayName ?: CustomEndpoint.DEFAULT_NAME
     val custom = CustomEndpointInferenceRepository(http) { customEndpoint }
     val registry = AiProviderRegistry(listOf(
         AiProvider("chatgpt", "ChatGPT", inference) { auth.state.value.let { state -> state.accounts.firstOrNull { it.clientId == state.activeClientId }?.canInfer == true } },
         AiProvider("openrouter", "OpenRouter", openRouter) { openRouterConnected },
-        AiProvider("custom", "Custom endpoint", custom) { customConnected }
+        AiProvider("custom", { customName }, custom) { customConnected }
     ), preferences.getString("exposure", "chatgpt")?.takeIf { it in AiProviderRegistry.modes } ?: "chatgpt")
     val exposure: String get() = registry.exposure
     /** Serializes only the Settings model check; generation requests from different subapps run concurrently. */
@@ -168,13 +171,14 @@ class AppAiManager(context: Context) {
         broadcastConnection()
     }
 
-    suspend fun saveCustomEndpoint(url: String, key: String): Int {
+    suspend fun saveCustomEndpoint(url: String, key: String, alias: String? = null): Int {
+        val name = CustomEndpoint.normalizeAlias(alias)
         val base = CustomEndpoint.normalizeUrl(url) ?: throw CustomEndpoint.invalidUrl()
         withContext(Dispatchers.IO) { CustomEndpoint.requirePrivateIfPlain(base) }
         // Editing a saved endpoint may leave the key empty to keep the current one.
         val apiKey = key.trim().ifEmpty { customEndpoint?.apiKey.orEmpty() }
         if (!CustomEndpoint.validKey(apiKey)) throw ApiFailure(ApiFailure.Kind.INVALID_REQUEST, "Enter a valid API key.")
-        val candidate = CustomEndpoint(base, apiKey)
+        val candidate = CustomEndpoint(base, apiKey, name)
         val count = verifyCustom(candidate)
         withContext(Dispatchers.IO) { customStore.write(com.google.gson.Gson().toJson(candidate)) }
         cancelProvider("custom")

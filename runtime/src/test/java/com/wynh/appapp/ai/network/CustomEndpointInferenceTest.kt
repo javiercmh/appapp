@@ -43,4 +43,16 @@ class CustomEndpointInferenceTest {
         org.junit.Assert.assertThrows(ApiFailure::class.java) { CustomEndpoint.requirePrivateIfPlain("http://8.8.8.8/v1") }
         org.junit.Assert.assertThrows(ApiFailure::class.java) { CustomEndpoint.requirePrivateIfPlain("http://100.128.0.1/v1") }
     }
+
+    @Test fun `alias is optional, trimmed and bounded`() {
+        assertNull(CustomEndpoint.normalizeAlias(null))
+        assertNull(CustomEndpoint.normalizeAlias("   "))
+        assertEquals("DFKI server", CustomEndpoint.normalizeAlias("  DFKI   server "))
+        org.junit.Assert.assertThrows(ApiFailure::class.java) { CustomEndpoint.normalizeAlias("x".repeat(41)) }
+        assertEquals("Custom endpoint", CustomEndpoint("https://a.example/v1", "k").displayName)
+        assertEquals("Lab", CustomEndpoint("https://a.example/v1", "k", "Lab").displayName)
+        // Saves from before aliases existed have no alias field.
+        val old = com.google.gson.Gson().fromJson("""{"baseUrl":"https://a.example/v1","apiKey":"k"}""", CustomEndpoint::class.java)
+        assertEquals("Custom endpoint", old.displayName)
+    }
 }

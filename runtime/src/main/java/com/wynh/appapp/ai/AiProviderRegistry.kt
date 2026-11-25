@@ -5,7 +5,11 @@ import com.wynh.appapp.ai.network.InferenceRepository
 import com.wynh.appapp.ai.network.ModelChoice
 import java.util.Base64
 
-data class AiProvider(val id: String, val name: String, val inference: InferenceRepository, val connected: () -> Boolean)
+/** [label] is read on each use, so a renamed service (the custom endpoint's alias) shows its current name. */
+class AiProvider(val id: String, private val label: () -> String, val inference: InferenceRepository, val connected: () -> Boolean) {
+    constructor(id: String, name: String, inference: InferenceRepository, connected: () -> Boolean) : this(id, { name }, inference, connected)
+    val name: String get() = label()
+}
 data class ExposedProvider(val id: String, val name: String, val connected: Boolean)
 data class ModelRoute(val provider: AiProvider, val model: String)
 

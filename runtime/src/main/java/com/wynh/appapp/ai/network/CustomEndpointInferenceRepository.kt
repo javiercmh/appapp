@@ -12,8 +12,22 @@ import okhttp3.RequestBody.Companion.toRequestBody
  * A user-entered OpenAI-compatible service: base URL (the part before `/models`) and API key.
  * HTTPS everywhere; plain HTTP only for servers on a private network (see [requirePrivateIfPlain]).
  */
-data class CustomEndpoint(val baseUrl: String, val apiKey: String) {
+data class CustomEndpoint(val baseUrl: String, val apiKey: String, val alias: String? = null) {
+    /** What the user sees: the optional alias, or the generic name. Gson leaves [alias] null in older saves. */
+    val displayName: String get() = alias?.takeIf { it.isNotBlank() } ?: DEFAULT_NAME
+
     companion object {
+        const val DEFAULT_NAME = "Custom endpoint"
+        const val MAX_ALIAS = 40
+
+        /** Trimmed alias, null when blank, or throws when it is too long or holds control characters. */
+        fun normalizeAlias(raw: String?): String? {
+            val alias = raw?.trim()?.replace(Regex("\\s+"), " ")?.takeIf { it.isNotEmpty() } ?: return null
+            if (alias.length > MAX_ALIAS || alias.any { it.isISOControl() })
+                throw ApiFailure(ApiFailure.Kind.INVALID_REQUEST, "Keep the name to $MAX_ALIAS characters or fewer.")
+            return alias
+        }
+
         /** Returns a normalized HTTP(S) base URL, or null when it is not acceptable. */
         fun normalizeUrl(raw: String): String? {
             val url: HttpUrl = raw.trim().toHttpUrlOrNull() ?: return null

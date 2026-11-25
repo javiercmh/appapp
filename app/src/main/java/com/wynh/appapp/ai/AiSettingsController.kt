@@ -182,6 +182,7 @@ object AiSettingsController {
     private fun bindCustomEndpoint(activity: ComponentActivity, dialog: Dialog): Service {
         val ai = (activity.application as AppAiApplication).ai
         val status = dialog.findViewById<TextView>(R.id.settings_tv_custom_status)
+        val title = dialog.findViewById<TextView>(R.id.settings_tv_custom_title)
         val connection = dialog.findViewById<TextView>(R.id.settings_tv_custom_connection)
         val checkButton = dialog.findViewById<MaterialButton>(R.id.settings_btn_custom_set)
         val more = dialog.findViewById<ImageButton>(R.id.settings_btn_custom_more)
@@ -189,6 +190,7 @@ object AiSettingsController {
         var feedback: String? = null
         fun render() {
             checkButton.text = if (busy) "Checking…" else "Check connection"
+            title.text = ai.customName
             checkButton.isEnabled = !busy && ai.customConnected
             more.isEnabled = !busy && !ai.customRestoring
             connection.text = when {
@@ -214,15 +216,24 @@ object AiSettingsController {
         }
         fun openEntry() {
             val editing = ai.customConnected
+            val nameField = textField(activity, password = false).apply {
+                inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_WORDS
+                setText(ai.customAlias.orEmpty())
+                filters = arrayOf(android.text.InputFilter.LengthFilter(com.wynh.appapp.ai.network.CustomEndpoint.MAX_ALIAS))
+            }
             val urlField = textField(activity, password = false).apply { setText(ai.customUrl.orEmpty()) }
             val keyField = textField(activity, password = true)
+            val nameLayout = fieldLayout(activity, "Name (optional), such as DFKI server", nameField)
             val urlLayout = fieldLayout(activity, "Base URL (https://…/v1, or http:// on a private network)", urlField)
             val keyLayout = fieldLayout(activity, if (editing) "API key (leave empty to keep the current key)" else "API key", keyField, password = true)
             val form = android.widget.LinearLayout(activity).apply {
                 orientation = android.widget.LinearLayout.VERTICAL
                 val pad = (20 * activity.resources.displayMetrics.density).toInt()
                 setPadding(pad, 0, pad, 0)
-                addView(urlLayout)
+                addView(nameLayout)
+                addView(urlLayout, android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = (8 * activity.resources.displayMetrics.density).toInt() })
                 addView(keyLayout, android.widget.LinearLayout.LayoutParams(
                     android.widget.LinearLayout.LayoutParams.MATCH_PARENT, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
                 ).apply { topMargin = (8 * activity.resources.displayMetrics.density).toInt() })
@@ -231,9 +242,13 @@ object AiSettingsController {
                 title = if (editing) "Edit custom endpoint" else "Add custom endpoint",
                 message = "Works with any OpenAI-compatible service. The URL and key are verified by listing the service's models, then stored encrypted on this device.",
                 form = form,
-                errorField = { e -> if ((e as? ApiFailure)?.kind == ApiFailure.Kind.AUTHENTICATION) keyLayout else urlLayout },
+                errorField = { e -> when {
+                    (e as? ApiFailure)?.kind == ApiFailure.Kind.AUTHENTICATION -> keyLayout
+                    e.message?.startsWith("Keep the name") == true -> nameLayout
+                    else -> urlLayout
+                } },
                 verify = {
-                    val count = ai.saveCustomEndpoint(urlField.text?.toString().orEmpty(), keyField.text?.toString().orEmpty())
+                    val count = ai.saveCustomEndpoint(urlField.text?.toString().orEmpty(), keyField.text?.toString().orEmpty(), nameField.text?.toString())
                     preferNewlyAdded(ai, "custom")
                     "Verified · $count models available."
                 },
