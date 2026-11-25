@@ -109,7 +109,7 @@ class MarketplaceDeviceTest {
                     val list = activity.findViewById<RecyclerView>(R.id.discover_list)
                     ready = pager.currentItem == 1 &&
                         activity.findViewById<BottomNavigationView>(R.id.library_bottom_nav).selectedItemId == R.id.nav_discover &&
-                        list.adapter?.itemCount == 4 &&
+                        list.adapter?.itemCount == 5 &&
                         list.findViewHolderForAdapterPosition(1) != null
                 }
                 ready
@@ -134,7 +134,7 @@ class MarketplaceDeviceTest {
                     val pager = activity.findViewById<ViewPager2>(R.id.library_pager)
                     val list = activity.findViewById<RecyclerView>(R.id.discover_list)
                     ready = pager.currentItem == 1 &&
-                        list.adapter?.itemCount == 4 &&
+                        list.adapter?.itemCount == 5 &&
                         list.findViewHolderForAdapterPosition(1) != null
                 }
                 ready

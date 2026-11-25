@@ -42,6 +42,26 @@
       }
     },
     {
+      "id": "b-log",
+      "name": "B-log",
+      "author": "Javier Melo",
+      "category": "Sports",
+      "license": "MIT",
+      "summary": "Log boulders by tapping walls on your gym map and track progress.",
+      "description": "An offline boulder logbook for indoor climbing. Load a built-in gym or upload a layout file, tap a wall to log flashes, sends, and tries by difficulty and hold color, and track your progress over weeks and months.",
+      "capabilities": ["files", "share"],
+      "offlineOnly": true,
+      "minHostCompatibility": 1,
+      "iconKey": "b_log",
+      "source": {
+        "type": "github",
+        "owner": "javiercmh",
+        "repository": "b-log",
+        "branch": "main",
+        "publisherAppId": "com.wynh.blog"
+      }
+    },
+    {
       "id": "starter-demo",
       "name": "Starter Demo",
       "author": "App\u00b2",

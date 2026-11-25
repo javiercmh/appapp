@@ -145,7 +145,7 @@ class MarketplaceCatalogRepository(
         const val BUNDLED_ASSET_PATH = "catalog/catalog.json"
         const val DEFAULT_CATALOG_URL =
             "https://raw.githubusercontent.com/javiercmh/appapp/main/app/src/main/assets/catalog/catalog.json"
-        val BUILT_IN_ICON_KEYS = setOf("lingomage", "working_hours", "starter_demo")
+        val BUILT_IN_ICON_KEYS = setOf("lingomage", "working_hours", "b_log", "starter_demo")
         private const val USER_AGENT = "AppApp-Catalog"
         private const val MAX_CATALOG_BYTES = 256L * 1024
         private const val MAX_META_BYTES = 64L * 1024

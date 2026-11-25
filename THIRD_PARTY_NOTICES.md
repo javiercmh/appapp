@@ -107,4 +107,4 @@ providers a user connects; they are not covered by App²'s MIT license and imply
   the same design. They are offered under the MIT license to the extent the owner holds rights in them.
 - **`ic_chatgpt.xml`.** The OpenAI mark from Simple Icons v14.0.0 (CC0), per its file comment.
 - **`ic_openrouter.xml`.** Provenance not recorded; unresolved.
-- **`catalog_icon_lingomage.png` and `catalog_icon_working_hours.png`.** App icons for LingoMage (`javiercmh/lingomage`) and Working Hours (`javiercmh/working-hours`), MIT licensed by the project owner.
+- **`catalog_icon_lingomage.png`, `catalog_icon_working_hours.png`, and `catalog_icon_b_log.png`.** App icons for LingoMage (`javiercmh/lingomage`), Working Hours (`javiercmh/working-hours`), and B-log (`javiercmh/b-log`), MIT licensed by the project owner.

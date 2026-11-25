@@ -38,6 +38,7 @@ Get the latest APK from [Releases](https://github.com/javiercmh/appapp/releases/
 
 - **[LingoMage](https://github.com/javiercmh/lingomage)**: learn languages with AI stories that match your interests and reading level.
 - **[Working Hours](https://github.com/javiercmh/working-hours)**: track shifts, breaks and overtime, with end-of-day reminders.
+- **[B-log](https://github.com/javiercmh/b-log)**: log bouldering sessions on your gym's map by difficulty and hold colour, and track progress over weeks and months.
 - **[Starter Demo](app/src/main/assets/starter_template/)**: included in App². Shows storage, photos, notifications, speech and AI, with a guide to building your own app.
 
 Discover ships inside App² and does not go online by itself. Tap the refresh icon (`↻`) in the top bar to download the latest catalog and check for updates. Each app has its own licence.

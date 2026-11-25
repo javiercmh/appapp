@@ -200,6 +200,7 @@ internal object MarketplaceUi {
         val bundledIconRes = when (app.iconKey) {
             "lingomage" -> R.drawable.catalog_icon_lingomage
             "working_hours" -> R.drawable.catalog_icon_working_hours
+            "b_log" -> R.drawable.catalog_icon_b_log
             "starter_demo" -> R.mipmap.ic_launcher_round
             else -> null
         }

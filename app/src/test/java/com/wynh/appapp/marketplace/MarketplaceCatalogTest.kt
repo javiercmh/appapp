@@ -48,7 +48,7 @@ class MarketplaceCatalogTest {
         val raw = bundledCatalogFile().readText(Charsets.UTF_8)
         val catalog = MarketplaceCatalogParser.parse(raw)
         assertEquals(1, catalog.schemaVersion)
-        assertEquals(listOf("lingomage", "working-hours", "starter-demo"), catalog.apps.map { it.id })
+        assertEquals(listOf("lingomage", "working-hours", "b-log", "starter-demo"), catalog.apps.map { it.id })
 
         val lingo = catalog.apps[0]
         assertEquals("LingoMage", lingo.name)
@@ -67,7 +67,19 @@ class MarketplaceCatalogTest {
         assertEquals(GitHubSource("javiercmh", "working-hours", "main"), hoursSrc.source)
         assertEquals("com.wynh.workinghours", hoursSrc.publisherAppId)
 
-        val starter = catalog.apps[2]
+        val bLog = catalog.apps[2]
+        assertEquals("B-log", bLog.name)
+        assertEquals("Javier Melo", bLog.author)
+        assertEquals("Sports", bLog.category)
+        assertTrue(bLog.offlineOnly)
+        assertEquals(listOf(CatalogCapability.FILES, CatalogCapability.SHARE), bLog.capabilities)
+        assertEquals(1L, bLog.minHostCompatibility)
+        assertEquals("b_log", bLog.iconKey)
+        val bLogSrc = bLog.source as CatalogSource.GitHub
+        assertEquals(GitHubSource("javiercmh", "b-log", "main"), bLogSrc.source)
+        assertEquals("com.wynh.blog", bLogSrc.publisherAppId)
+
+        val starter = catalog.apps[3]
         assertEquals("App\u00b2", starter.author)
         assertTrue(starter.offlineOnly)
         assertEquals(CatalogSource.BundledStarter, starter.source)
@@ -196,7 +208,7 @@ class MarketplaceCatalogTest {
         val initial = repoV1.loadLocal()
         assertEquals(0, networkCalls)
         assertFalse(initial.syncedFromRemote)
-        assertEquals(3, initial.apps.size)
+        assertEquals(4, initial.apps.size)
 
         val refreshed = repoV1.refreshFromRemote()
         assertTrue(refreshed.syncedFromRemote)
@@ -228,7 +240,7 @@ class MarketplaceCatalogTest {
         )
         val afterUpgrade = repoV2.loadLocal()
         assertFalse(afterUpgrade.syncedFromRemote)
-        assertEquals(listOf("lingomage", "working-hours", "starter-demo"), afterUpgrade.apps.map { it.id })
+        assertEquals(listOf("lingomage", "working-hours", "b-log", "starter-demo"), afterUpgrade.apps.map { it.id })
     }
 
     @Test
@@ -302,7 +314,13 @@ class MarketplaceCatalogTest {
         File(unattributedRec.directory, "import-source.json").writeText("""{"url":"https://github.com/someone/unattributed"}""")
         File(unattributedRec.workspaceDir, "manifest.json").writeText("""{"name":"Unattributed","author":"Someone"}""")
 
-        val records = listOf(lingoRec, whRec, ownApp, starterCopy, unattributedRec)
+        // 6. B-log matched via publisherAppId in manifest.json
+        val bLogRec = makeRecord("b-log-1")
+        File(bLogRec.workspaceDir, "manifest.json").writeText(
+            """{"name":"B-log","version":"0.8.1","app2Update":{"appId":"com.wynh.blog"}}"""
+        )
+
+        val records = listOf(lingoRec, whRec, ownApp, starterCopy, unattributedRec, bLogRec)
         val provenance = records.associate { it.id to MarketplaceMatcher.inspectInstalled(it) }
 
         val matched = MarketplaceMatcher.match(
@@ -324,6 +342,13 @@ class MarketplaceCatalogTest {
         assertEquals(listOf(whRec), whState.installedRecords)
         assertNull(whState.updateRecord)
         assertEquals("Javier Melo", whState.resolvedAuthor)
+
+        val bLogState = matched.first { it.app.id == "b-log" }
+        assertEquals(listOf(bLogRec), bLogState.installedRecords)
+        assertNull(bLogState.updateRecord)
+        assertTrue(bLogState.hostCompatible)
+        assertEquals("Javier Melo", bLogState.resolvedAuthor)
+        assertEquals("0.8.1", bLogState.installedVersion)
 
         val starterState = matched.first { it.app.id == "starter-demo" }
         assertEquals(listOf(starterCopy), starterState.installedRecords)
