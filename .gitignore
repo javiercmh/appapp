@@ -34,3 +34,6 @@ examples/**/.claude/
 # Python bytecode
 __pycache__/
 *.pyc
+
+# Kotlin compiler caches (Kotlin 2.x)
+.kotlin/
