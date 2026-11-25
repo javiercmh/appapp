@@ -5,9 +5,9 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CustomEndpointInferenceTest {
-    @Test fun `only plain https urls are accepted and normalized`() {
+    @Test fun `clean http and https urls are accepted and normalized`() {
         assertEquals("https://api.example.com/v1", CustomEndpoint.normalizeUrl(" https://api.example.com/v1/ "))
-        assertNull(CustomEndpoint.normalizeUrl("http://api.example.com/v1"))
+        assertEquals("http://10.0.0.5:8000/v1", CustomEndpoint.normalizeUrl("http://10.0.0.5:8000/v1/"))
         assertNull(CustomEndpoint.normalizeUrl("https://user:pw@api.example.com/v1"))
         assertNull(CustomEndpoint.normalizeUrl("https://api.example.com/v1?key=1"))
         assertNull(CustomEndpoint.normalizeUrl("https://api.example.com/v1#x"))
@@ -31,5 +31,16 @@ class CustomEndpointInferenceTest {
         assertEquals(ApiFailure.Kind.INCOMPLETE, assertThrows(ApiFailure::class.java) { text("""{"choices":[{"finish_reason":"length","message":{"content":"hi"}}]}""") }.kind)
         assertThrows(ApiFailure::class.java) { text("""{"choices":[{"finish_reason":"stop","message":{"refusal":"no","content":"hi"}}]}""") }
         assertThrows(ApiFailure::class.java) { text("""{"choices":[]}""") }
+    }
+
+    @Test fun `plain http is limited to private addresses`() {
+        CustomEndpoint.requirePrivateIfPlain("https://8.8.8.8/v1")
+        CustomEndpoint.requirePrivateIfPlain("http://192.168.33.186:8000/v1")
+        CustomEndpoint.requirePrivateIfPlain("http://10.1.2.3/v1")
+        CustomEndpoint.requirePrivateIfPlain("http://100.101.1.1/v1")
+        CustomEndpoint.requirePrivateIfPlain("http://127.0.0.1:8000/v1")
+        CustomEndpoint.requirePrivateIfPlain("http://[fd12::1]/v1")
+        org.junit.Assert.assertThrows(ApiFailure::class.java) { CustomEndpoint.requirePrivateIfPlain("http://8.8.8.8/v1") }
+        org.junit.Assert.assertThrows(ApiFailure::class.java) { CustomEndpoint.requirePrivateIfPlain("http://100.128.0.1/v1") }
     }
 }

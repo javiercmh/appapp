@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Cleartext is permitted so a custom AI endpoint on a private network can use plain http://.
+  The custom endpoint itself refuses http:// unless the host resolves only to private addresses
+  (CustomEndpoint.requirePrivateIfPlain), and subapp WebViews refuse http:// requests.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

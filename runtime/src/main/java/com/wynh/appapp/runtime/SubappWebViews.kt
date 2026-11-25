@@ -177,6 +177,8 @@ open class SubappWebViewClient(
         if (scheme != "http" && scheme != "https") return null
         val reason = when {
             !networkAllowed() -> "this app has no internet permission (library: app menu → Permissions)"
+            // Cleartext is allowed app-wide only for the native custom AI endpoint; subapps stay HTTPS-only.
+            scheme == "http" -> "plain http:// is blocked; use https://"
             SubappWebViews.isLocalNetworkHost(url.host) -> "local or private host literal is blocked"
             else -> return null
         }

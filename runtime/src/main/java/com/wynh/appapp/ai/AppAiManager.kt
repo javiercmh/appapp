@@ -169,8 +169,8 @@ class AppAiManager(context: Context) {
     }
 
     suspend fun saveCustomEndpoint(url: String, key: String): Int {
-        val base = CustomEndpoint.normalizeUrl(url)
-            ?: throw ApiFailure(ApiFailure.Kind.INVALID_REQUEST, "Enter a full https:// URL, such as https://api.example.com/v1, without credentials or a query.")
+        val base = CustomEndpoint.normalizeUrl(url) ?: throw CustomEndpoint.invalidUrl()
+        withContext(Dispatchers.IO) { CustomEndpoint.requirePrivateIfPlain(base) }
         // Editing a saved endpoint may leave the key empty to keep the current one.
         val apiKey = key.trim().ifEmpty { customEndpoint?.apiKey.orEmpty() }
         if (!CustomEndpoint.validKey(apiKey)) throw ApiFailure(ApiFailure.Kind.INVALID_REQUEST, "Enter a valid API key.")
@@ -185,8 +185,11 @@ class AppAiManager(context: Context) {
     }
 
     /** Re-verifies the saved custom endpoint by listing its models. */
-    suspend fun checkCustomEndpoint(): Int =
-        verifyCustom(customEndpoint ?: throw ApiFailure(ApiFailure.Kind.AUTHENTICATION, "Add a custom endpoint first."))
+    suspend fun checkCustomEndpoint(): Int {
+        val saved = customEndpoint ?: throw ApiFailure(ApiFailure.Kind.AUTHENTICATION, "Add a custom endpoint first.")
+        withContext(Dispatchers.IO) { CustomEndpoint.requirePrivateIfPlain(saved.baseUrl) }
+        return verifyCustom(saved)
+    }
 
     /** Setup-time wording: the generic request errors talk about models, but here the URL or key is what is wrong. */
     private suspend fun verifyCustom(candidate: CustomEndpoint): Int = try {

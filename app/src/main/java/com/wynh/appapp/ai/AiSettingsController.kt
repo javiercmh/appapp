@@ -216,7 +216,7 @@ object AiSettingsController {
             val editing = ai.customConnected
             val urlField = textField(activity, password = false).apply { setText(ai.customUrl.orEmpty()) }
             val keyField = textField(activity, password = true)
-            val urlLayout = fieldLayout(activity, "Base URL (https://…/v1)", urlField)
+            val urlLayout = fieldLayout(activity, "Base URL (https://…/v1, or http:// on a private network)", urlField)
             val keyLayout = fieldLayout(activity, if (editing) "API key (leave empty to keep the current key)" else "API key", keyField, password = true)
             val form = android.widget.LinearLayout(activity).apply {
                 orientation = android.widget.LinearLayout.VERTICAL

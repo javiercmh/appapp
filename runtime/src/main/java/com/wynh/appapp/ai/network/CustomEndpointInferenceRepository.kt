@@ -8,16 +8,46 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
-/** A user-entered OpenAI-compatible service: HTTPS base URL (the part before `/models`) and API key. */
+/**
+ * A user-entered OpenAI-compatible service: base URL (the part before `/models`) and API key.
+ * HTTPS everywhere; plain HTTP only for servers on a private network (see [requirePrivateIfPlain]).
+ */
 data class CustomEndpoint(val baseUrl: String, val apiKey: String) {
     companion object {
-        /** Returns a normalized HTTPS base URL, or null when it is not acceptable. */
+        /** Returns a normalized HTTP(S) base URL, or null when it is not acceptable. */
         fun normalizeUrl(raw: String): String? {
             val url: HttpUrl = raw.trim().toHttpUrlOrNull() ?: return null
-            if (!url.isHttps || url.username.isNotEmpty() || url.password.isNotEmpty() ||
+            if (url.username.isNotEmpty() || url.password.isNotEmpty() ||
                 url.query != null || url.fragment != null || url.host.isBlank()) return null
             return url.toString().trimEnd('/')
         }
+
+        /**
+         * Plain http:// sends the key unencrypted, so it is allowed only when every address the host
+         * resolves to is loopback, link-local or private (RFC 1918, CGNAT/VPN 100.64/10, IPv6 ULA).
+         * Blocking DNS: call off the main thread.
+         */
+        fun requirePrivateIfPlain(baseUrl: String) {
+            val url = baseUrl.toHttpUrlOrNull() ?: throw invalidUrl()
+            if (url.isHttps) return
+            val addresses = try { java.net.InetAddress.getAllByName(url.host).toList() }
+            catch (_: java.net.UnknownHostException) { throw ApiFailure(ApiFailure.Kind.NETWORK, "Could not find ${url.host}. Check the URL and that you are on the right network or VPN.") }
+            if (addresses.isEmpty() || !addresses.all(::isPrivateAddress)) throw ApiFailure(ApiFailure.Kind.INVALID_REQUEST,
+                "Plain http:// is only allowed for servers on a private network. Use https:// for internet services.")
+        }
+
+        fun isPrivateAddress(a: java.net.InetAddress): Boolean {
+            if (a.isLoopbackAddress || a.isLinkLocalAddress || a.isSiteLocalAddress) return true
+            val b = a.address
+            return when (b.size) {
+                4 -> (b[0].toInt() and 0xFF) == 100 && (b[1].toInt() and 0xC0) == 64
+                16 -> (b[0].toInt() and 0xFE) == 0xFC
+                else -> false
+            }
+        }
+
+        fun invalidUrl() = ApiFailure(ApiFailure.Kind.INVALID_REQUEST,
+            "Enter a full URL, such as https://api.example.com/v1, without credentials or a query. Plain http:// works only for servers on a private network.")
         fun validKey(key: String) = key.isNotBlank() && key.length <= 8192 && key.all { it.code in 33..126 }
     }
 }
