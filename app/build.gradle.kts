@@ -31,8 +31,8 @@ android {
         applicationId = "com.wynh.appapp"
         minSdk = 26
         targetSdk = 37
-        versionCode = 20
-        versionName = "1.12.1"
+        versionCode = 21
+        versionName = "1.12.2"
         manifestPlaceholders["appLinkScheme"] = "appapp"
         buildConfigField("String", "APP_LINK_SCHEME", "\"appapp\"")
 
