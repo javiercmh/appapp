@@ -71,11 +71,11 @@ class CustomEndpointInferenceRepository(
     private val http: HttpGateway,
     private val endpoint: () -> CustomEndpoint?
 ) : InferenceRepository {
-    suspend fun verify(candidate: CustomEndpoint): Int = parseModels(http.json(request("models", candidate).build(), maxBytes = 8_388_608, errors = ::errorFor)).size
+    suspend fun verify(candidate: CustomEndpoint): Int = parseModels(http.json(request("models", candidate).build(), maxBytes = 8_388_608, errors = ::errorFor, detail = detail(candidate))).size
 
     override suspend fun models(): List<ModelChoice> {
         val config = endpoint() ?: throw notConfigured()
-        val models = parseModels(http.json(request("models", config).build(), maxBytes = 8_388_608, errors = ::errorFor))
+        val models = parseModels(http.json(request("models", config).build(), maxBytes = 8_388_608, errors = ::errorFor, detail = detail(config)))
         if (endpoint() != config) throw ApiFailure(ApiFailure.Kind.AUTHENTICATION, "The custom endpoint changed. Load models again.")
         return models
     }
@@ -90,7 +90,7 @@ class CustomEndpointInferenceRepository(
         }
         val body = JsonObject().apply { addProperty("model", model); addProperty("stream", false); add("messages", messages) }
         return http.output(parseText(http.completion(request("chat/completions", config)
-            .post(body.toString().toRequestBody("application/json".toMediaType())).build(), errors = ::errorFor)))
+            .post(body.toString().toRequestBody("application/json".toMediaType())).build(), errors = ::errorFor, detail = detail(config))))
     }
     private fun request(path: String, config: CustomEndpoint): Request.Builder {
         if (!CustomEndpoint.validKey(config.apiKey))
@@ -98,6 +98,8 @@ class CustomEndpointInferenceRepository(
         val base = CustomEndpoint.normalizeUrl(config.baseUrl) ?: throw notConfigured()
         return Request.Builder().url("$base/$path").header("Authorization", "Bearer ${config.apiKey}")
     }
+    // The endpoint's own error text (e.g. Ollama's {"error":"…"}) is shown after App²'s message, without the key.
+    private fun detail(config: CustomEndpoint) = ProviderDetail("The endpoint", listOf(config.apiKey))
     companion object {
         private fun notConfigured() = ApiFailure(ApiFailure.Kind.AUTHENTICATION, "Add a custom endpoint in App² Settings → AI.")
         fun parseModels(response: JsonObject): List<ModelChoice> {

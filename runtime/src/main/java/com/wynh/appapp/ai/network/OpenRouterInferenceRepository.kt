@@ -14,12 +14,12 @@ class OpenRouterInferenceRepository(
     private val allowPaid: () -> Boolean
 ) : InferenceRepository {
     suspend fun verifyKey(candidate: String) {
-        val data = http.json(request("key", candidate).build(), errors = ::errorFor)
+        val data = http.json(request("key", candidate).build(), errors = ::errorFor, detail = detail(candidate))
         if (!data.has("data") || !data.get("data").isJsonObject) throw HttpGateway.malformed()
     }
     override suspend fun models(): List<ModelChoice> {
         val token = key() ?: throw ApiFailure(ApiFailure.Kind.AUTHENTICATION, "Add an OpenRouter API key in App² Settings → AI.")
-        val response = http.json(request("models", token).build(), maxBytes = 8_388_608, errors = ::errorFor)
+        val response = http.json(request("models", token).build(), maxBytes = 8_388_608, errors = ::errorFor, detail = detail(token))
         val all = parseModels(response)
         // Do not publish a catalog fetched for credentials or policy that changed in flight.
         if (key() != token) throw ApiFailure(ApiFailure.Kind.AUTHENTICATION, "OpenRouter connection changed. Load models again.")
@@ -44,8 +44,10 @@ class OpenRouterInferenceRepository(
             })
         }
         return http.output(parseText(http.completion(request("chat/completions", token)
-            .post(body.toString().toRequestBody("application/json".toMediaType())).build(), errors = ::errorFor)))
+            .post(body.toString().toRequestBody("application/json".toMediaType())).build(), errors = ::errorFor, detail = detail(token))))
     }
+    // OpenRouter's own error text is shown after App²'s message, without the key.
+    private fun detail(token: String) = ProviderDetail(SOURCE, listOf(token))
     private fun request(path: String, token: String): Request.Builder {
         if (token.isBlank() || token.length > 8192 || token.any { it.code !in 33..126 })
             throw ApiFailure(ApiFailure.Kind.AUTHENTICATION, "OpenRouter key has an invalid format. Replace it in App² Settings → AI.")
@@ -54,6 +56,7 @@ class OpenRouterInferenceRepository(
     }
     companion object {
         const val BASE = "https://openrouter.ai/api/v1"
+        private const val SOURCE = "OpenRouter"
         fun parseModels(response: JsonObject): List<OpenRouterModel> {
             val rows = response.get("data")?.takeIf { it.isJsonArray }?.asJsonArray ?: throw HttpGateway.malformed()
             return rows.mapNotNull { row -> runCatching {
@@ -79,7 +82,7 @@ class OpenRouterInferenceRepository(
         private fun parseCompletedText(response: JsonObject): String {
             if (response.has("error")) {
                 val status = runCatching { response.getAsJsonObject("error").get("code").asInt }.getOrDefault(500)
-                throw errorFor(status, null)
+                throw ProviderDetail(SOURCE).appendTo(errorFor(status, null), HttpGateway.providerMessage(response.get("error")))
             }
             val choices = response.get("choices")?.takeIf { it.isJsonArray }?.asJsonArray ?: throw HttpGateway.malformed()
             if (choices.size() != 1) throw HttpGateway.malformed()

@@ -1,6 +1,7 @@
 package com.wynh.appapp.ai.network
 
 import com.google.gson.JsonObject
+import com.google.gson.JsonElement
 import com.google.gson.JsonParser
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.ensureActive
@@ -51,12 +52,12 @@ class HttpGateway(
     /** A non-streamed answer arrives in one piece at the end, so the wait for its first byte is the whole generation. */
     private val completionClient = streamClient.newBuilder().readTimeout(COMPLETION_READ_MS, TimeUnit.MILLISECONDS).build()
 
-    suspend fun json(request: Request, maxBytes: Long = 1_048_576, errors: (Int, String?) -> ApiFailure = ::errorFor): JsonObject =
-        request(client, request, errors) { response -> parseJson(boundedBody(response, maxBytes)) }
+    suspend fun json(request: Request, maxBytes: Long = 1_048_576, errors: (Int, String?) -> ApiFailure = ::errorFor, detail: ProviderDetail? = null): JsonObject =
+        request(client, request, errors, detail) { response -> parseJson(boundedBody(response, maxBytes)) }
 
     /** A non-streamed generation: no whole-call deadline, a body large enough for [maxOutputUnits] of text. */
-    suspend fun completion(request: Request, errors: (Int, String?) -> ApiFailure = ::errorFor): JsonObject =
-        request(completionClient, request, errors) { response -> parseJson(boundedBody(response, maxOutputUnits * 4L)) }
+    suspend fun completion(request: Request, errors: (Int, String?) -> ApiFailure = ::errorFor, detail: ProviderDetail? = null): JsonObject =
+        request(completionClient, request, errors, detail) { response -> parseJson(boundedBody(response, maxOutputUnits * 4L)) }
 
     /** The text of a completed non-streamed answer, rejected when it is above [maxOutputUnits]. */
     fun output(text: String): String = if (text.length > maxOutputUnits) throw tooLarge(maxOutputUnits) else text
@@ -87,7 +88,7 @@ class HttpGateway(
 
     suspend fun empty(request: Request) { request(client, request) { Unit } }
 
-    private suspend fun <T> request(client: OkHttpClient, request: Request, errors: (Int, String?) -> ApiFailure = ::errorFor, consume: (Response) -> T): T {
+    private suspend fun <T> request(client: OkHttpClient, request: Request, errors: (Int, String?) -> ApiFailure = ::errorFor, detail: ProviderDetail? = null, consume: (Response) -> T): T {
         coroutineContext.ensureActive()
         return suspendCancellableCoroutine { continuation ->
             val call = client.newCall(request)
@@ -100,11 +101,12 @@ class HttpGateway(
                     response.use {
                         try {
                             if (!it.isSuccessful) {
+                                val error = runCatching { JsonParser.parseString(boundedBody(it)).asJsonObject.get("error") }.getOrNull()
                                 val code = runCatching {
-                                    val error = JsonParser.parseString(boundedBody(it)).asJsonObject.get("error")
                                     if (error?.isJsonPrimitive == true) error.asString else error?.asJsonObject?.get("code")?.asString
                                 }.getOrNull()
-                                throw errors(it.code, code)
+                                val failure = errors(it.code, code)
+                                throw detail?.appendTo(failure, providerMessage(error)) ?: failure
                             }
                             val result = consume(it)
                             if (continuation.isActive) continuation.resume(result)
@@ -167,6 +169,15 @@ class HttpGateway(
             val kind = if (isTimeout(error)) ApiFailure.Kind.TIMEOUT else ApiFailure.Kind.NETWORK
             return ApiFailure(kind, "$detail (${error.javaClass.simpleName}$endpoint)")
         }
+        /** The provider's own explanation in an error body: `{"error":"…"}` (Ollama) or `{"error":{"message":"…"}}`. */
+        fun providerMessage(error: JsonElement?): String? = runCatching {
+            when {
+                error == null || error.isJsonNull -> null
+                error.isJsonPrimitive -> error.asString
+                error.isJsonObject -> error.asJsonObject.get("message")?.takeIf { it.isJsonPrimitive }?.asString
+                else -> null
+            }
+        }.getOrNull()
         fun malformed() = ApiFailure(ApiFailure.Kind.INVALID_RESPONSE, "The service returned an unexpected response. Please try again.")
         fun errorFor(status: Int, code: String?): ApiFailure = when {
             code == "subscription_sharing_usage_limit_exceeded" || code == "subscription_sharing_usage_unavailable" || status == 429 ->
@@ -175,5 +186,39 @@ class HttpGateway(
             status == 403 -> ApiFailure(ApiFailure.Kind.PERMISSION, "This account does not permit this request. Review ChatGPT plan access in ChatGPT settings.")
             else -> ApiFailure(ApiFailure.Kind.SERVICE, "The service could not complete the request. Please try again.")
         }
+    }
+}
+
+/**
+ * Opt-in for providers whose error text helps the user (custom endpoints such as Ollama, OpenRouter): the
+ * provider's explanation is appended to App²'s message as `<source> said: “…”`. The text comes from outside,
+ * so it is bounded, control characters, URLs, bearer tokens and long key-like runs are removed, and so is every
+ * literal occurrence of [secrets] (the configured key). Blank or fully removed text leaves the failure unchanged.
+ */
+class ProviderDetail(private val source: String, secrets: List<String> = emptyList()) {
+    private val secrets = secrets.filter { it.length >= 8 }
+
+    fun appendTo(failure: ApiFailure, raw: String?): ApiFailure {
+        val text = clean(raw) ?: return failure
+        return ApiFailure(failure.kind, "${failure.userMessage} $source said: “$text”", failure.serviceCode)
+    }
+
+    fun clean(raw: String?): String? {
+        var text = raw ?: return null
+        for (secret in secrets) text = text.replace(secret, "")
+        text = text.replace(CONTROL, " ").replace(URL, "").replace(BEARER, "").replace(KEY_PREFIX, "").replace(LONG_RUN, "")
+            .replace(SPACES, " ").trim().trim('“', '”', '"')
+        if (text.none { it.isLetterOrDigit() }) return null
+        return if (text.length > MAX_UNITS) text.take(MAX_UNITS).trimEnd() + "…" else text
+    }
+
+    companion object {
+        const val MAX_UNITS = 300
+        private val CONTROL = Regex("[\\p{Cc}\\p{Cf}]")
+        private val URL = Regex("(?i)\\b(?:https?|wss?)://\\S+")
+        private val BEARER = Regex("(?i)\\bbearer\\s+\\S+")
+        private val KEY_PREFIX = Regex("\\b(?:sk|pk|rk|or|key)-[A-Za-z0-9_-]{8,}")
+        private val LONG_RUN = Regex("[A-Za-z0-9_+/=-]{32,}")
+        private val SPACES = Regex("\\s+")
     }
 }

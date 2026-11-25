@@ -102,14 +102,22 @@ class OpenRouterInferenceTest {
             """{"choices":[{"finish_reason":"stop","message":{"content":"text","refusal":"no"}}]}""", """{"error":{"code":429,"message":"secret"}}""")
         bad.forEach { raw -> assertThrows(ApiFailure::class.java) { OpenRouterInferenceRepository.parseText(json(raw)) } }
     }
-    @Test fun `provider http errors are safe and do not mention ChatGPT`() = runBlocking {
+    @Test fun `provider http errors carry OpenRouter's reason without the key and do not mention ChatGPT`() = runBlocking {
+        val key = "sk-or-v1-0123456789abcdef"
         listOf(401 to ApiFailure.Kind.AUTHENTICATION, 402 to ApiFailure.Kind.USAGE_LIMIT, 403 to ApiFailure.Kind.PERMISSION,
             429 to ApiFailure.Kind.USAGE_LIMIT, 500 to ApiFailure.Kind.SERVICE).forEach { (status, kind) ->
-            val stub = Stub { status to """{"error":{"code":$status,"message":"secret-key"}}""" }
-            val repo = OpenRouterInferenceRepository(stub.http, { "key" }, { false })
-            try { repo.models(); fail() } catch (e: ApiFailure) { assertEquals(kind, e.kind); assertFalse(e.message!!.contains("secret")); assertFalse(e.message!!.contains("ChatGPT")) }
+            val stub = Stub { status to """{"error":{"code":$status,"message":"Key $key hit the daily free-model limit"}}""" }
+            val repo = OpenRouterInferenceRepository(stub.http, { key }, { false })
+            try { repo.models(); fail() } catch (e: ApiFailure) {
+                assertEquals(kind, e.kind)
+                assertTrue(e.message!!.contains("hit the daily free-model limit"))
+                assertFalse(e.message!!.contains(key)); assertFalse(e.message!!.contains("ChatGPT"))
+            }
             assertEquals(1, stub.requests.size)
         }
+        // An error payload inside a successful response keeps its reason too.
+        val e = assertThrows(ApiFailure::class.java) { OpenRouterInferenceRepository.parseText(json("""{"error":{"code":429,"message":"Upstream provider is rate limited"}}""")) }
+        assertEquals(ApiFailure.Kind.USAGE_LIMIT, e.kind); assertTrue(e.message!!.contains("Upstream provider is rate limited"))
     }
     @Test fun `invalid header characters are rejected without revealing key material`() = runBlocking {
         val stub = Stub { 200 to "{}" }
