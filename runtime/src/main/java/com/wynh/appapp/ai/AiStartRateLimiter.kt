@@ -10,10 +10,11 @@ class AiStartRateLimiter(
     private val now: () -> Long = System::currentTimeMillis
 ) {
     companion object {
-        const val DEFAULT_STARTS = 6
+        /** 12 leaves room for one multi-step generation (plan, prose, several parallel parts) per minute. */
+        const val DEFAULT_STARTS = 12
         const val UNLIMITED = 0
         /** The choices Settings offers, in display order. */
-        val CHOICES = listOf(DEFAULT_STARTS, 12, 30, 60, UNLIMITED)
+        val CHOICES = listOf(6, DEFAULT_STARTS, 30, 60, UNLIMITED)
         fun label(value: Int): String = when (value) {
             UNLIMITED -> "No limit"
             DEFAULT_STARTS -> "$value (default)"

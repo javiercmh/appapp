@@ -66,6 +66,7 @@ class AiExposureDeviceTest {
                     val result = JsonParser.parseString(await(page, "window.providersResult")).asString
                     val providers = JsonParser.parseString(result).asJsonObject.getAsJsonArray("providers")
                     assertEquals(1, providers.size()); assertEquals(mode, providers[0].asJsonObject.get("id").asString)
+                    assertTrue("providers() reports the start limit", JsonParser.parseString(result).asJsonObject.get("startLimit").asInt >= 0)
                     val hidden = if (mode == "chatgpt") "openrouter" else "chatgpt"
                     js(page, "window.errorCode=null;ai.models('$hidden').catch(e=>window.errorCode=e.code);")
                     assertEquals("\"provider\"", await(page, "window.errorCode"))

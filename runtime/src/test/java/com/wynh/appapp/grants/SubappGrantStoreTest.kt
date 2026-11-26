@@ -50,5 +50,9 @@ class SubappGrantStoreTest {
         limiter.maxStarts = AiStartRateLimiter.UNLIMITED
         repeat(100) { assertTrue(limiter.tryAcquire("a")) }
         assertTrue(AiStartRateLimiter.DEFAULT_STARTS in AiStartRateLimiter.CHOICES)
+        assertEquals(12, AiStartRateLimiter.DEFAULT_STARTS)
+        assertEquals(AiStartRateLimiter.CHOICES.size, AiStartRateLimiter.CHOICES.toSet().size)
+        assertEquals("12 (default)", AiStartRateLimiter.label(12))
+        assertEquals("6", AiStartRateLimiter.label(6))
     }
 }
