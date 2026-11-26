@@ -1,6 +1,5 @@
 package com.wynh.appapp.grants
 
-import com.wynh.appapp.ai.AiStartRateLimiter
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -30,29 +29,5 @@ class SubappGrantStoreTest {
         assertEquals(setOf(SubappCapability.NETWORK), store.granted("b"))
         assertFalse(store.migrateExisting(listOf("c")) { true })
         assertTrue(store.granted("c").isEmpty())
-    }
-
-    @Test fun `rate limiter allows a burst then blocks until the window passes`() {
-        var now = 0L
-        val limiter = AiStartRateLimiter(maxStarts = 2, windowMillis = 1000) { now }
-        assertTrue(limiter.tryAcquire("a")); assertTrue(limiter.tryAcquire("a"))
-        assertFalse(limiter.tryAcquire("a"))
-        assertTrue(limiter.tryAcquire("b"))
-        now = 1000
-        assertTrue(limiter.tryAcquire("a"))
-    }
-
-    @Test fun `rate limiter follows a changed setting and can be turned off`() {
-        val limiter = AiStartRateLimiter(maxStarts = 1, windowMillis = 1000) { 0L }
-        assertTrue(limiter.tryAcquire("a")); assertFalse(limiter.tryAcquire("a"))
-        limiter.maxStarts = 3
-        assertTrue(limiter.tryAcquire("a")); assertTrue(limiter.tryAcquire("a")); assertFalse(limiter.tryAcquire("a"))
-        limiter.maxStarts = AiStartRateLimiter.UNLIMITED
-        repeat(100) { assertTrue(limiter.tryAcquire("a")) }
-        assertTrue(AiStartRateLimiter.DEFAULT_STARTS in AiStartRateLimiter.CHOICES)
-        assertEquals(12, AiStartRateLimiter.DEFAULT_STARTS)
-        assertEquals(AiStartRateLimiter.CHOICES.size, AiStartRateLimiter.CHOICES.toSet().size)
-        assertEquals("12 (default)", AiStartRateLimiter.label(12))
-        assertEquals("6", AiStartRateLimiter.label(6))
     }
 }

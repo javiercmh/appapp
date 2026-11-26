@@ -129,8 +129,7 @@ export const ai = {
   // Channel presence only; discover connection separately via providers().
   available: !!AI || !!DEV?.mockAi,
   developmentMock: !AI && !!DEV?.mockAi,
-  // -> {providers:[{id,name,connected}], startLimit}: the host exposes ChatGPT, OpenRouter, a custom endpoint or Combined;
-  // startLimit is the app's generation starts per minute (0 = no limit, absent on older hosts).
+  // -> {providers:[{id,name,connected}]}: the host exposes ChatGPT, OpenRouter, a custom endpoint or Combined.
   // Discover and pass the exposed ID; defaults below remain ChatGPT. No credentials.
   providers: () => aiCall('providers'),
   // -> {models:[{id,name,reasoningLevels}]}. IDs are opaque; Combined names include source.

@@ -50,8 +50,7 @@ class AiWebMessageBridge(
         val id = request.get("id")?.asString ?: return
         val action = request.get("action")?.asString ?: return
         when (action) {
-            // startLimit: generation starts this app may make per minute (0 = no limit), so it can pace parallel requests.
-            "providers" -> respond(reply, id, "result", com.google.gson.Gson().toJson(mapOf("providers" to listOf(manager.registry.exposed()), "startLimit" to manager.startLimit)))
+            "providers" -> respond(reply, id, "result", com.google.gson.Gson().toJson(mapOf("providers" to listOf(manager.registry.exposed()))))
             "models" -> activity.runOnUiThread { activity.lifecycleScope.launch { 
                 try { val models = manager.exposedModels(request.get("providerId")?.asString ?: "chatgpt"); respond(reply, id, "result", """{"models":${models.joinToString(prefix="[", postfix="]") { m -> """{"id":${quote(m.slug)},"name":${quote(m.displayName)},"reasoningLevels":${m.reasoningLevels.joinToString(prefix="[",postfix="]",transform=::quote)}}""" }}}""") }
                 catch (e: Exception) { fail(reply, id, (e as? com.wynh.appapp.ai.network.ApiFailure)?.kind?.name?.lowercase() ?: "models", e.message ?: "Could not load models.") }

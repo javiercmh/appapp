@@ -82,10 +82,6 @@ class AppAiManager(context: Context) {
     val connectionChanges = connectionRevision.asStateFlow()
 
     private val notificationIds = java.util.concurrent.atomic.AtomicInteger()
-    /** Generation starts per subapp per minute, across all of its tasks; set in Settings → AI (0 = no limit). */
-    private val startLimiter = AiStartRateLimiter(
-        preferences.getInt("start_limit", AiStartRateLimiter.DEFAULT_STARTS).takeIf { it in AiStartRateLimiter.CHOICES } ?: AiStartRateLimiter.DEFAULT_STARTS)
-    val startLimit: Int get() = startLimiter.maxStarts
     private val ledger = AiRequestLedger()
     private val requests = ledger.results
     private val jobs = ledger.owners
@@ -123,12 +119,6 @@ class AppAiManager(context: Context) {
                 false
             }
         } }
-    }
-
-    fun setStartLimit(value: Int) {
-        require(value in AiStartRateLimiter.CHOICES)
-        startLimiter.maxStarts = value
-        preferences.edit().putInt("start_limit", value).apply()
     }
 
     fun setExposure(value: String) {
@@ -244,8 +234,6 @@ class AppAiManager(context: Context) {
         if (!com.wynh.appapp.grants.SubappGrants.isGranted(app, appId, com.wynh.appapp.grants.SubappCapability.AI))
             throw ApiFailure(ApiFailure.Kind.PERMISSION, "AI is not allowed for this app. Allow it when asked, or in the library: app menu → Permissions.")
         val lease = sessionId?.let { liveLease(appId, taskId, it) }
-        if (!startLimiter.tryAcquire(appId))
-            throw ApiFailure(ApiFailure.Kind.USAGE_LIMIT, "This app started too many AI requests. Wait a minute, then generate again.")
         val id = UUID.randomUUID().toString()
         val presentation = AiPresentation(
             notificationId = lease?.notificationId ?: nextNotificationId(),

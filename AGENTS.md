@@ -223,7 +223,7 @@ Capabilities are granted per subapp by the user and stored natively outside ever
 
 | Capability | Default for a new or imported app | What happens without it |
 | --- | --- | --- |
-| AI | Off | The first `ai.start` shows a native dialog naming the app, the provider, the data sent and the cost source. Allow stores the grant; Don't allow fails with code `permission`. By default at most 12 starts per app per minute (`usage_limit`); Settings → AI → Start limit per app lowers it to 6, raises it or turns it off. `ai.providers()` reports the current limit as `startLimit`. |
+| AI | Off | The first `ai.start` shows a native dialog naming the app, the provider, the data sent and the cost source. Allow stores the grant; Don't allow fails with code `permission`. App² sets no request or rate limit of its own; the provider's limits apply and arrive as `usage_limit`. |
 | Notifications | Off | `showNotification`, `showNotificationWithId` and `scheduleNotification` return `false` and a native dialog asks once per page load; `hasNotificationPermission()` is `false` until granted and Android's own permission is also held. Scheduled alarms of an ungranted app are skipped and cancelled on revocation. |
 | Internet | Off | Pages get a `Content-Security-Policy` limiting loads to the app's own origin (plus `data:` and `blob:`), and any request to another host is answered `403` and logged to `app.log` as `[Network] Blocked`. Known local/private host names and literal addresses are filtered even with the grant. This is not complete local-network isolation; see `docs/ARCHITECTURE.md`. Changes apply on the next app launch. |
 
