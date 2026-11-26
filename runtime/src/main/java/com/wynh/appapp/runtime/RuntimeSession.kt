@@ -16,7 +16,6 @@ import com.wynh.appapp.SelectionAwareWebView
 import com.wynh.appapp.host.runtimeHost
 import com.wynh.appapp.ai.AiWebMessageBridge
 import com.wynh.appapp.bridge.NativeStorageBridge
-import com.wynh.appapp.dictionary.DictionarySession
 import com.wynh.appapp.grants.SubappCapability
 import com.wynh.appapp.grants.SubappGrants
 import com.wynh.appapp.speech.SpeechSession
@@ -43,7 +42,6 @@ class RuntimeSession(
     private val speech = SpeechSession(activity, web, record.id)
     private val share = com.wynh.appapp.share.ShareSession(activity, web, record.id, record.workspaceDir, shareLauncher)
     private val save = com.wynh.appapp.saveas.SaveAsSession(activity, web, record.id, record.workspaceDir, saveLauncher)
-    private val dictionary = DictionarySession(activity, web, record.id)
     private val translation = TranslationSession(activity, web, record.id)
     private var closed = false
     private var suspended = false
@@ -51,7 +49,7 @@ class RuntimeSession(
     private var reloadPending = false
     init {
         SubappWebViews.configure(web, cacheMode)
-        speech.install(); translation.install(); dictionary.install(); share.install(); save.install()
+        speech.install(); translation.install(); share.install(); save.install()
         SubappWebViews.installStorageBridge(web, record.id, storage, log)
         activity.runtimeHost?.ai?.let { AiWebMessageBridge(activity, web, record.id, activity.taskId, it).install() }
         UpdateWebMessageBridge(activity, web, record).install()
@@ -66,7 +64,7 @@ class RuntimeSession(
             SubappGrants.isGranted(activity, record.id, SubappCapability.NETWORK)
         }) {
             override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
-                chooser.complete(null); speech.pageChanged(); dictionary.pageChanged(); share.pageChanged(); save.pageChanged(); web.selectionMenuSuppressed = false; storage.pageStarted()
+                chooser.complete(null); speech.pageChanged(); share.pageChanged(); save.pageChanged(); web.selectionMenuSuppressed = false; storage.pageStarted()
                 // A new page cannot hold the previous page's session; a running request keeps running.
                 activity.runtimeHost?.ai?.releaseTask(activity.taskId)
                 super.onPageStarted(view, url, favicon)
@@ -88,7 +86,7 @@ class RuntimeSession(
             }
         }
     }
-    fun pause() { if (!closed) { speech.pause(); translation.pause(); dictionary.pause(); share.pause(); save.pause() } }
+    fun pause() { if (!closed) { speech.pause(); translation.pause(); share.pause(); save.pause() } }
 
     /**
      * Called from the activity's onResume, before the lifecycle state reads RESUMED. It also
@@ -97,7 +95,7 @@ class RuntimeSession(
     fun resume() {
         if (closed || suspended) return
         if (webPaused) { web.onResume(); webPaused = false }
-        speech.resume(); translation.resume(); dictionary.resume(); share.resume(); save.resume()
+        speech.resume(); translation.resume(); share.resume(); save.resume()
         if (reloadPending) { reloadPending = false; web.reload() }
     }
 
@@ -105,13 +103,14 @@ class RuntimeSession(
     fun suspendForOperation() { if (!closed) { suspended = true; pause(); web.onPause(); webPaused = true; web.visibility = View.INVISIBLE } }
 
     /**
-     * The replacement ended: a foreground activity reloads immediately. A paused or stopped
-     * activity reloads and reenables native actions on its next onResume.
+     * The replacement ended: the page must reload. A foreground activity does so now; one that is
+     * paused or stopped keeps its WebView paused, and speech and translation not foreground,
+     * until its next onResume.
      */
     fun resumeAfterOperation() {
         if (closed) return
         suspended = false; reloadPending = true; web.visibility = View.VISIBLE
         if (activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) resume()
     }
-    fun close() { if (!closed) { closed = true; chooser.complete(null); speech.close(); translation.close(); dictionary.close(); share.close(); save.close() } }
+    fun close() { if (!closed) { closed = true; chooser.complete(null); speech.close(); translation.close(); share.close(); save.close() } }
 }
