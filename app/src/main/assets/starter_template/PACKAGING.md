@@ -34,6 +34,7 @@ can describe unreleased features; its presence does not prove the installed host
 | Store records and settings in the app | [Storage and persistence](#storage-and-persistence) |
 | Open a phone file for the subapp to read | HTML file input; [choosing a file](#choosing-a-file-from-the-phone) |
 | Export to a user-chosen phone folder | `save.text/file`; [Save as](#save-as) |
+| Look up selected text in a device dictionary | `dictionary`; [dictionary lookup](#device-dictionary) |
 | Send text or a text file to another app | `share.text/file`; [sharing](#sharing) |
 | Generate text using the user's configured provider | `ai`; [AI guide](#subapp-ai-guide) |
 | Speak text / open a translator | `speech` / `translation`; [speech](#text-to-speech), [translation](#device-translation) |
@@ -44,7 +45,7 @@ can describe unreleased features; its presence does not prove the installed host
 File opening, internal persistence, saving an export, outgoing sharing and installing a subapp
 are distinct operations. There is no `AppIncoming` channel, incoming-share manifest opt-in or
 printing API. File input needs no native bridge. The asynchronous host channels (`AppAI`,
-`AppSpeech`, `AppTranslation`, `AppUpdates`, `AppShare`, `AppSave`) accept only the owning origin's
+`AppSpeech`, `AppTranslation`, `AppDictionary`, `AppUpdates`, `AppShare`, `AppSave`) accept only the owning origin's
 main frame; the synchronous storage aliases also work in same-origin frames.
 
 Import helpers from `./bridge.js` in a module under `js/`, or `./js/bridge.js` in a root-level script.
@@ -450,6 +451,19 @@ translateButton.addEventListener('click', async () => {
 ```
 
 Existing workspaces must explicitly adopt the updated `js/bridge.js` to use this API.
+
+## Device Dictionary
+
+Import `dictionary` from `js/bridge.js`. `dictionary.supported` indicates whether the host
+exposes the origin-restricted, main-frame-only `AppDictionary` channel. In the foreground,
+`await dictionary.availability()` returns `{available: boolean}` for a supported installed
+dictionary. App² currently supports QuickDic through its read-only Android text action.
+
+After a deliberate user action, call `await dictionary.open({text})` with canonical selected
+text. It forwards the text to the dictionary and resolves to `{opened: true}` on launch.
+The dictionary controls which lexical data is installed and what results appear. Send
+nonblank text of at most 1000 UTF-16 code units. Browser previews and older hosts report
+unavailable. Errors carry `.code` and `.message`; handle launch failures in the subapp.
 
 ## Text Selection Menu
 

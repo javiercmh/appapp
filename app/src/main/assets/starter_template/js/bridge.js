@@ -410,6 +410,41 @@ export const speech = {
   stop: () => speechCommand('stop')
 };
 
+// Opens the device dictionary; no definition is returned.
+const DICTIONARY = window.AppDictionary || null;
+const dictionaryRequests = new Map();
+if (DICTIONARY) DICTIONARY.onmessage = event => {
+  let message;
+  try { message = JSON.parse(event.data); } catch { return; }
+  const pending = dictionaryRequests.get(message.id);
+  if (!pending) return;
+  dictionaryRequests.delete(message.id);
+  clearTimeout(pending.timer);
+  if (message.error) {
+    const error = new Error(message.error.message);
+    error.code = message.error.code;
+    pending.reject(error);
+  } else pending.resolve(message.value);
+};
+function dictionaryCommand(action, options) {
+  if (!DICTIONARY) return Promise.reject(Object.assign(new Error('Dictionary requires a supported App² host.'), {code: 'unavailable'}));
+  const id = `dictionary-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      dictionaryRequests.delete(id);
+      reject(Object.assign(new Error('Dictionary command timed out.'), {code: 'timeout'}));
+    }, 15000);
+    dictionaryRequests.set(id, {resolve, reject, timer});
+    try { DICTIONARY.postMessage(JSON.stringify({id, action, options})); }
+    catch (error) { clearTimeout(timer); dictionaryRequests.delete(id); reject(error); }
+  });
+}
+export const dictionary = {
+  supported: !!DICTIONARY,
+  availability: () => DICTIONARY ? dictionaryCommand('availability') : Promise.resolve({available: false}),
+  open: options => dictionaryCommand('open', options)
+};
+
 // Opens the device translation handler; no translated result is returned.
 const TRANSLATION = window.AppTranslation || null;
 const translationRequests = new Map();
